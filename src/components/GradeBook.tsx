@@ -183,7 +183,9 @@ const ImportScoresDialog: FC<{
   unsavedGrades: GradeData;
   setUnsavedGrades: React.Dispatch<React.SetStateAction<GradeData>>;
   setEditingGrades: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
-}> = ({ assignmentId, periodId, onImport, unsavedGrades, setUnsavedGrades, setEditingGrades }) => {
+  assignments: Record<string, Assignment>;
+  students: Record<string, Student[]>;
+}> = ({ assignmentId, periodId, onImport, unsavedGrades, setUnsavedGrades, setEditingGrades, assignments, students }) => {
   const [file, setFile] = useState<File | null>(null);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -195,41 +197,33 @@ const ImportScoresDialog: FC<{
 
   const handleSubmitImport = async () => {
     if (!file) return;
-
+  
     try {
       const text = await file.text();
       const rows = text.split('\n');
       const headers = rows[0].split(',');
+      
       const localIdIndex = headers.findIndex(h => h.trim() === 'LocalID');
       const scoreIndex = headers.findIndex(h => h.trim() === 'Score');
-
+      
       if (localIdIndex === -1 || scoreIndex === -1) {
-        alert('Invalid file format. Missing required columns.');
+        alert('Invalid file format. Missing LocalID or Score columns.');
         return;
       }
-
-      const updatedGrades = { ...unsavedGrades };
-      if (!updatedGrades[assignmentId]) {
-        updatedGrades[assignmentId] = {};
-      }
-      if (!updatedGrades[assignmentId][periodId]) {
-        updatedGrades[assignmentId][periodId] = {};
-      }
-
+  
+      const importedGrades: Record<string, string> = {};
+      
       rows.slice(1).forEach(row => {
-        const columns = row.split(',');
-        const localId = columns[localIdIndex].trim();
-        const score = columns[scoreIndex].trim();
+        const columns = row.split(',').map(col => col.trim());
+        const localId = columns[localIdIndex];
+        const score = columns[scoreIndex];
+  
         if (localId && score) {
-          updatedGrades[assignmentId][periodId][localId] = score;
+          importedGrades[localId] = score;
         }
       });
-
-      setUnsavedGrades(updatedGrades);
-      setEditingGrades(prev => ({
-        ...prev,
-        [`${assignmentId}-${periodId}`]: true
-      }));
+  
+      onImport(importedGrades);
       setFile(null);
     } catch (error) {
       console.error('Error importing grades:', error);
@@ -298,6 +292,120 @@ const WeekView: FC<{
           <div className="text-lg">{format(day, 'd')}</div>
         </div>
       ))}
+    </div>
+  );
+};
+
+const StudentSearch: FC<{
+  students: Record<string, Student[]>;
+  onStudentSelect: (student: Student) => void;
+}> = ({ students, onStudentSelect }) => {
+  const [search, setSearch] = useState('');
+  const [results, setResults] = useState<Student[]>([]);
+
+  useEffect(() => {
+    if (search.length < 2) {
+      setResults([]);
+      return;
+    }
+
+    const searchLower = search.toLowerCase();
+    const matches = Object.values(students)
+      .flat()
+      .filter(student => 
+        String(student.id).toLowerCase().includes(searchLower) ||
+        student.name.toLowerCase().includes(searchLower)
+      );
+
+    setResults(matches);
+  }, [search, students]);
+
+  return (
+    <div className="relative">
+      <Input
+        placeholder="Search by ID or name..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        className="mb-2"
+      />
+      {results.length > 0 && (
+        <Card className="absolute w-full z-50 max-h-64 overflow-y-auto">
+          <CardContent className="p-2">
+            {results.map(student => (
+              <div
+                key={student.id}
+                className="p-2 hover:bg-secondary cursor-pointer rounded"
+                onClick={() => {
+                  onStudentSelect(student);
+                  setSearch('');
+                }}
+              >
+                <div className="font-medium">{student.name}</div>
+                <div className="text-sm text-muted-foreground">
+                  ID: {student.id} - Period {student.class_period}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+};
+
+// Add this component inside GradeBook.tsx
+const PeriodStudentSearch: FC<{
+  students: Student[]; // Now takes all students
+  assignmentId: string;  // Add this prop
+  onSelect: (studentId: string, periodId: string) => void;  // Update this prop
+}> = ({ students, assignmentId, onSelect }) => {
+  const [search, setSearch] = useState('');
+  const [results, setResults] = useState<Student[]>([]);
+
+  useEffect(() => {
+    if (search.length < 1) {
+      setResults([]);
+      return;
+    }
+
+    const searchLower = search.toLowerCase();
+    const matches = students.filter(student => 
+      String(student.id).toLowerCase().includes(searchLower) ||
+      student.name.toLowerCase().includes(searchLower)
+    );
+
+    setResults(matches);
+  }, [search, students]);
+
+  return (
+    <div className="relative mb-4">
+      <Input
+        placeholder="Search student by name or ID..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        className="mb-2"
+      />
+      {results.length > 0 && (
+        <Card className="absolute w-full z-50 max-h-48 overflow-y-auto">
+          <CardContent className="p-2">
+            {results.map(student => (
+              <div
+                key={student.id}
+                className="p-2 hover:bg-secondary cursor-pointer rounded"
+                onClick={() => {
+                  onSelect(student.id, student.class_period);
+                  setSearch('');
+                }}
+              >
+                <div className="font-medium">{student.name}</div>
+                <div className="text-sm text-muted-foreground">
+                  ID: {student.id} - Period {student.class_period}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };
@@ -424,13 +532,19 @@ const GradeBook: FC = () => {
     if (date) {
       setSelectedDate(date);
       checkBirthdays(date);
-      setNewAssignment({
-        date,
-        name: '',
-        periods: [],
-        type: selectedType
-      });
     }
+  };
+
+  // Add a new button for creating assignments
+  const handleNewAssignment = () => {
+    if (!selectedDate) return;
+    
+    setNewAssignment({
+      date: selectedDate,
+      name: '',
+      periods: [],
+      type: selectedType
+    });
   };
 
 const handleAssignmentNameChange = (name: string) => {
@@ -704,23 +818,31 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
     if (!updatedGrades[assignmentId]) {
       updatedGrades[assignmentId] = {};
     }
-    if (!updatedGrades[assignmentId][periodId]) {
-      updatedGrades[assignmentId][periodId] = {};
-    }
-  
-    // Update grades for matching student IDs
+
+    // Get all periods from the assignment
+    const assignmentPeriods = assignments[assignmentId].periods;
+
+    // Process each grade entry
     Object.entries(grades).forEach(([localId, score]) => {
-      const student = students[periodId]?.find(s => s.id === localId);
-      if (student) {
-        updatedGrades[assignmentId][periodId][localId] = score;
-      }
+      // Look for student in any period
+      assignmentPeriods.forEach(period => {
+        const studentExists = students[period]?.some(s => s.id === localId);
+        if (studentExists) {
+          if (!updatedGrades[assignmentId][period]) {
+            updatedGrades[assignmentId][period] = {};
+          }
+          updatedGrades[assignmentId][period][localId] = score;
+        }
+      });
     });
-  
+
     setUnsavedGrades(updatedGrades);
-    setEditingGrades(prev => ({
-      ...prev,
-      [`${assignmentId}-${periodId}`]: true
-    }));
+    assignmentPeriods.forEach(period => {
+      setEditingGrades(prev => ({
+        ...prev,
+        [`${assignmentId}-${period}`]: true
+      }));
+    });
   };
 
   const handleLateToggle = (assignmentId: string, periodId: string, studentId: string) => {
@@ -763,67 +885,84 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
   return (
     <div className="p-6">
       <div className="flex gap-6">
-        {/* Left side - Calendar */}
-        <Card className="w-96 h-fit">
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <CardTitle>Calendar</CardTitle>
-              <Select 
-                defaultValue="month"
-                onValueChange={(value) => setCalendarView(value as 'month' | 'week')}
-              >
-                <SelectTrigger className="w-28">
-                  <SelectValue placeholder="View" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="month">Month</SelectItem>
-                  <SelectItem value="week">Week</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {calendarView === 'month' ? (
-              <Calendar
-                mode="single"
-                selected={selectedDate || undefined}
-                onSelect={handleDateSelect}
-                className="w-full"
-                modifiers={{
-                  assignment: (date) => {
-                    return Object.values(assignments).some(
-                      assignment => assignment.date.toDateString() === date.toDateString()
-                    );
-                  }
-                }}
-                modifiersStyles={{
-                  assignment: {
-                    border: '2px solid var(--primary)',
-                  }
-                }}
+        {/* Left side */}
+        <div className="space-y-4">
+          <StudentSearch 
+            students={students}
+            onStudentSelect={(student) => {
+              // Scroll to student or highlight their row
+              const element = document.getElementById(`student-${student.id}`);
+              element?.scrollIntoView({ behavior: 'smooth' });
+            }}
+          />
+          <Card className="w-96">
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <CardTitle>Calendar</CardTitle>
+                <Select 
+                  defaultValue="month"
+                  onValueChange={(value) => setCalendarView(value as 'month' | 'week')}
+                >
+                  <SelectTrigger className="w-28">
+                    <SelectValue placeholder="View" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="month">Month</SelectItem>
+                    <SelectItem value="week">Week</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {calendarView === 'month' ? (
+                <Calendar
+                  mode="single"
+                  selected={selectedDate || undefined}
+                  onSelect={handleDateSelect}
+                  className="w-full"
+                  modifiers={{
+                    assignment: (date) => {
+                      return Object.values(assignments).some(
+                        assignment => assignment.date.toDateString() === date.toDateString()
+                      );
+                    }
+                  }}
+                  modifiersStyles={{
+                    assignment: {
+                      border: '2px solid var(--primary)',
+                    }
+                  }}
+                />
+              ) : (
+                <WeekView
+                  date={selectedDate || new Date()}
+                  onDateSelect={(date) => handleDateSelect(date)}
+                  assignments={assignments}
+                />
+              )}
+              <BirthdayList
+                students={Object.values(students).flat()}
+                currentDate={selectedDate || new Date()}
+                view={calendarView}
               />
-            ) : (
-              <WeekView
-                date={selectedDate || new Date()}
-                onDateSelect={(date) => handleDateSelect(date)}
-                assignments={assignments}
-              />
-            )}
-            <BirthdayList
-              students={Object.values(students).flat()}
-              currentDate={selectedDate || new Date()}
-              view={calendarView}
-            />
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
 
-        {/* Right side - Assignments and Grades */}
+        {/* Right side */}
         <div className="flex-grow space-y-4">
-          {/* New Assignment Form */}
           {selectedDate && (
+            <Button
+              onClick={handleNewAssignment}
+              className="w-full"
+            >
+              Create New Assignment for {selectedDate.toLocaleDateString()}
+            </Button>
+          )}
+          {newAssignment && (
             <Card>
               <CardHeader>
-                <CardTitle>New Assignment for {selectedDate.toLocaleDateString()}</CardTitle>
+                <CardTitle>New Assignment for {selectedDate?.toLocaleDateString()}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <Input
@@ -861,7 +1000,6 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
               </CardContent>
             </Card>
           )}
-
           {/* Existing Assignments */}
           {Object.entries(assignments).map(([assignmentId, assignment]) => (
             <Card 
@@ -914,10 +1052,30 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
                     {assignment.periods.map(periodId => (
                       <TabsContent key={periodId} value={periodId}>
                         <div className="space-y-4">
+                          <PeriodStudentSearch 
+                            students={Object.values(students).flat()}
+                            assignmentId={assignmentId}
+                            onSelect={(studentId, periodId) => {
+                              // Switch to correct period tab if needed
+                              const tabTrigger = document.querySelector(`[value="${periodId}"]`) as HTMLButtonElement;
+                              if (tabTrigger) tabTrigger.click();
+                              
+                              // Focus on grade input
+                              setTimeout(() => {
+                                const gradeInput = document.querySelector(
+                                  `input[id="grade-${assignmentId}-${periodId}-${studentId}"]`
+                                ) as HTMLInputElement;
+                                if (gradeInput) {
+                                  gradeInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                  gradeInput.focus();
+                                }
+                              }, 100);
+                            }}
+                          />
                           <div className="grid grid-cols-[auto_1fr_70px_70px_70px] gap-2">
                             {(students[periodId] || []).map(student => (
                               <React.Fragment key={student.id}>
-                                <div className="flex items-center gap-1">
+                                <div id={`student-${student.id}-${assignmentId}`} className="flex items-center gap-1">
                                   <Button
                                     variant="outline"
                                     size="sm"
@@ -972,6 +1130,7 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
                                   <span className="text-sm">{student.name}</span>
                                 </div>
                                 <Input
+                                  id={`grade-${assignmentId}-${periodId}-${student.id}`}
                                   type="number"
                                   min="0"
                                   max="100"
@@ -1016,6 +1175,8 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
                               unsavedGrades={unsavedGrades}
                               setUnsavedGrades={setUnsavedGrades}
                               setEditingGrades={setEditingGrades}
+                              assignments={assignments}
+                              students={students}
                             />
                           )}
                           <Button
