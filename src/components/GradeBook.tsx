@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { X, Save, ChevronDown, ChevronUp, Download } from 'lucide-react';
+import { X, Save, ChevronDown, ChevronUp, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
@@ -23,7 +23,7 @@ const supabase = createClient(
 
 // Move interfaces outside component
 interface Student {
-  id: string;
+  id: number;  // Changed from string to number to match bigint in database
   name: string;
   birthday: string;
   class_period: string;
@@ -61,6 +61,15 @@ interface DMACScore {
   LocalID: string;
   Score: string;
   // ... other DMAC fields if needed
+}
+
+interface AssignmentTag {
+  id: string;
+  assignment_id: string;
+  student_id: number;  // Changed from string to number
+  period: string;
+  tag_type: 'absent' | 'late' | 'incomplete' | 'retest';
+  created_at: string;
 }
 
 // Update BirthdayList component
@@ -185,7 +194,8 @@ const ImportScoresDialog: FC<{
   setEditingGrades: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   assignments: Record<string, Assignment>;
   students: Record<string, Student[]>;
-}> = ({ assignmentId, periodId, onImport, unsavedGrades, setUnsavedGrades, setEditingGrades, assignments, students }) => {
+  grades: GradeData;
+}> = ({ assignmentId, periodId, onImport, unsavedGrades, setUnsavedGrades, setEditingGrades, assignments, students, grades }) => {
   const [file, setFile] = useState<File | null>(null);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -197,34 +207,68 @@ const ImportScoresDialog: FC<{
 
   const handleSubmitImport = async () => {
     if (!file) return;
-  
+
     try {
       const text = await file.text();
       const rows = text.split('\n');
-      const headers = rows[0].split(',');
+      const headers = rows[0].split(',').map(h => h.trim());
       
-      const localIdIndex = headers.findIndex(h => h.trim() === 'LocalID');
-      const scoreIndex = headers.findIndex(h => h.trim() === 'Score');
+      // Find the indices for LocalID and Score columns
+      const localIdIndex = headers.findIndex(h => h === 'LocalID');
+      const scoreIndex = headers.findIndex(h => h === 'Score');
       
       if (localIdIndex === -1 || scoreIndex === -1) {
         alert('Invalid file format. Missing LocalID or Score columns.');
         return;
       }
-  
+
       const importedGrades: Record<string, string> = {};
       
-      rows.slice(1).forEach(row => {
-        const columns = row.split(',').map(col => col.trim());
+      // Process each row (skip header)
+      for (let i = 1; i < rows.length; i++) {
+        const columns = rows[i].split(',').map(col => col.trim());
+        if (columns.length <= Math.max(localIdIndex, scoreIndex)) continue;
+        
         const localId = columns[localIdIndex];
         const score = columns[scoreIndex];
-  
+
         if (localId && score) {
           importedGrades[localId] = score;
         }
+      }
+
+      // Update grades for all matching students
+      const updatedGrades = { ...unsavedGrades };
+      if (!updatedGrades[assignmentId]) {
+        updatedGrades[assignmentId] = {};
+      }
+
+      // Get all periods for this assignment
+      const assignmentPeriods = assignments[assignmentId].periods;
+
+      // Look for matching students in all periods
+      assignmentPeriods.forEach(period => {
+        if (!updatedGrades[assignmentId][period]) {
+          updatedGrades[assignmentId][period] = {};
+        }
+
+        students[period]?.forEach(student => {
+          if (importedGrades[student.id]) {
+            updatedGrades[assignmentId][period][student.id] = importedGrades[student.id];
+          }
+        });
       });
-  
-      onImport(importedGrades);
+
+      setUnsavedGrades(updatedGrades);
+      assignmentPeriods.forEach(period => {
+        setEditingGrades(prev => ({
+          ...prev,
+          [`${assignmentId}-${period}`]: true
+        }));
+      });
+
       setFile(null);
+      alert('Grades imported successfully!');
     } catch (error) {
       console.error('Error importing grades:', error);
       alert('Error importing grades. Please check the file format.');
@@ -357,7 +401,7 @@ const StudentSearch: FC<{
 const PeriodStudentSearch: FC<{
   students: Student[]; // Now takes all students
   assignmentId: string;  // Add this prop
-  onSelect: (studentId: string, periodId: string) => void;  // Update this prop
+  onSelect: (studentId: number, periodId: string) => void;  // Update this prop
 }> = ({ students, assignmentId, onSelect }) => {
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<Student[]>([]);
@@ -430,6 +474,9 @@ const GradeBook: FC = () => {
   const [incomplete, setIncomplete] = useState<Record<string, boolean>>({});
   const [extraPoints, setExtraPoints] = useState<Record<string, string>>({});
   const [retest, setRetest] = useState<Record<string, boolean>>({});
+  const [isCalendarVisible, setIsCalendarVisible] = useState(true);
+  const [studentSortOrder, setStudentSortOrder] = useState<'none' | 'highest' | 'lowest'>('none');
+  const [tags, setTags] = useState<AssignmentTag[]>([]);
 
   // Fetch students from Supabase
   useEffect(() => {
@@ -510,6 +557,25 @@ const GradeBook: FC = () => {
     };
   
     loadAssignments();
+  }, []);
+
+  // Add function to load tags
+  useEffect(() => {
+    const loadTags = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('assignment_tags')
+          .select('*');
+        
+        if (error) throw error;
+        setTags(data);
+      } catch (error) {
+        console.error('Error loading tags:', error);
+        alert('Failed to load assignment tags');
+      }
+    };
+
+    loadTags();
   }, []);
 
   // Check for birthdays on date selection
@@ -618,45 +684,55 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
   };
 
   const saveGrades = async (assignmentId: string, periodId: string) => {
-    const gradesToSave = unsavedGrades[assignmentId]?.[periodId] || {};
-    const gradeEntries = Object.entries(gradesToSave).map(([studentId, grade]) => ({
-      assignment_id: assignmentId,
-      student_id: studentId,
-      period: periodId,
-      grade: grade
-    }));
+    try {
+      const gradesToSave = unsavedGrades[assignmentId]?.[periodId] || {};
+      const gradeEntries = Object.entries(gradesToSave).map(([studentId, grade]) => ({
+        assignment_id: assignmentId,
+        student_id: parseInt(studentId),  // Ensure student_id is number
+        period: periodId,
+        grade: grade
+      }));
   
-    // Delete existing grades for this assignment and period
-    await supabase
-      .from('grades')
-      .delete()
-      .match({ assignment_id: assignmentId, period: periodId });
+      // Delete existing grades for this assignment and period
+      const { error: deleteError } = await supabase
+        .from('grades')
+        .delete()
+        .match({ assignment_id: assignmentId, period: periodId });
   
-    // Insert new grades
-    const { error } = await supabase
-      .from('grades')
-      .insert(gradeEntries);
-  
-    if (error) {
-      console.error('Error saving grades:', error);
-      return;
-    }
-  
-    setGrades(prev => ({
-      ...prev,
-      [assignmentId]: {
-        ...prev[assignmentId],
-        [periodId]: {
-          ...prev[assignmentId]?.[periodId],
-          ...unsavedGrades[assignmentId]?.[periodId]
-        }
+      if (deleteError) {
+        console.error('Error deleting existing grades:', deleteError);
+        throw new Error('Failed to delete existing grades');
       }
-    }));
   
-    setEditingGrades(prev => ({
-      ...prev,
-      [`${assignmentId}-${periodId}`]: false
-    }));
+      // Insert new grades
+      const { error: insertError } = await supabase
+        .from('grades')
+        .insert(gradeEntries);
+  
+      if (insertError) {
+        console.error('Error inserting new grades:', insertError);
+        throw new Error('Failed to insert new grades');
+      }
+  
+      setGrades(prev => ({
+        ...prev,
+        [assignmentId]: {
+          ...prev[assignmentId],
+          [periodId]: {
+            ...prev[assignmentId]?.[periodId],
+            ...unsavedGrades[assignmentId]?.[periodId]
+          }
+        }
+      }));
+  
+      setEditingGrades(prev => ({
+        ...prev,
+        [`${assignmentId}-${periodId}`]: false
+      }));
+    } catch (error) {
+      console.error('Error saving grades:', error);
+      alert('Failed to save grades. Please try again.');
+    }
   };
 
   const saveAssignment = async () => {
@@ -710,12 +786,16 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
   
     // Create CSV data with comma separation
     const csvData = [
-      ['Student ID', 'Assignment Grade', 'First Name', 'Last Name'].join(','),
+      ['Student ID', 'Final Grade', 'First Name', 'Last Name'].join(','),
       ...periodStudents.map(student => {
         const [lastName, firstName] = student.name.split(',').map(part => part.trim());
+        const finalGrade = calculateTotal(
+          assignmentGrades[student.id] || '0',
+          extraPoints[`${assignmentId}-${periodId}-${student.id}`] || '0'
+        );
         return [
           student.id,
-          assignmentGrades[student.id] || '0',
+          finalGrade,
           escapeCSV(firstName),
           escapeCSV(lastName)
         ].join(',');
@@ -745,9 +825,13 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
   
           return periodStudents.map(student => {
             const [lastName, firstName] = student.name.split(',').map(part => part.trim());
+            const finalGrade = calculateTotal(
+              assignmentGrades[student.id] || '0',
+              extraPoints[`${assignmentId}-${periodId}-${student.id}`] || '0'
+            );
             return [
               student.id,
-              assignmentGrades[student.id] || '0',
+              finalGrade,
               firstName,
               lastName,
               periodId,
@@ -758,7 +842,7 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
       );
   
       const csvData = [
-        ['Student ID', 'Assignment Grade', 'First Name', 'Last Name', 'Period', 'Assignment'].join(','),
+        ['Student ID', 'Final Grade', 'First Name', 'Last Name', 'Period', 'Assignment'].join(','),
         ...allData.map(row => row.join(','))
       ].join('\n');
   
@@ -826,12 +910,12 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
     Object.entries(grades).forEach(([localId, score]) => {
       // Look for student in any period
       assignmentPeriods.forEach(period => {
-        const studentExists = students[period]?.some(s => s.id === localId);
+        const studentExists = students[period]?.some(s => s.id === parseInt(localId));
         if (studentExists) {
           if (!updatedGrades[assignmentId][period]) {
             updatedGrades[assignmentId][period] = {};
           }
-          updatedGrades[assignmentId][period][localId] = score;
+          updatedGrades[assignmentId][period][parseInt(localId)] = score;
         }
       });
     });
@@ -861,16 +945,16 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
     }));
   };
 
-  const handleExtraPointsChange = (assignmentId: string, periodId: string, studentId: string, points: string) => {
+  const handleExtraPointsChange = (assignmentId: string, periodId: string, studentId: number, points: string) => {
     setExtraPoints(prev => ({
       ...prev,
       [`${assignmentId}-${periodId}-${studentId}`]: points
     }));
   };
 
-  const calculateTotal = (grade: string = '0', extra: string = '0') => {
-    const baseGrade = parseInt(grade) || 0;
-    const extraGrade = parseInt(extra) || 0;
+  const calculateTotal = (grade: string = '0', extra: string = '0'): number => {
+    const baseGrade = Math.max(0, Math.min(100, parseInt(grade) || 0));
+    const extraGrade = Math.max(0, Math.min(100, parseInt(extra) || 0));
     return Math.min(100, baseGrade + extraGrade);
   };
 
@@ -882,71 +966,147 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
     }));
   };
 
+  // Update tag handling functions
+  const hasTag = (assignmentId: string, periodId: string, studentId: string, tagType: string) => {
+    return tags.some(tag => 
+      tag.assignment_id === assignmentId && 
+      tag.period === periodId && 
+      String(tag.student_id) === String(studentId) && 
+      tag.tag_type === tagType
+    );
+  };
+
+  const handleTagToggle = async (
+    assignmentId: string, 
+    periodId: string, 
+    studentId: number, 
+    tagType: 'absent' | 'late' | 'incomplete' | 'retest'
+  ) => {
+    // For retest, check if assignment type is Assessment
+    if (tagType === 'retest' && assignments[assignmentId]?.type !== 'Assessment') {
+      return;
+    }
+
+    const existingTag = tags.find(tag => 
+      tag.assignment_id === assignmentId && 
+      tag.period === periodId && 
+      tag.student_id === studentId && 
+      tag.tag_type === tagType
+    );
+
+    if (existingTag) {
+      // Remove tag
+      const { error } = await supabase
+        .from('assignment_tags')
+        .delete()
+        .match({ id: existingTag.id });
+
+      if (!error) {
+        setTags(prev => prev.filter(tag => tag.id !== existingTag.id));
+      }
+    } else {
+      // Add tag
+      const { data, error } = await supabase
+        .from('assignment_tags')
+        .insert({
+          assignment_id: assignmentId,
+          student_id: studentId,
+          period: periodId,
+          tag_type: tagType
+        })
+        .select()
+        .single();
+
+      if (!error && data) {
+        setTags(prev => [...prev, data]);
+      }
+    }
+  };
+
+  const sortStudents = (students: Student[], assignmentId: string, periodId: string) => {
+    if (studentSortOrder === 'none') return students;
+
+    return [...students].sort((a, b) => {
+      const gradeA = calculateTotal(
+        grades[assignmentId]?.[periodId]?.[a.id] || '0',
+        extraPoints[`${assignmentId}-${periodId}-${a.id}`] || '0'
+      );
+      const gradeB = calculateTotal(
+        grades[assignmentId]?.[periodId]?.[b.id] || '0',
+        extraPoints[`${assignmentId}-${periodId}-${b.id}`] || '0'
+      );
+      return studentSortOrder === 'highest' ? gradeB - gradeA : gradeA - gradeB;
+    });
+  };
+
   return (
     <div className="p-6">
       <div className="flex gap-6">
-        {/* Left side */}
-        <div className="space-y-4">
-          <StudentSearch 
-            students={students}
-            onStudentSelect={(student) => {
-              // Scroll to student or highlight their row
-              const element = document.getElementById(`student-${student.id}`);
-              element?.scrollIntoView({ behavior: 'smooth' });
-            }}
-          />
-          <Card className="w-96">
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <CardTitle>Calendar</CardTitle>
-                <Select 
-                  defaultValue="month"
-                  onValueChange={(value) => setCalendarView(value as 'month' | 'week')}
-                >
-                  <SelectTrigger className="w-28">
-                    <SelectValue placeholder="View" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="month">Month</SelectItem>
-                    <SelectItem value="week">Week</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {calendarView === 'month' ? (
-                <Calendar
-                  mode="single"
-                  selected={selectedDate || undefined}
-                  onSelect={handleDateSelect}
-                  className="w-full"
-                  modifiers={{
-                    assignment: (date) => {
-                      return Object.values(assignments).some(
-                        assignment => assignment.date.toDateString() === date.toDateString()
-                      );
-                    }
-                  }}
-                  modifiersStyles={{
-                    assignment: {
-                      border: '2px solid var(--primary)',
-                    }
-                  }}
+        {/* Left side - Collapsible Calendar */}
+        <div className={cn("space-y-4", !isCalendarVisible && "w-auto")}>
+          <Button 
+            variant="outline" 
+            onClick={() => setIsCalendarVisible(prev => !prev)}
+            className="w-full"
+          >
+            {isCalendarVisible ? <ChevronLeft /> : <ChevronRight />}
+            {isCalendarVisible ? "Hide Calendar" : "Show Calendar"}
+          </Button>
+          
+          {isCalendarVisible && (
+            <Card className="w-96">
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <CardTitle>Calendar</CardTitle>
+                  <Select 
+                    defaultValue="month"
+                    onValueChange={(value) => setCalendarView(value as 'month' | 'week')}
+                  >
+                    <SelectTrigger className="w-28">
+                      <SelectValue placeholder="View" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="month">Month</SelectItem>
+                      <SelectItem value="week">Week</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {calendarView === 'month' ? (
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate || undefined}
+                    onSelect={handleDateSelect}
+                    className="w-full"
+                    modifiers={{
+                      assignment: (date) => {
+                        return Object.values(assignments).some(
+                          assignment => assignment.date.toDateString() === date.toDateString()
+                        );
+                      }
+                    }}
+                    modifiersStyles={{
+                      assignment: {
+                        border: '2px solid var(--primary)',
+                      }
+                    }}
+                  />
+                ) : (
+                  <WeekView
+                    date={selectedDate || new Date()}
+                    onDateSelect={(date) => handleDateSelect(date)}
+                    assignments={assignments}
+                  />
+                )}
+                <BirthdayList
+                  students={Object.values(students).flat()}
+                  currentDate={selectedDate || new Date()}
+                  view={calendarView}
                 />
-              ) : (
-                <WeekView
-                  date={selectedDate || new Date()}
-                  onDateSelect={(date) => handleDateSelect(date)}
-                  assignments={assignments}
-                />
-              )}
-              <BirthdayList
-                students={Object.values(students).flat()}
-                currentDate={selectedDate || new Date()}
-                view={calendarView}
-              />
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Right side */}
@@ -1072,17 +1232,34 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
                               }, 100);
                             }}
                           />
-                          <div className="grid grid-cols-[auto_1fr_70px_70px_70px] gap-2">
-                            {(students[periodId] || []).map(student => (
-                              <React.Fragment key={student.id}>
-                                <div id={`student-${student.id}-${assignmentId}`} className="flex items-center gap-1">
+                          <div className="flex justify-between items-center">
+                            <Select
+                              value={studentSortOrder}
+                              onValueChange={(value: 'none' | 'highest' | 'lowest') => setStudentSortOrder(value)}
+                            >
+                              <SelectTrigger className="w-32">
+                                <SelectValue placeholder="Sort by..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">No Sort</SelectItem>
+                                <SelectItem value="highest">Highest</SelectItem>
+                                <SelectItem value="lowest">Lowest</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            
+                            {/* ...existing buttons... */}
+                          </div>
+                          <div className="space-y-2">
+                            {sortStudents(students[periodId] || [], assignmentId, periodId).map(student => (
+                              <div key={student.id} className="grid grid-cols-[auto_1fr_70px_70px_70px] gap-2 items-center">
+                                <div className="flex items-center gap-1">
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => handleAbsenceToggle(assignmentId, periodId, student.id)}
+                                    onClick={() => handleTagToggle(assignmentId, periodId, student.id, 'absent')}
                                     className={cn(
                                       "px-2 h-6 text-xs",
-                                      absences[`${assignmentId}-${periodId}-${student.id}`] && "bg-red-100"
+                                      hasTag(assignmentId, periodId, String(student.id), 'absent') && "bg-red-100"
                                     )}
                                   >
                                     Abs
@@ -1090,10 +1267,10 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => handleLateToggle(assignmentId, periodId, student.id)}
+                                    onClick={() => handleTagToggle(assignmentId, periodId, student.id, 'late')}
                                     className={cn(
                                       "px-2 h-6 text-xs",
-                                      lateWork[`${assignmentId}-${periodId}-${student.id}`] && "bg-yellow-100"
+                                      hasTag(assignmentId, periodId, String(student.id), 'late') && "bg-yellow-100"
                                     )}
                                   >
                                     Late
@@ -1101,10 +1278,10 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => handleIncompleteToggle(assignmentId, periodId, student.id)}
+                                    onClick={() => handleTagToggle(assignmentId, periodId, student.id, 'incomplete')}
                                     className={cn(
                                       "px-2 h-6 text-xs",
-                                      incomplete[`${assignmentId}-${periodId}-${student.id}`] && "bg-orange-100"
+                                      hasTag(assignmentId, periodId, String(student.id), 'incomplete') && "bg-orange-100"
                                     )}
                                   >
                                     Inc
@@ -1113,10 +1290,10 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      onClick={() => handleRetestToggle(assignmentId, periodId, student.id)}
+                                      onClick={() => handleTagToggle(assignmentId, periodId, student.id, 'retest')}
                                       className={cn(
                                         "px-2 h-6 text-xs",
-                                        retest[`${assignmentId}-${periodId}-${student.id}`] && "bg-blue-100"
+                                        hasTag(assignmentId, periodId, String(student.id), 'retest') && "bg-blue-100"
                                       )}
                                     >
                                       Retest
@@ -1141,7 +1318,7 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
                                       ? unsavedGrades[assignmentId]?.[periodId]?.[student.id] || ''
                                       : grades[assignmentId]?.[periodId]?.[student.id] || ''
                                   }
-                                  onChange={(e) => handleGradeChange(assignmentId, periodId, student.id, e.target.value)}
+                                  onChange={(e) => handleGradeChange(assignmentId, periodId, String(student.id), e.target.value)}
                                 />
                                 <Input
                                   type="number"
@@ -1161,24 +1338,23 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
                                     )}
                                   </span>
                                 </div>
-                              </React.Fragment>
+                              </div>
                             ))}
                           </div>
                         </div>
                         
                         <div className="mt-4 flex justify-between items-center">
-                          {assignment.type === 'Assessment' && (
-                            <ImportScoresDialog
-                              assignmentId={assignmentId}
-                              periodId={periodId}
-                              onImport={(grades) => handleImportGrades(assignmentId, periodId, grades)}
-                              unsavedGrades={unsavedGrades}
-                              setUnsavedGrades={setUnsavedGrades}
-                              setEditingGrades={setEditingGrades}
-                              assignments={assignments}
-                              students={students}
-                            />
-                          )}
+                          <ImportScoresDialog
+                            assignmentId={assignmentId}
+                            periodId={periodId}
+                            onImport={(grades) => handleImportGrades(assignmentId, periodId, grades)}
+                            unsavedGrades={unsavedGrades}
+                            setUnsavedGrades={setUnsavedGrades}
+                            setEditingGrades={setEditingGrades}
+                            assignments={assignments}
+                            students={students}
+                            grades={grades}
+                          />
                           <Button
                             onClick={() => saveGrades(assignmentId, periodId)}
                             className="flex items-center gap-2"
