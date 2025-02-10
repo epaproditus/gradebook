@@ -1,450 +1,934 @@
 'use client';
 
-  import type { FC } from 'react';
-  import React, { useState, useEffect } from 'react';
-  import { createClient } from '@supabase/supabase-js';
-  import { Calendar } from '@/components/ui/calendar';
-  import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-  import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-  import { Input } from '@/components/ui/input';
-  import { Button } from '@/components/ui/button';
-  import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-  import { X, Save, ChevronDown, ChevronUp, Download } from 'lucide-react';
+import type { FC } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import { Calendar } from '@/components/ui/calendar';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { X, Save, ChevronDown, ChevronUp, Download } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
 
-  // Initialize Supabase client
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-  );
+// Initialize Supabase client (this is fine outside component)
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+);
 
-  interface Student {
-    id: string;
-    name: string;
-    birthday: string;
-    class_period: string;
-  }
+// Move interfaces outside component
+interface Student {
+  id: string;
+  name: string;
+  birthday: string;
+  class_period: string;
+}
 
-  interface Assignment {
-    date: Date;
-    name: string;
-    periods: string[];
-    type: 'Daily' | 'Assessment';
-  }
+interface Assignment {
+  date: Date;
+  name: string;
+  periods: string[];
+  type: 'Daily' | 'Assessment';
+}
 
-  interface GradeData {
+interface GradeData {
+  [key: string]: {
     [key: string]: {
-      [key: string]: {
-        [key: string]: string;
-      };
+      [key: string]: string;
     };
-  }
+  };
+}
 
-  const GradeBook: FC = () => {
-    const [students, setStudents] = useState<Record<string, Student[]>>({});
-    const [birthdayStudents, setBirthdayStudents] = useState<Student[]>([]);
-    const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-    const [assignments, setAssignments] = useState<Record<string, Assignment>>({});
-    const [newAssignment, setNewAssignment] = useState<Assignment | null>(null);
-    const [grades, setGrades] = useState<GradeData>({});
-    const [unsavedGrades, setUnsavedGrades] = useState<GradeData>({});
-    const [editingGrades, setEditingGrades] = useState<Record<string, boolean>>({});
-    const [expandedAssignments, setExpandedAssignments] = useState<Record<string, boolean>>({});
-    const [selectedType, setSelectedType] = useState<'Daily' | 'Assessment'>('Daily');
+interface ExportDialogProps {
+  assignments: Record<string, Assignment>;
+  students: Record<string, Student[]>;
+  onExport: (assignments: string[], periods: string[], merge: boolean) => void;
+}
 
-    // Fetch students from Supabase
-    useEffect(() => {
-      const fetchStudents = async () => {
-        try {
-          const { data, error } = await supabase
-            .from('students')
-            .select('*')
-            .order('class_period, name');
+interface BirthdayListProps {
+  students: Student[];
+  currentMonth: number;
+}
 
-          if (error) {
-            console.error('Error fetching students:', error);
-            return;
-          }
+interface DMACScore {
+  LocalID: string;
+  Score: string;
+  // ... other DMAC fields if needed
+}
 
-          // Organize students by period
-          const studentsByPeriod = data.reduce((acc: Record<string, Student[]>, student: Student) => {
-            if (!acc[student.class_period]) {
-              acc[student.class_period] = [];
-            }
-            acc[student.class_period].push(student);
-            return acc;
-          }, {});
+const BirthdayList: FC<BirthdayListProps> = ({ students, currentMonth }) => {
+  const monthBirthdays = students.filter(student => {
+    if (!student.birthday) return false;
+    const [_, month] = student.birthday.split('-').map(Number);
+    return month === currentMonth;
+  }).sort((a, b) => {
+    const [_y1, _m1, dayA] = a.birthday.split('-').map(Number);
+    const [_y2, _m2, dayB] = b.birthday.split('-').map(Number);
+    return dayA - dayB;
+  });
 
-          setStudents(studentsByPeriod);
-        } catch (error) {
-          console.error('Error in fetchStudents:', error);
-        }
-      };
+  return (
+    <div className="mt-4">
+      <h3 className="font-semibold mb-2">Birthdays this month:</h3>
+      {monthBirthdays.map(student => {
+        const [_, __, day] = student.birthday.split('-').map(Number);
+        return (
+          <div key={student.id} className="text-sm flex gap-2 items-center">
+            <span className="w-6">{day}</span>
+            <span>🎂</span>
+            <span>{student.name}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
 
-      fetchStudents();
-    }, []);
+const GradeExportDialog: FC<ExportDialogProps> = ({ assignments, students, onExport }) => {
+  const [selectedAssignment, setSelectedAssignment] = useState<string>('');
+  const [selectedPeriods, setSelectedPeriods] = useState<string[]>([]);
+  const [mergePeriods, setMergePeriods] = useState(false);
 
-    // Check for birthdays on date selection
-    const checkBirthdays = (date: Date) => {
-      const selectedMonth = date.getMonth() + 1;
-      const selectedDay = date.getDate();
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="outline" className="flex items-center gap-2">
+          <Download className="h-4 w-4" />
+          Export Grades
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Export Grades</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <h4 className="mb-2 text-sm font-medium">Assignments</h4>
+            <Select value={selectedAssignment} onValueChange={setSelectedAssignment}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select Assignment" />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(assignments).map(([id, assignment]) => (
+                  <SelectItem key={id} value={id}>
+                    {assignment.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-      const birthdayStudents = Object.values(students)
-        .flat()
-        .filter(student => {
-          const birthday = new Date(student.birthday + 'T00:00:00'); // Add time to ensure proper parsing
-          return (
-            birthday.getMonth() + 1 === selectedMonth && 
-            birthday.getDate() === selectedDay
-          );
-        });
+          <div>
+            <h4 className="mb-2 text-sm font-medium">Class Periods</h4>
+            <div className="space-y-2">
+              {Object.keys(students).map((periodId) => (
+                <div key={periodId} className="flex items-center gap-2">
+                  <Checkbox
+                    checked={selectedPeriods.includes(periodId)}
+                    onCheckedChange={(checked) => {
+                      setSelectedPeriods(prev => 
+                        checked 
+                          ? [...prev, periodId]
+                          : prev.filter(p => p !== periodId)
+                      );
+                    }}
+                  />
+                  <span className="text-sm">Period {periodId}</span>
+                </div>
+              ))}
+            </div>
+          </div>
 
-      setBirthdayStudents(birthdayStudents);
-    };
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={mergePeriods}
+              onCheckedChange={(checked) => setMergePeriods(!!checked)}
+            />
+            <span className="text-sm">Merge all periods into one file</span>
+          </div>
+        </div>
+        <Button 
+          onClick={() => onExport([selectedAssignment], selectedPeriods, mergePeriods)}
+          disabled={selectedAssignment === '' || selectedPeriods.length === 0}
+        >
+          Export Selected
+        </Button>
+      </DialogContent>
+    </Dialog>
+  );
+};
 
-    const handleDateSelect = (date: Date | undefined) => {
-      if (date) {
-        setSelectedDate(date);
-        checkBirthdays(date);
-        setNewAssignment({
-          date,
-          name: '',
-          periods: [],
-          type: selectedType
-        });
-      }
-    };
+const ImportScoresDialog: FC<{
+  assignmentId: string;
+  periodId: string;
+  onImport: (grades: Record<string, string>) => void;
+}> = ({ assignmentId, periodId, onImport }) => {
+  const [file, setFile] = useState<File | null>(null);
 
-    const handleAssignmentNameChange = (name: string) => {
-      setNewAssignment(prev => prev ? { ...prev, name } : null);
-    };
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setFile(file);
+      const text = await file.text();
+      const rows = text.split('\n');
+      const headers = rows[0].split(',');
+      const localIdIndex = headers.findIndex(h => h.trim() === 'LocalID');
+      const scoreIndex = headers.findIndex(h => h.trim() === 'Score');
 
-    const handlePeriodsSelect = (selectedPeriod: string) => {
-      setNewAssignment(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          periods: Array.from(new Set([...prev.periods, selectedPeriod]))
-        };
-      });
-    };
-
-    const handleGradeChange = (assignmentId: string, periodId: string, studentId: string, grade: string) => {
-      const finalGrade = grade === '' ? '0' : grade;
-      setUnsavedGrades(prev => ({
-        ...prev,
-        [assignmentId]: {
-          ...prev[assignmentId],
-          [periodId]: {
-            ...prev[assignmentId]?.[periodId],
-            [studentId]: finalGrade
-          }
-        }
-      }));
-      setEditingGrades(prev => ({
-        ...prev,
-        [`${assignmentId}-${periodId}`]: true
-      }));
-    };
-
-    const deleteAssignment = (assignmentId: string) => {
-      setAssignments(prev => {
-        const newAssignments = { ...prev };
-        delete newAssignments[assignmentId];
-        return newAssignments;
-      });
-    };
-
-    const toggleAssignment = (assignmentId: string) => {
-      setExpandedAssignments(prev => ({
-        ...prev,
-        [assignmentId]: !prev[assignmentId]
-      }));
-    };
-
-    const saveGrades = (assignmentId: string, periodId: string) => {
-      setGrades(prev => ({
-        ...prev,
-        [assignmentId]: {
-          ...prev[assignmentId],
-          [periodId]: {
-            ...prev[assignmentId]?.[periodId],
-            ...unsavedGrades[assignmentId]?.[periodId]
-          }
-        }
-      }));
-
-      setEditingGrades(prev => ({
-        ...prev,
-        [`${assignmentId}-${periodId}`]: false
-      }));
-    };
-
-    const saveAssignment = () => {
-      if (!newAssignment?.name || newAssignment.periods.length === 0) {
-        alert('Please fill in assignment name and select at least one period');
+      if (localIdIndex === -1 || scoreIndex === -1) {
+        alert('Invalid file format. Missing required columns.');
         return;
       }
 
-      const assignmentId = `${newAssignment.date.toISOString()}-${newAssignment.name}`;
-      setAssignments(prev => ({
-        ...prev,
-        [assignmentId]: {
-          ...newAssignment,
-          date: newAssignment.date,
-          type: selectedType
+      const grades: Record<string, string> = {};
+      rows.slice(1).forEach(row => {
+        const columns = row.split(',');
+        const localId = columns[localIdIndex].trim();
+        const score = columns[scoreIndex].trim();
+        if (localId && score) {
+          grades[localId] = score;
         }
-      }));
-      setNewAssignment(null);
-      setSelectedDate(null);
+      });
+
+      onImport(grades);
+    }
+  };
+
+  const handleSubmitImport = (file: File) => {
+    // Handle the file import logic here
+  };
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="ml-2">
+          Import DMAC Scores
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Import DMAC Scores</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <Input
+            type="file"
+            accept=".csv"
+            onChange={handleFileUpload}
+          />
+          <div className="text-sm text-muted-foreground">
+            Upload a CSV file exported from DMAC containing student scores.
+          </div>
+          <Button onClick={() => file && handleSubmitImport(file)}>
+            Import Scores
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const GradeBook: FC = () => {
+  // Move useState here
+  const [calendarView, setCalendarView] = useState<'month' | 'week'>('month');
+  
+  // Rest of your state declarations
+  const [students, setStudents] = useState<Record<string, Student[]>>({});
+  const [birthdayStudents, setBirthdayStudents] = useState<Student[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [assignments, setAssignments] = useState<Record<string, Assignment>>({});
+  const [newAssignment, setNewAssignment] = useState<Assignment | null>(null);
+  const [grades, setGrades] = useState<GradeData>({});
+  const [unsavedGrades, setUnsavedGrades] = useState<GradeData>({});
+  const [editingGrades, setEditingGrades] = useState<Record<string, boolean>>({});
+  const [expandedAssignments, setExpandedAssignments] = useState<Record<string, boolean>>({});
+  const [selectedType, setSelectedType] = useState<'Daily' | 'Assessment'>('Daily');
+  const [absences, setAbsences] = useState<Record<string, boolean>>({});
+  const [lateWork, setLateWork] = useState<Record<string, boolean>>({});
+  const [incomplete, setIncomplete] = useState<Record<string, boolean>>({});
+
+  // Fetch students from Supabase
+  useEffect(() => {
+    const fetchStudents = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('students')
+          .select('*')
+          .order('class_period, name');
+
+        if (error) {
+          console.error('Error fetching students:', error);
+          return;
+        }
+
+        // Organize students by period
+        const studentsByPeriod = data.reduce((acc: Record<string, Student[]>, student: Student) => {
+          if (!acc[student.class_period]) {
+            acc[student.class_period] = [];
+          }
+          acc[student.class_period].push(student);
+          return acc;
+        }, {});
+
+        setStudents(studentsByPeriod);
+      } catch (error) {
+        console.error('Error in fetchStudents:', error);
+      }
     };
 
-    const exportGrades = (assignmentId: string, periodId: string) => {
-      const assignment = assignments[assignmentId];
-      const periodStudents = students[periodId] || [];
-      const assignmentGrades = grades[assignmentId]?.[periodId] || {};
-    
-      // Function to split name into first and last name
-      const splitName = (fullName: string) => {
-        // Assuming format is "Last Name, First Name"
-        const [lastName, firstName] = fullName.split(',').map(part => part.trim());
-        return { firstName: firstName || '', lastName: lastName || '' };
+    fetchStudents();
+  }, []);
+
+  // Load assignments and grades on component mount
+  useEffect(() => {
+    const loadAssignments = async () => {
+      const { data: assignmentData, error: assignmentError } = await supabase
+        .from('assignments')
+        .select('*');
+  
+      if (assignmentError) {
+        console.error('Error loading assignments:', assignmentError);
+        return;
+      }
+  
+      const formattedAssignments = assignmentData.reduce((acc, assignment) => ({
+        ...acc,
+        [assignment.id]: {
+          ...assignment,
+          date: new Date(assignment.date)
+        }
+      }), {});
+  
+      setAssignments(formattedAssignments);
+  
+      // Load grades for all assignments
+      const { data: gradeData, error: gradeError } = await supabase
+        .from('grades')
+        .select('*');
+  
+      if (gradeError) {
+        console.error('Error loading grades:', gradeError);
+        return;
+      }
+  
+      const formattedGrades = gradeData.reduce((acc, grade) => ({
+        ...acc,
+        [grade.assignment_id]: {
+          ...acc[grade.assignment_id],
+          [grade.period]: {
+            ...acc[grade.assignment_id]?.[grade.period],
+            [grade.student_id]: grade.grade
+          }
+        }
+      }), {});
+  
+      setGrades(formattedGrades);
+    };
+  
+    loadAssignments();
+  }, []);
+
+  // Check for birthdays on date selection
+  const checkBirthdays = (date: Date) => {
+    const selectedMonth = date.getMonth() + 1;
+    const selectedDay = date.getDate();
+
+    const birthdayStudents = Object.values(students)
+      .flat()
+      .filter(student => {
+        if (!student.birthday) return false;
+        const [year, month, day] = student.birthday.split('-').map(Number);
+        return month === selectedMonth && day === selectedDay;
+      });
+
+    setBirthdayStudents(birthdayStudents);
+  };
+
+  const handleDateSelect = (date: Date | undefined) => {
+    if (date) {
+      setSelectedDate(date);
+      checkBirthdays(date);
+      // Remove automatic assignment creation
+    }
+  };
+
+  const handleAssignmentNameChange = (name: string) => {
+    setNewAssignment(prev => prev ? { ...prev, name } : null);
+  };
+
+  const handlePeriodsSelect = (selectedPeriod: string) => {
+    setNewAssignment(prev => {
+      if (!prev) return null;
+      const periods = prev.periods.includes(selectedPeriod)
+        ? prev.periods.filter(p => p !== selectedPeriod)
+        : [...prev.periods, selectedPeriod];
+      return {
+        ...prev,
+        periods
       };
-    
-      // Create CSV data with tab separation
-      const csvData = [
-        ['Student ID', 'Assignment Grade', 'First Name', 'Last Name'], // Header
-        ...periodStudents.map(student => {
-          const { firstName, lastName } = splitName(student.name);
-          return [
-            student.id,
-            assignmentGrades[student.id] || '0', // Default to '0' here
-            firstName,
-            lastName
-          ];
+    });
+  };
+
+  const handleGradeChange = (assignmentId: string, periodId: string, studentId: string, grade: string) => {
+    const finalGrade = grade === '' ? '0' : grade;
+    setUnsavedGrades(prev => ({
+      ...prev,
+      [assignmentId]: {
+        ...prev[assignmentId],
+        [periodId]: {
+          ...prev[assignmentId]?.[periodId],
+          [studentId]: finalGrade
+        }
+      }
+    }));
+    setEditingGrades(prev => ({
+      ...prev,
+      [`${assignmentId}-${periodId}`]: true
+    }));
+  };
+
+  const deleteAssignment = async (assignmentId: string) => {
+    if (!confirm('Are you sure you want to delete this assignment?')) {
+      return;
+    }
+    // Delete grades first (due to foreign key constraint)
+    await supabase
+      .from('grades')
+      .delete()
+      .match({ assignment_id: assignmentId });
+  
+    // Then delete the assignment
+    const { error } = await supabase
+      .from('assignments')
+      .delete()
+      .match({ id: assignmentId });
+  
+    if (error) {
+      console.error('Error deleting assignment:', error);
+      return;
+    }
+  
+    setAssignments(prev => {
+      const newAssignments = { ...prev };
+      delete newAssignments[assignmentId];
+      return newAssignments;
+    });
+  };
+
+  const toggleAssignment = (assignmentId: string) => {
+    setExpandedAssignments(prev => ({
+      ...prev,
+      [assignmentId]: !prev[assignmentId]
+    }));
+  };
+
+  const saveGrades = async (assignmentId: string, periodId: string) => {
+    const gradesToSave = unsavedGrades[assignmentId]?.[periodId] || {};
+    const gradeEntries = Object.entries(gradesToSave).map(([studentId, grade]) => ({
+      assignment_id: assignmentId,
+      student_id: studentId,
+      period: periodId,
+      grade: grade
+    }));
+  
+    // Delete existing grades for this assignment and period
+    await supabase
+      .from('grades')
+      .delete()
+      .match({ assignment_id: assignmentId, period: periodId });
+  
+    // Insert new grades
+    const { error } = await supabase
+      .from('grades')
+      .insert(gradeEntries);
+  
+    if (error) {
+      console.error('Error saving grades:', error);
+      return;
+    }
+  
+    setGrades(prev => ({
+      ...prev,
+      [assignmentId]: {
+        ...prev[assignmentId],
+        [periodId]: {
+          ...prev[assignmentId]?.[periodId],
+          ...unsavedGrades[assignmentId]?.[periodId]
+        }
+      }
+    }));
+  
+    setEditingGrades(prev => ({
+      ...prev,
+      [`${assignmentId}-${periodId}`]: false
+    }));
+  };
+
+  const saveAssignment = async () => {
+    if (!newAssignment?.name || newAssignment.periods.length === 0) {
+      alert('Please fill in assignment name and select at least one period');
+      return;
+    }
+  
+    const assignmentId = `${newAssignment.date.toISOString()}-${newAssignment.name}`;
+    const assignmentData = {
+      id: assignmentId,
+      name: newAssignment.name,
+      date: newAssignment.date.toISOString().split('T')[0],
+      type: selectedType,
+      periods: newAssignment.periods
+    };
+  
+    const { error } = await supabase
+      .from('assignments')
+      .insert(assignmentData);
+  
+    if (error) {
+      console.error('Error saving assignment:', error);
+      return;
+    }
+  
+    setAssignments(prev => ({
+      ...prev,
+      [assignmentId]: {
+        ...newAssignment,
+        date: newAssignment.date,
+        type: selectedType
+      }
+    }));
+    setNewAssignment(null);
+    setSelectedDate(null);
+  };
+
+  const exportSingleGradeSet = (assignmentId: string, periodId: string) => {
+    const assignment = assignments[assignmentId];
+    const periodStudents = students[periodId] || [];
+    const assignmentGrades = grades[assignmentId]?.[periodId] || {};
+  
+    // Function to escape commas in values
+    const escapeCSV = (value: string) => {
+      if (value.includes(',') || value.includes('"')) {
+        return `"${value.replace(/"/g, '""')}"`;
+      }
+      return value;
+    };
+  
+    // Create CSV data with comma separation
+    const csvData = [
+      ['Student ID', 'Assignment Grade', 'First Name', 'Last Name'].join(','),
+      ...periodStudents.map(student => {
+        const [lastName, firstName] = student.name.split(',').map(part => part.trim());
+        return [
+          student.id,
+          assignmentGrades[student.id] || '0',
+          escapeCSV(firstName),
+          escapeCSV(lastName)
+        ].join(',');
+      })
+    ].join('\n');
+  
+    // Create and trigger download
+    const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${assignment.name}-${periodId}-grades.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };
+
+  const exportGrades = (assignmentIds: string[], periodIds: string[], merge: boolean) => {
+    if (merge) {
+      // Create one merged file for all selections
+      const allData = assignmentIds.flatMap(assignmentId => 
+        periodIds.flatMap(periodId => {
+          const assignment = assignments[assignmentId];
+          const periodStudents = students[periodId] || [];
+          const assignmentGrades = grades[assignmentId]?.[periodId] || {};
+  
+          return periodStudents.map(student => {
+            const [lastName, firstName] = student.name.split(',').map(part => part.trim());
+            return [
+              student.id,
+              assignmentGrades[student.id] || '0',
+              firstName,
+              lastName,
+              periodId,
+              assignment.name
+            ];
+          });
         })
-      ];
-    
-      // Convert to CSV string using tabs
-      const csv = csvData.map(row => row.join('\t')).join('\n');
-    
-      // Create and trigger download
-      const blob = new Blob([csv], { type: 'text/csv' });
+      );
+  
+      const csvData = [
+        ['Student ID', 'Assignment Grade', 'First Name', 'Last Name', 'Period', 'Assignment'].join(','),
+        ...allData.map(row => row.join(','))
+      ].join('\n');
+  
+      // Download merged file
+      const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${assignment.name}-${periodId}-grades.csv`;
+      a.download = `grades-export.csv`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-    };
+    } else {
+      // Create separate files for each assignment-period combination
+      assignmentIds.forEach(assignmentId => {
+        periodIds.forEach(periodId => {
+          exportSingleGradeSet(assignmentId, periodId);
+        });
+      });
+    }
+  };
 
-    return (
-      <div className="p-6">
-        <div className="flex gap-6">
-          {/* Left side - Calendar */}
-          <Card className="w-96 h-fit">
-            <CardHeader>
+  const handleAbsenceToggle = async (assignmentId: string, periodId: string, studentId: string) => {
+    const key = `${assignmentId}-${periodId}-${studentId}`;
+    
+    if (absences[key]) {
+      // Remove absence
+      await supabase
+        .from('absences')
+        .delete()
+        .match({ 
+          assignment_id: assignmentId,
+          student_id: studentId,
+          period: periodId 
+        });
+    } else {
+      // Add absence
+      await supabase
+        .from('absences')
+        .insert({
+          assignment_id: assignmentId,
+          student_id: studentId,
+          period: periodId
+        });
+    }
+  
+    setAbsences(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
+  const handleImportGrades = async (assignmentId: string, periodId: string, grades: Record<string, string>) => {
+    const updatedGrades = { ...unsavedGrades };
+    
+    if (!updatedGrades[assignmentId]) {
+      updatedGrades[assignmentId] = {};
+    }
+    if (!updatedGrades[assignmentId][periodId]) {
+      updatedGrades[assignmentId][periodId] = {};
+    }
+  
+    // Update grades for matching student IDs
+    Object.entries(grades).forEach(([localId, score]) => {
+      const student = students[periodId]?.find(s => s.id === localId);
+      if (student) {
+        updatedGrades[assignmentId][periodId][localId] = score;
+      }
+    });
+  
+    setUnsavedGrades(updatedGrades);
+    setEditingGrades(prev => ({
+      ...prev,
+      [`${assignmentId}-${periodId}`]: true
+    }));
+  };
+
+  const handleLateToggle = (assignmentId: string, periodId: string, studentId: string) => {
+    const key = `${assignmentId}-${periodId}-${studentId}`;
+    setLateWork(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
+  const handleIncompleteToggle = (assignmentId: string, periodId: string, studentId: string) => {
+    const key = `${assignmentId}-${periodId}-${studentId}`;
+    setIncomplete(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+  return (
+    <div className="p-6">
+      <div className="flex gap-6">
+        {/* Left side - Calendar */}
+        <Card className="w-96 h-fit">
+          <CardHeader>
+            <div className="flex justify-between items-center">
               <CardTitle>Calendar</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Calendar
-                mode="single"
-                selected={selectedDate || undefined}
-                onSelect={handleDateSelect}
-                className="w-full"
-                modifiers={{
-                  assignment: (date) => {
-                    return Object.values(assignments).some(
-                      assignment => 
-                        assignment.date.toDateString() === date.toDateString()
-                    );
-                  }
-                }}
-                modifiersStyles={{
-                  assignment: {
-                    textDecoration: 'underline',
-                    content: '""',
-                    position: 'relative',
-                    backgroundColor: 'currentColor'
-                  }
-                }}
-              />
-              {birthdayStudents.length > 0 && (
-                <div className="mt-4 p-4 bg-secondary rounded-lg">
-                  <div className="text-xl mb-2">🎉🎂🥳</div>
-                  <div>Birthday Celebrations:</div>
-                  {birthdayStudents.map(student => (
-                    <div key={student.id} className="text-sm">
-                      {student.name}
+              <Select 
+                defaultValue="month"
+                onValueChange={(value) => setCalendarView(value as 'month' | 'week')}
+              >
+                <SelectTrigger className="w-28">
+                  <SelectValue placeholder="View" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="month">Month</SelectItem>
+                  <SelectItem value="week">Week</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Calendar
+              mode="single"
+              selected={selectedDate || undefined}
+              onSelect={handleDateSelect}
+              className="w-full"
+              weekStartsOn={1}
+              modifiers={{
+                assignment: (date) => {
+                  return Object.values(assignments).some(
+                    assignment => 
+                      assignment.date.toDateString() === date.toDateString()
+                  );
+                }
+              }}
+              modifiersStyles={{
+                assignment: {
+                  border: '2px solid var(--primary)',
+                }
+              }}
+            />
+          </CardContent>
+        </Card>
+
+        {/* Right side - Assignments and Grades */}
+        <div className="flex-grow space-y-4">
+          {/* New Assignment Form */}
+          {newAssignment && (
+            <Card>
+              <CardHeader>
+                <CardTitle>New Assignment for {newAssignment.date.toLocaleDateString()}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Input
+                  placeholder="Assignment Name"
+                  value={newAssignment.name}
+                  onChange={(e) => handleAssignmentNameChange(e.target.value)}
+                />
+                <div className="border rounded-md p-4">
+                  <div className="text-sm font-medium mb-2">Select Periods</div>
+                  {Object.keys(students).map(periodId => (
+                    <div key={periodId} className="flex items-center gap-2 mb-2">
+                      <Checkbox 
+                        checked={newAssignment?.periods.includes(periodId)}
+                        onCheckedChange={() => handlePeriodsSelect(periodId)}
+                        className="h-4 w-4"
+                      />
+                      <span>Period {periodId}</span>
                     </div>
                   ))}
                 </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Right side - Assignments and Grades */}
-          <div className="flex-grow space-y-4">
-            {/* New Assignment Form */}
-            {newAssignment && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>New Assignment for {newAssignment.date.toLocaleDateString()}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Input
-                    placeholder="Assignment Name"
-                    value={newAssignment.name}
-                    onChange={(e) => handleAssignmentNameChange(e.target.value)}
-                  />
-                  <Select onValueChange={handlePeriodsSelect}>
+                <div className="flex gap-2 flex-wrap">
+                  {newAssignment.periods.map(periodId => (
+                    <div key={periodId} className="bg-secondary text-secondary-foreground px-2 py-1 rounded">
+                      Period {periodId}
+                    </div>
+                  ))}
+                </div>
+                <div className="space-y-4">
+                  <Select onValueChange={(value: 'Daily' | 'Assessment') => setSelectedType(value)}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select Periods" />
+                      <SelectValue placeholder="Assignment Type" />
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.keys(students).map(periodId => (
-                        <SelectItem key={periodId} value={periodId}>
-                          Period {periodId}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="Daily">Daily</SelectItem>
+                      <SelectItem value="Assessment">Assessment</SelectItem>
                     </SelectContent>
                   </Select>
-                  <div className="flex gap-2 flex-wrap">
-                    {newAssignment.periods.map(periodId => (
-                      <div key={periodId} className="bg-secondary text-secondary-foreground px-2 py-1 rounded">
-                        Period {periodId}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="space-y-4">
-                    <Select onValueChange={(value: 'Daily' | 'Assessment') => setSelectedType(value)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Assignment Type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Daily">Daily</SelectItem>
-                        <SelectItem value="Assessment">Assessment</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button onClick={saveAssignment} className="w-full">
-                    Create Assignment
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
+                </div>
+                <Button onClick={saveAssignment} className="w-full">
+                  Create Assignment
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
-            {/* Existing Assignments */}
-            {Object.entries(assignments).map(([assignmentId, assignment]) => (
-              <Card 
-                key={assignmentId} 
-                className="w-full mb-2"
+          {/* Existing Assignments */}
+          {Object.entries(assignments).map(([assignmentId, assignment]) => (
+            <Card 
+              key={assignmentId} 
+              className="w-full mb-2"
+            >
+              <CardHeader
+                className="flex flex-row items-center justify-between cursor-pointer"
+                onClick={() => toggleAssignment(assignmentId)}
               >
-                <CardHeader
-                  className="flex flex-row items-center justify-between cursor-pointer"
-                  onClick={() => toggleAssignment(assignmentId)}
-                >
-                  <div>
-                    <CardTitle>{assignment.name}</CardTitle>
-                    <div className="text-sm text-muted-foreground">
-                      {assignment.date.toLocaleDateString()}
-                    </div>
+                <div>
+                  <CardTitle>{assignment.name}</CardTitle>
+                  <div className="text-sm text-muted-foreground">
+                    {assignment.date.toLocaleDateString()}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteAssignment(assignmentId);
-                      }}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                    {expandedAssignments[assignmentId] ? (
-                      <ChevronUp className="h-4 w-4" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4" />
-                    )}
-                  </div>
-                </CardHeader>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteAssignment(assignmentId);
+                    }}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                  {expandedAssignments[assignmentId] ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </div>
+              </CardHeader>
 
-                {expandedAssignments[assignmentId] && (
-                  <CardContent>
-                    <Tabs defaultValue={assignment.periods[0]}>
-                      <TabsList className="w-full">
-                        {assignment.periods.map(periodId => (
-                          <TabsTrigger
-                            key={periodId}
-                            value={periodId}
-                            className="flex-1"
-                          >
-                            Period {periodId}
-                          </TabsTrigger>
-                        ))}
-                      </TabsList>
+              {expandedAssignments[assignmentId] && (
+                <CardContent>
+                  <Tabs defaultValue={assignment.periods[0]}>
+                    <TabsList className="w-full">
                       {assignment.periods.map(periodId => (
-                        <TabsContent key={periodId} value={periodId}>
-                          <div className="space-y-4">
-                            <Button
-                              onClick={() => exportGrades(assignmentId, periodId)}
-                              variant="outline"
-                              className="w-full flex items-center gap-2"
-                            >
-                              <Download className="h-4 w-4" />
-                              Export Grades
-                            </Button>
-
-                            <div className="grid grid-cols-[auto_100px] gap-2">
-                              {(students[periodId] || []).map(student => (
-                                <React.Fragment key={student.id}>
-                                  <div className="flex items-center bg-secondary rounded px-2 py-1">
-                                    <span className="text-sm text-muted-foreground mr-2">
-                                      {student.id}
-                                    </span>
-                                    <span className="text-sm">{student.name}</span>
-                                  </div>
-                                  <Input
-                                    type="number"
-                                    min="0"
-                                    max="100"
-                                    placeholder="0"
-                                    className="text-center h-8 text-sm"
-                                    value={
-                                      editingGrades[`${assignmentId}-${periodId}`] 
-                                        ? unsavedGrades[assignmentId]?.[periodId]?.[student.id] || ''
-                                        : grades[assignmentId]?.[periodId]?.[student.id] || ''
-                                    }
-                                    onChange={(e) => handleGradeChange(assignmentId, periodId, student.id, e.target.value)}
-                                  />
-                                </React.Fragment>
-                              ))}
-                            </div>
-                          </div>
-
-                          {editingGrades[`${assignmentId}-${periodId}`] && (
-                            <div className="mt-4 flex justify-end">
-                              <Button
-                                onClick={() => saveGrades(assignmentId, periodId)}
-                                className="flex items-center gap-2"
-                              >
-                                <Save className="h-4 w-4" />
-                                Save Grades
-                              </Button>
-                            </div>
-                          )}
-                        </TabsContent>
+                        <TabsTrigger
+                          key={periodId}
+                          value={periodId}
+                          className="flex-1"
+                        >
+                          Period {periodId}
+                        </TabsTrigger>
                       ))}
-                    </Tabs>
-                  </CardContent>
-                )}
-              </Card>
-            ))}
-          </div>
+                    </TabsList>
+                    {assignment.periods.map(periodId => (
+                      <TabsContent key={periodId} value={periodId}>
+                        <div className="flex justify-between items-center mb-4">
+                          <h3 className="text-lg font-medium">Period {periodId}</h3>
+                          {assignment.type === 'Assessment' && (
+                            <ImportScoresDialog
+                              assignmentId={assignmentId}
+                              periodId={periodId}
+                              onImport={(grades) => handleImportGrades(assignmentId, periodId, grades)}
+                            />
+                          )}
+                        </div>
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-[auto_1fr_100px] gap-2">
+                            {(students[periodId] || []).map(student => (
+                              <React.Fragment key={student.id}>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleAbsenceToggle(assignmentId, periodId, student.id)}
+                                    className={cn(
+                                      "px-1 h-6 text-xs",
+                                      absences[`${assignmentId}-${periodId}-${student.id}`] && "bg-red-100"
+                                    )}
+                                  >
+                                    A
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleLateToggle(assignmentId, periodId, student.id)}
+                                    className={cn(
+                                      "px-1 h-6 text-xs",
+                                      lateWork[`${assignmentId}-${periodId}-${student.id}`] && "bg-yellow-100"
+                                    )}
+                                  >
+                                    L
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleIncompleteToggle(assignmentId, periodId, student.id)}
+                                    className={cn(
+                                      "px-1 h-6 text-xs",
+                                      incomplete[`${assignmentId}-${periodId}-${student.id}`] && "bg-orange-100"
+                                    )}
+                                  >
+                                    I
+                                  </Button>
+                                </div>
+                                <div className="flex items-center bg-secondary rounded px-2 py-1">
+                                  <span className="text-sm text-muted-foreground mr-2">
+                                    {student.id}
+                                  </span>
+                                  <span className="text-sm">{student.name}</span>
+                                </div>
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  placeholder="0"
+                                  className="text-center h-8 text-sm"
+                                  value={
+                                    editingGrades[`${assignmentId}-${periodId}`] 
+                                      ? unsavedGrades[assignmentId]?.[periodId]?.[student.id] || ''
+                                      : grades[assignmentId]?.[periodId]?.[student.id] || ''
+                                  }
+                                  onChange={(e) => handleGradeChange(assignmentId, periodId, student.id, e.target.value)}
+                                />
+                              </React.Fragment>
+                            ))}
+                          </div>
+                        </div>
+
+                        {editingGrades[`${assignmentId}-${periodId}`] && (
+                          <div className="mt-4 flex justify-end">
+                            <Button
+                              onClick={() => saveGrades(assignmentId, periodId)}
+                              className="flex items-center gap-2"
+                            >
+                              <Save className="h-4 w-4" />
+                              Save Grades
+                            </Button>
+                          </div>
+                        )}
+                        <ImportScoresDialog
+                          assignmentId={assignmentId}
+                          periodId={periodId}
+                          onImport={(importedGrades) => {
+                            setUnsavedGrades(prev => ({
+                              ...prev,
+                              [assignmentId]: {
+                                ...prev[assignmentId],
+                                [periodId]: {
+                                  ...prev[assignmentId]?.[periodId],
+                                  ...importedGrades
+                                }
+                              }
+                            }));
+                            setEditingGrades(prev => ({
+                              ...prev,
+                              [`${assignmentId}-${periodId}`]: true
+                            }));
+                          }}
+                        />
+                      </TabsContent>
+                    ))}
+                  </Tabs>
+                </CardContent>
+              )}
+            </Card>
+          ))}
+          <GradeExportDialog 
+            assignments={assignments} 
+            students={students}
+            onExport={exportGrades} 
+          />
         </div>
       </div>
-    );
-  };
+    </div>
+  );
+};
 
-  export default GradeBook;
+export default GradeBook;
