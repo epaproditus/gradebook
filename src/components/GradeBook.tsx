@@ -13,6 +13,7 @@ import { X, Save, ChevronDown, ChevronUp, Download } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
+import { startOfWeek, addDays, isSameDay, format } from 'date-fns';
 
 // Initialize Supabase client (this is fine outside component)
 const supabase = createClient(
@@ -49,9 +50,11 @@ interface ExportDialogProps {
   onExport: (assignments: string[], periods: string[], merge: boolean) => void;
 }
 
+// Update BirthdayListProps interface
 interface BirthdayListProps {
   students: Student[];
-  currentMonth: number;
+  currentDate: Date;  // Changed from currentMonth
+  view: 'month' | 'week';  // Added view prop
 }
 
 interface DMACScore {
@@ -60,22 +63,32 @@ interface DMACScore {
   // ... other DMAC fields if needed
 }
 
-const BirthdayList: FC<BirthdayListProps> = ({ students, currentMonth }) => {
-  const monthBirthdays = students.filter(student => {
-    if (!student.birthday) return false;
-    const [_, month] = student.birthday.split('-').map(Number);
-    return month === currentMonth;
-  }).sort((a, b) => {
-    const [_y1, _m1, dayA] = a.birthday.split('-').map(Number);
-    const [_y2, _m2, dayB] = b.birthday.split('-').map(Number);
-    return dayA - dayB;
-  });
+// Update BirthdayList component
+const BirthdayList: FC<BirthdayListProps> = ({ students, currentDate, view }) => {
+  const getBirthdaysInRange = (startDate: Date, endDate: Date) => {
+    return students.filter(student => {
+      if (!student.birthday) return false;
+      const [_, month, day] = student.birthday.split('-').map(Number);
+      const birthdayDate = new Date(currentDate.getFullYear(), month - 1, day);
+      return birthdayDate >= startDate && birthdayDate <= endDate;
+    });
+  };
 
-  return (
+  const birthdays = view === 'week' 
+    ? getBirthdaysInRange(
+        startOfWeek(currentDate), 
+        addDays(startOfWeek(currentDate), 6)
+      )
+    : getBirthdaysInRange(
+        new Date(currentDate.getFullYear(), currentDate.getMonth(), 1),
+        new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+      );
+
+  return birthdays.length > 0 ? (
     <div className="mt-4">
-      <h3 className="font-semibold mb-2">Birthdays this month:</h3>
-      {monthBirthdays.map(student => {
-        const [_, __, day] = student.birthday.split('-').map(Number);
+      <h3 className="font-semibold mb-2">Birthdays this {view}:</h3>
+      {birthdays.map(student => {
+        const [_, month, day] = student.birthday.split('-').map(Number);
         return (
           <div key={student.id} className="text-sm flex gap-2 items-center">
             <span className="w-6">{day}</span>
@@ -85,7 +98,7 @@ const BirthdayList: FC<BirthdayListProps> = ({ students, currentMonth }) => {
         );
       })}
     </div>
-  );
+  ) : null;
 };
 
 const GradeExportDialog: FC<ExportDialogProps> = ({ assignments, students, onExport }) => {
@@ -162,17 +175,28 @@ const GradeExportDialog: FC<ExportDialogProps> = ({ assignments, students, onExp
   );
 };
 
+// Fix the ImportScoresDialog component
 const ImportScoresDialog: FC<{
   assignmentId: string;
   periodId: string;
   onImport: (grades: Record<string, string>) => void;
-}> = ({ assignmentId, periodId, onImport }) => {
+  unsavedGrades: GradeData;
+  setUnsavedGrades: React.Dispatch<React.SetStateAction<GradeData>>;
+  setEditingGrades: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+}> = ({ assignmentId, periodId, onImport, unsavedGrades, setUnsavedGrades, setEditingGrades }) => {
   const [file, setFile] = useState<File | null>(null);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       setFile(file);
+    }
+  };
+
+  const handleSubmitImport = async () => {
+    if (!file) return;
+
+    try {
       const text = await file.text();
       const rows = text.split('\n');
       const headers = rows[0].split(',');
@@ -184,22 +208,33 @@ const ImportScoresDialog: FC<{
         return;
       }
 
-      const grades: Record<string, string> = {};
+      const updatedGrades = { ...unsavedGrades };
+      if (!updatedGrades[assignmentId]) {
+        updatedGrades[assignmentId] = {};
+      }
+      if (!updatedGrades[assignmentId][periodId]) {
+        updatedGrades[assignmentId][periodId] = {};
+      }
+
       rows.slice(1).forEach(row => {
         const columns = row.split(',');
         const localId = columns[localIdIndex].trim();
         const score = columns[scoreIndex].trim();
         if (localId && score) {
-          grades[localId] = score;
+          updatedGrades[assignmentId][periodId][localId] = score;
         }
       });
 
-      onImport(grades);
+      setUnsavedGrades(updatedGrades);
+      setEditingGrades(prev => ({
+        ...prev,
+        [`${assignmentId}-${periodId}`]: true
+      }));
+      setFile(null);
+    } catch (error) {
+      console.error('Error importing grades:', error);
+      alert('Error importing grades. Please check the file format.');
     }
-  };
-
-  const handleSubmitImport = (file: File) => {
-    // Handle the file import logic here
   };
 
   return (
@@ -222,12 +257,48 @@ const ImportScoresDialog: FC<{
           <div className="text-sm text-muted-foreground">
             Upload a CSV file exported from DMAC containing student scores.
           </div>
-          <Button onClick={() => file && handleSubmitImport(file)}>
-            Import Scores
-          </Button>
+          {file && (
+            <Button 
+              onClick={handleSubmitImport}
+              className="w-full"
+            >
+              Import Scores
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>
+  );
+};
+
+// New component for week view
+const WeekView: FC<{
+  date: Date;
+  onDateSelect: (date: Date) => void;
+  assignments: Record<string, Assignment>;
+}> = ({ date, onDateSelect, assignments }) => {
+  const weekStart = startOfWeek(date);
+  const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+
+  return (
+    <div className="grid grid-cols-7 gap-1">
+      {days.map((day) => (
+        <div
+          key={day.toISOString()}
+          className={cn(
+            "p-2 border rounded hover:bg-secondary cursor-pointer",
+            isSameDay(day, date) && "bg-primary text-primary-foreground",
+            Object.values(assignments).some(
+              (assignment) => isSameDay(assignment.date, day)
+            ) && "border-primary border-2"
+          )}
+          onClick={() => onDateSelect(day)}
+        >
+          <div className="text-sm font-medium">{format(day, 'EEE')}</div>
+          <div className="text-lg">{format(day, 'd')}</div>
+        </div>
+      ))}
+    </div>
   );
 };
 
@@ -249,6 +320,8 @@ const GradeBook: FC = () => {
   const [absences, setAbsences] = useState<Record<string, boolean>>({});
   const [lateWork, setLateWork] = useState<Record<string, boolean>>({});
   const [incomplete, setIncomplete] = useState<Record<string, boolean>>({});
+  const [extraPoints, setExtraPoints] = useState<Record<string, string>>({});
+  const [retest, setRetest] = useState<Record<string, boolean>>({});
 
   // Fetch students from Supabase
   useEffect(() => {
@@ -351,26 +424,31 @@ const GradeBook: FC = () => {
     if (date) {
       setSelectedDate(date);
       checkBirthdays(date);
-      // Remove automatic assignment creation
+      setNewAssignment({
+        date,
+        name: '',
+        periods: [],
+        type: selectedType
+      });
     }
   };
 
-  const handleAssignmentNameChange = (name: string) => {
-    setNewAssignment(prev => prev ? { ...prev, name } : null);
-  };
+const handleAssignmentNameChange = (name: string) => {
+  setNewAssignment(prev => prev ? { ...prev, name } : null);
+};
 
-  const handlePeriodsSelect = (selectedPeriod: string) => {
-    setNewAssignment(prev => {
-      if (!prev) return null;
-      const periods = prev.periods.includes(selectedPeriod)
-        ? prev.periods.filter(p => p !== selectedPeriod)
-        : [...prev.periods, selectedPeriod];
-      return {
-        ...prev,
-        periods
-      };
-    });
-  };
+const handlePeriodsSelect = (selectedPeriod: string) => {
+  setNewAssignment(prev => {
+    if (!prev) return null;
+    const periods = prev.periods.includes(selectedPeriod)
+      ? prev.periods.filter(p => p !== selectedPeriod)
+      : [...prev.periods, selectedPeriod];
+    return {
+      ...prev,
+      periods
+    };
+  });
+};
 
   const handleGradeChange = (assignmentId: string, periodId: string, studentId: string, grade: string) => {
     const finalGrade = grade === '' ? '0' : grade;
@@ -660,6 +738,28 @@ const GradeBook: FC = () => {
       [key]: !prev[key]
     }));
   };
+
+  const handleExtraPointsChange = (assignmentId: string, periodId: string, studentId: string, points: string) => {
+    setExtraPoints(prev => ({
+      ...prev,
+      [`${assignmentId}-${periodId}-${studentId}`]: points
+    }));
+  };
+
+  const calculateTotal = (grade: string = '0', extra: string = '0') => {
+    const baseGrade = parseInt(grade) || 0;
+    const extraGrade = parseInt(extra) || 0;
+    return Math.min(100, baseGrade + extraGrade);
+  };
+
+  const handleRetestToggle = (assignmentId: string, periodId: string, studentId: string) => {
+    const key = `${assignmentId}-${periodId}-${studentId}`;
+    setRetest(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
   return (
     <div className="p-6">
       <div className="flex gap-6">
@@ -683,25 +783,36 @@ const GradeBook: FC = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <Calendar
-              mode="single"
-              selected={selectedDate || undefined}
-              onSelect={handleDateSelect}
-              className="w-full"
-              weekStartsOn={1}
-              modifiers={{
-                assignment: (date) => {
-                  return Object.values(assignments).some(
-                    assignment => 
-                      assignment.date.toDateString() === date.toDateString()
-                  );
-                }
-              }}
-              modifiersStyles={{
-                assignment: {
-                  border: '2px solid var(--primary)',
-                }
-              }}
+            {calendarView === 'month' ? (
+              <Calendar
+                mode="single"
+                selected={selectedDate || undefined}
+                onSelect={handleDateSelect}
+                className="w-full"
+                modifiers={{
+                  assignment: (date) => {
+                    return Object.values(assignments).some(
+                      assignment => assignment.date.toDateString() === date.toDateString()
+                    );
+                  }
+                }}
+                modifiersStyles={{
+                  assignment: {
+                    border: '2px solid var(--primary)',
+                  }
+                }}
+              />
+            ) : (
+              <WeekView
+                date={selectedDate || new Date()}
+                onDateSelect={(date) => handleDateSelect(date)}
+                assignments={assignments}
+              />
+            )}
+            <BirthdayList
+              students={Object.values(students).flat()}
+              currentDate={selectedDate || new Date()}
+              view={calendarView}
             />
           </CardContent>
         </Card>
@@ -709,15 +820,15 @@ const GradeBook: FC = () => {
         {/* Right side - Assignments and Grades */}
         <div className="flex-grow space-y-4">
           {/* New Assignment Form */}
-          {newAssignment && (
+          {selectedDate && (
             <Card>
               <CardHeader>
-                <CardTitle>New Assignment for {newAssignment.date.toLocaleDateString()}</CardTitle>
+                <CardTitle>New Assignment for {selectedDate.toLocaleDateString()}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <Input
                   placeholder="Assignment Name"
-                  value={newAssignment.name}
+                  value={newAssignment?.name || ''}
                   onChange={(e) => handleAssignmentNameChange(e.target.value)}
                 />
                 <div className="border rounded-md p-4">
@@ -727,30 +838,23 @@ const GradeBook: FC = () => {
                       <Checkbox 
                         checked={newAssignment?.periods.includes(periodId)}
                         onCheckedChange={() => handlePeriodsSelect(periodId)}
-                        className="h-4 w-4"
                       />
                       <span>Period {periodId}</span>
                     </div>
                   ))}
                 </div>
-                <div className="flex gap-2 flex-wrap">
-                  {newAssignment.periods.map(periodId => (
-                    <div key={periodId} className="bg-secondary text-secondary-foreground px-2 py-1 rounded">
-                      Period {periodId}
-                    </div>
-                  ))}
-                </div>
-                <div className="space-y-4">
-                  <Select onValueChange={(value: 'Daily' | 'Assessment') => setSelectedType(value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Assignment Type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Daily">Daily</SelectItem>
-                      <SelectItem value="Assessment">Assessment</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <Select 
+                  value={selectedType}
+                  onValueChange={(value: 'Daily' | 'Assessment') => setSelectedType(value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Assignment Type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Daily">Daily</SelectItem>
+                    <SelectItem value="Assessment">Assessment</SelectItem>
+                  </SelectContent>
+                </Select>
                 <Button onClick={saveAssignment} className="w-full">
                   Create Assignment
                 </Button>
@@ -809,18 +913,8 @@ const GradeBook: FC = () => {
                     </TabsList>
                     {assignment.periods.map(periodId => (
                       <TabsContent key={periodId} value={periodId}>
-                        <div className="flex justify-between items-center mb-4">
-                          <h3 className="text-lg font-medium">Period {periodId}</h3>
-                          {assignment.type === 'Assessment' && (
-                            <ImportScoresDialog
-                              assignmentId={assignmentId}
-                              periodId={periodId}
-                              onImport={(grades) => handleImportGrades(assignmentId, periodId, grades)}
-                            />
-                          )}
-                        </div>
                         <div className="space-y-4">
-                          <div className="grid grid-cols-[auto_1fr_100px] gap-2">
+                          <div className="grid grid-cols-[auto_1fr_70px_70px_70px] gap-2">
                             {(students[periodId] || []).map(student => (
                               <React.Fragment key={student.id}>
                                 <div className="flex items-center gap-1">
@@ -829,34 +923,47 @@ const GradeBook: FC = () => {
                                     size="sm"
                                     onClick={() => handleAbsenceToggle(assignmentId, periodId, student.id)}
                                     className={cn(
-                                      "px-1 h-6 text-xs",
+                                      "px-2 h-6 text-xs",
                                       absences[`${assignmentId}-${periodId}-${student.id}`] && "bg-red-100"
                                     )}
                                   >
-                                    A
+                                    Abs
                                   </Button>
                                   <Button
                                     variant="outline"
                                     size="sm"
                                     onClick={() => handleLateToggle(assignmentId, periodId, student.id)}
                                     className={cn(
-                                      "px-1 h-6 text-xs",
+                                      "px-2 h-6 text-xs",
                                       lateWork[`${assignmentId}-${periodId}-${student.id}`] && "bg-yellow-100"
                                     )}
                                   >
-                                    L
+                                    Late
                                   </Button>
                                   <Button
                                     variant="outline"
                                     size="sm"
                                     onClick={() => handleIncompleteToggle(assignmentId, periodId, student.id)}
                                     className={cn(
-                                      "px-1 h-6 text-xs",
+                                      "px-2 h-6 text-xs",
                                       incomplete[`${assignmentId}-${periodId}-${student.id}`] && "bg-orange-100"
                                     )}
                                   >
-                                    I
+                                    Inc
                                   </Button>
+                                  {assignment.type === 'Assessment' && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleRetestToggle(assignmentId, periodId, student.id)}
+                                      className={cn(
+                                        "px-2 h-6 text-xs",
+                                        retest[`${assignmentId}-${periodId}-${student.id}`] && "bg-blue-100"
+                                      )}
+                                    >
+                                      Retest
+                                    </Button>
+                                  )}
                                 </div>
                                 <div className="flex items-center bg-secondary rounded px-2 py-1">
                                   <span className="text-sm text-muted-foreground mr-2">
@@ -877,42 +984,48 @@ const GradeBook: FC = () => {
                                   }
                                   onChange={(e) => handleGradeChange(assignmentId, periodId, student.id, e.target.value)}
                                 />
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  placeholder="+0"
+                                  className="text-center h-8 text-sm"
+                                  value={extraPoints[`${assignmentId}-${periodId}-${student.id}`] || ''}
+                                  onChange={(e) => handleExtraPointsChange(assignmentId, periodId, student.id, e.target.value)}
+                                />
+                                <div className="flex items-center justify-center bg-secondary rounded px-2 h-8">
+                                  <span className="text-sm font-medium">
+                                    {calculateTotal(
+                                      editingGrades[`${assignmentId}-${periodId}`]
+                                        ? unsavedGrades[assignmentId]?.[periodId]?.[student.id]
+                                        : grades[assignmentId]?.[periodId]?.[student.id],
+                                      extraPoints[`${assignmentId}-${periodId}-${student.id}`]
+                                    )}
+                                  </span>
+                                </div>
                               </React.Fragment>
                             ))}
                           </div>
                         </div>
-
-                        {editingGrades[`${assignmentId}-${periodId}`] && (
-                          <div className="mt-4 flex justify-end">
-                            <Button
-                              onClick={() => saveGrades(assignmentId, periodId)}
-                              className="flex items-center gap-2"
-                            >
-                              <Save className="h-4 w-4" />
-                              Save Grades
-                            </Button>
-                          </div>
-                        )}
-                        <ImportScoresDialog
-                          assignmentId={assignmentId}
-                          periodId={periodId}
-                          onImport={(importedGrades) => {
-                            setUnsavedGrades(prev => ({
-                              ...prev,
-                              [assignmentId]: {
-                                ...prev[assignmentId],
-                                [periodId]: {
-                                  ...prev[assignmentId]?.[periodId],
-                                  ...importedGrades
-                                }
-                              }
-                            }));
-                            setEditingGrades(prev => ({
-                              ...prev,
-                              [`${assignmentId}-${periodId}`]: true
-                            }));
-                          }}
-                        />
+                        
+                        <div className="mt-4 flex justify-between items-center">
+                          {assignment.type === 'Assessment' && (
+                            <ImportScoresDialog
+                              assignmentId={assignmentId}
+                              periodId={periodId}
+                              onImport={(grades) => handleImportGrades(assignmentId, periodId, grades)}
+                              unsavedGrades={unsavedGrades}
+                              setUnsavedGrades={setUnsavedGrades}
+                              setEditingGrades={setEditingGrades}
+                            />
+                          )}
+                          <Button
+                            onClick={() => saveGrades(assignmentId, periodId)}
+                            className="flex items-center gap-2"
+                          >
+                            <Save className="h-4 w-4" />
+                            Save Grades
+                          </Button>
+                        </div>
                       </TabsContent>
                     ))}
                   </Tabs>
@@ -932,3 +1045,4 @@ const GradeBook: FC = () => {
 };
 
 export default GradeBook;
+
