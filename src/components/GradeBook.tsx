@@ -14,6 +14,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { startOfWeek, addDays, isSameDay, format } from 'date-fns';
+import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
+import { Calendar as CalendarIcon } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 // Initialize Supabase client (this is fine outside component)
 const supabase = createClient(
@@ -34,6 +37,7 @@ interface Assignment {
   name: string;
   periods: string[];
   type: 'Daily' | 'Assessment';
+  subject: 'Math 8' | 'Algebra I';
 }
 
 interface GradeData {
@@ -459,6 +463,12 @@ const PeriodStudentSearch: FC<{
   );
 };
 
+// Add subject color constants
+const SUBJECT_COLORS = {
+  'Math 8': 'bg-purple-100 hover:bg-purple-200',
+  'Algebra I': 'bg-green-100 hover:bg-green-200'
+} as const;
+
 const GradeBook: FC = () => {
   // Move useState here
   const [calendarView, setCalendarView] = useState<'month' | 'week'>('month');
@@ -483,6 +493,10 @@ const GradeBook: FC = () => {
   const [studentSortOrder, setStudentSortOrder] = useState<'none' | 'highest' | 'lowest'>('none');
   const [tags, setTags] = useState<AssignmentTag[]>([]);
   const [activeTab, setActiveTab] = useState<string>('');
+  const [assignmentOrder, setAssignmentOrder] = useState<string[]>([]);
+  const [dateFilter, setDateFilter] = useState<'asc' | 'desc' | 'none'>('none');
+  const [subjectFilter, setSubjectFilter] = useState<'all' | 'Math 8' | 'Algebra I'>('all');
+  const [editingAssignment, setEditingAssignment] = useState<string | null>(null);
 
   // Fetch students from Supabase
   useEffect(() => {
@@ -537,6 +551,7 @@ const GradeBook: FC = () => {
       }), {});
   
       setAssignments(formattedAssignments);
+      setAssignmentOrder(Object.keys(formattedAssignments));
   
       // Load grades for all assignments
       const { data: gradeData, error: gradeError } = await supabase
@@ -548,18 +563,27 @@ const GradeBook: FC = () => {
         return;
       }
   
-      const formattedGrades = gradeData.reduce((acc, grade) => ({
-        ...acc,
-        [grade.assignment_id]: {
-          ...acc[grade.assignment_id],
-          [grade.period]: {
-            ...acc[grade.assignment_id]?.[grade.period],
-            [grade.student_id]: grade.grade
-          }
+      const formattedGrades: GradeData = {};
+      const loadedExtraPoints: Record<string, string> = {};
+  
+      gradeData.forEach(grade => {
+        if (!formattedGrades[grade.assignment_id]) {
+          formattedGrades[grade.assignment_id] = {};
         }
-      }), {});
+        if (!formattedGrades[grade.assignment_id][grade.period]) {
+          formattedGrades[grade.assignment_id][grade.period] = {};
+        }
+        formattedGrades[grade.assignment_id][grade.period][grade.student_id] = grade.grade;
+        
+        // Load extra points
+        if (grade.extra_points) {
+          const key = `${grade.assignment_id}-${grade.period}-${grade.student_id}`;
+          loadedExtraPoints[key] = grade.extra_points;
+        }
+      });
   
       setGrades(formattedGrades);
+      setExtraPoints(loadedExtraPoints);
     };
   
     loadAssignments();
@@ -615,7 +639,8 @@ const GradeBook: FC = () => {
       date: selectedDate,
       name: '',
       periods: [],
-      type: selectedType
+      type: selectedType,
+      subject: 'Math 8'
     });
   };
 
@@ -768,7 +793,8 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
       name: newAssignment.name,
       date: newAssignment.date.toISOString().split('T')[0],
       type: selectedType,
-      periods: newAssignment.periods
+      periods: newAssignment.periods,
+      subject: newAssignment.subject
     };
   
     const { error } = await supabase
@@ -1060,6 +1086,356 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
     });
   };
 
+  // Add function to handle assignment reordering
+  const handleDragEnd = (result: DropResult) => {
+    if (!result.destination) return;
+
+    const items = Array.from(assignmentOrder);
+    const [reorderedItem] = items.splice(result.source.index, 1);
+    items.splice(result.destination.index, 0, reorderedItem);
+
+    setAssignmentOrder(items);
+  };
+
+  // Add function to edit assignment
+  const handleAssignmentEdit = async (assignmentId: string, updates: Partial<Assignment>) => {
+    try {
+      // Convert date to ISO string for Supabase
+      const supabaseUpdates = {
+        ...updates,
+        date: updates.date ? updates.date.toISOString().split('T')[0] : undefined
+      };
+
+      const { error } = await supabase
+        .from('assignments')
+        .update(supabaseUpdates)
+        .eq('id', assignmentId);
+
+      if (error) throw error;
+
+      setAssignments(prev => ({
+        ...prev,
+        [assignmentId]: {
+          ...prev[assignmentId],
+          ...updates
+        }
+      }));
+    } catch (error) {
+      console.error('Error updating assignment:', error);
+      alert('Failed to update assignment');
+    }
+  };
+
+  // Add function to sort and filter assignments
+  const getSortedAndFilteredAssignments = () => {
+    let entries = assignmentOrder
+      .filter(id => assignments[id]) // Filter out any invalid IDs
+      .map(id => [id, assignments[id]] as [string, Assignment]);
+    
+    // Apply subject filter
+    if (subjectFilter !== 'all') {
+      entries = entries.filter(([_, assignment]) => assignment.subject === subjectFilter);
+    }
+
+    // Apply date sorting
+    if (dateFilter !== 'none') {
+      entries.sort(([, a], [, b]) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        return dateFilter === 'asc' ? dateA - dateB : dateB - dateA;
+      });
+    }
+
+    return entries;
+  };
+
+  // Update the assignment card rendering to make editing inline
+  const renderAssignmentCard = (assignmentId: string, assignment: Assignment, provided?: any) => (
+    <Card 
+      className={cn(
+        "mb-2",
+        SUBJECT_COLORS[assignment.subject]
+      )}
+      {...(provided ? provided.draggableProps : {})}
+      {...(provided ? provided.dragHandleProps : {})}
+      ref={provided?.innerRef}
+    >
+      <CardHeader
+        className="flex flex-row items-center justify-between cursor-pointer"
+        onClick={() => toggleAssignment(assignmentId)}
+      >
+        {editingAssignment === assignmentId ? (
+          <div className="space-y-2 flex-1" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2">
+              <Input
+                value={assignment.name}
+                onChange={(e) => {
+                  setAssignments(prev => ({
+                    ...prev,
+                    [assignmentId]: { ...prev[assignmentId], name: e.target.value }
+                  }));
+                }}
+                className="flex-1"
+              />
+              <Button 
+                size="sm"
+                onClick={() => {
+                  handleAssignmentEdit(assignmentId, assignments[assignmentId]);
+                  setEditingAssignment(null);
+                }}
+              >
+                Save
+              </Button>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => setEditingAssignment(null)}
+              >
+                Cancel
+              </Button>
+            </div>
+            <div className="flex gap-2">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    {format(assignment.date, 'PPP')}
+                    <CalendarIcon className="ml-2 h-4 w-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={assignment.date}
+                    onSelect={(date) => {
+                      if (date) {
+                        setAssignments(prev => ({
+                          ...prev,
+                          [assignmentId]: { ...prev[assignmentId], date }
+                        }));
+                      }
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
+              <Select
+                value={assignment.subject}
+                onValueChange={(value: 'Math 8' | 'Algebra I') => {
+                  setAssignments(prev => ({
+                    ...prev,
+                    [assignmentId]: { ...prev[assignmentId], subject: value }
+                  }));
+                }}
+              >
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Math 8">Math 8</SelectItem>
+                  <SelectItem value="Algebra I">Algebra I</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        ) : (
+          <div onClick={() => setEditingAssignment(assignmentId)}>
+            <CardTitle>{assignment.name}</CardTitle>
+            <div className="text-sm text-muted-foreground">
+              {format(assignment.date, 'PPP')} - {assignment.subject}
+            </div>
+          </div>
+        )}
+        <div className="flex items-center gap-2 ml-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              deleteAssignment(assignmentId);
+            }}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+          {expandedAssignments[assignmentId] ? (
+            <ChevronUp className="h-4 w-4" />
+          ) : (
+            <ChevronDown className="h-4 w-4" />
+          )}
+        </div>
+      </CardHeader>
+      {expandedAssignments[assignmentId] && (
+        <CardContent>
+          <Tabs defaultValue={assignment.periods[0]} onValueChange={setActiveTab}>
+            <TabsList className="w-full">
+              {assignment.periods.map(periodId => (
+                <TabsTrigger
+                  key={periodId}
+                  value={periodId}
+                  className="flex-1"
+                >
+                  Period {periodId}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            {assignment.periods.map(periodId => (
+              <TabsContent key={periodId} value={periodId}>
+                <div className="space-y-4">
+                  <PeriodStudentSearch 
+                    students={Object.values(students).flat()}
+                    assignmentId={assignmentId}
+                    onSelect={(studentId, periodId) => {
+                      const tabTrigger = document.querySelector(`[value="${periodId}"]`) as HTMLButtonElement;
+                      if (tabTrigger) tabTrigger.click();
+                      
+                      setTimeout(() => {
+                        const gradeInput = document.querySelector(
+                          `input[id="grade-${assignmentId}-${periodId}-${studentId}"]`
+                        ) as HTMLInputElement;
+                        if (gradeInput) {
+                          gradeInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          gradeInput.focus();
+                        }
+                      }, 100);
+                    }}
+                    activeTab={activeTab}
+                    onTabChange={setActiveTab}
+                  />
+                  <div className="flex justify-between items-center">
+                    <Select
+                      value={studentSortOrder}
+                      onValueChange={(value: 'none' | 'highest' | 'lowest') => setStudentSortOrder(value)}
+                    >
+                      <SelectTrigger className="w-32">
+                        <SelectValue placeholder="Sort by..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No Sort</SelectItem>
+                        <SelectItem value="highest">Highest</SelectItem>
+                        <SelectItem value="lowest">Lowest</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    {sortStudents(students[periodId] || [], assignmentId, periodId).map(student => (
+                      <div key={student.id} className="grid grid-cols-[auto_1fr_70px_70px_70px] gap-2 items-center">
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleTagToggle(assignmentId, periodId, student.id, 'absent')}
+                            className={cn(
+                              "px-2 h-6 text-xs",
+                              hasTag(assignmentId, periodId, String(student.id), 'absent') && "bg-red-100"
+                            )}
+                          >
+                            Abs
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleTagToggle(assignmentId, periodId, student.id, 'late')}
+                            className={cn(
+                              "px-2 h-6 text-xs",
+                              hasTag(assignmentId, periodId, String(student.id), 'late') && "bg-yellow-100"
+                            )}
+                          >
+                            Late
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleTagToggle(assignmentId, periodId, student.id, 'incomplete')}
+                            className={cn(
+                              "px-2 h-6 text-xs",
+                              hasTag(assignmentId, periodId, String(student.id), 'incomplete') && "bg-orange-100"
+                            )}
+                          >
+                            Inc
+                          </Button>
+                          {assignment.type === 'Assessment' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleTagToggle(assignmentId, periodId, student.id, 'retest')}
+                              className={cn(
+                                "px-2 h-6 text-xs",
+                                hasTag(assignmentId, periodId, String(student.id), 'retest') && "bg-blue-100"
+                              )}
+                            >
+                              Retest
+                            </Button>
+                          )}
+                        </div>
+                        <div className="flex items-center bg-secondary rounded px-2 py-1">
+                          <span className="text-sm text-muted-foreground mr-2">
+                            {student.id}
+                          </span>
+                          <span className="text-sm">{student.name}</span>
+                        </div>
+                        <Input
+                          id={`grade-${assignmentId}-${periodId}-${student.id}`}
+                          type="number"
+                          min="0"
+                          max="100"
+                          placeholder="0"
+                          className="text-center h-8 text-sm"
+                          value={
+                            editingGrades[`${assignmentId}-${periodId}`] 
+                              ? unsavedGrades[assignmentId]?.[periodId]?.[student.id] || ''
+                              : grades[assignmentId]?.[periodId]?.[student.id] || ''
+                          }
+                          onChange={(e) => handleGradeChange(assignmentId, periodId, String(student.id), e.target.value)}
+                        />
+                        <Input
+                          type="number"
+                          min="0"
+                          placeholder="+0"
+                          className="text-center h-8 text-sm"
+                          value={extraPoints[`${assignmentId}-${periodId}-${student.id}`] || ''}
+                          onChange={(e) => handleExtraPointsChange(assignmentId, periodId, student.id, e.target.value)}
+                        />
+                        <div className="flex items-center justify-center bg-secondary rounded px-2 h-8">
+                          <span className="text-sm font-medium">
+                            {calculateTotal(
+                              editingGrades[`${assignmentId}-${periodId}`]
+                                ? unsavedGrades[assignmentId]?.[periodId]?.[student.id]
+                                : grades[assignmentId]?.[periodId]?.[student.id],
+                              extraPoints[`${assignmentId}-${periodId}-${student.id}`]
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="mt-4 flex justify-between items-center">
+                  <ImportScoresDialog
+                    assignmentId={assignmentId}
+                    periodId={periodId}
+                    onImport={(grades) => handleImportGrades(assignmentId, periodId, grades)}
+                    unsavedGrades={unsavedGrades}
+                    setUnsavedGrades={setUnsavedGrades}
+                    setEditingGrades={setEditingGrades}
+                    assignments={assignments}
+                    students={students}
+                    grades={grades}
+                  />
+                  <Button
+                    onClick={() => saveGrades(assignmentId)}
+                    className="flex items-center gap-2"
+                  >
+                    <Save className="h-4 w-4" />
+                    Save All Grades
+                  </Button>
+                </div>
+              </TabsContent>
+            ))}
+          </Tabs>
+        </CardContent>
+      )}
+    </Card>
+  );
+
   return (
     <div className="p-6">
       <div className="flex gap-6">
@@ -1175,6 +1551,20 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
                     <SelectItem value="Assessment">Assessment</SelectItem>
                   </SelectContent>
                 </Select>
+                <Select
+                  value={newAssignment.subject}
+                  onValueChange={(value: 'Math 8' | 'Algebra I') => 
+                    setNewAssignment(prev => prev ? { ...prev, subject: value } : null)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select subject" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Math 8">Math 8</SelectItem>
+                    <SelectItem value="Algebra I">Algebra I</SelectItem>
+                  </SelectContent>
+                </Select>
                 <Button onClick={saveAssignment} className="w-full">
                   Create Assignment
                 </Button>
@@ -1182,217 +1572,54 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
             </Card>
           )}
           {/* Existing Assignments */}
-          {Object.entries(assignments).map(([assignmentId, assignment]) => (
-            <Card 
-              key={assignmentId} 
-              className="w-full mb-2"
+          <div className="flex gap-4 mb-4">
+            <Select
+              value={subjectFilter}
+              onValueChange={(value: 'all' | 'Math 8' | 'Algebra I') => setSubjectFilter(value)}
             >
-              <CardHeader
-                className="flex flex-row items-center justify-between cursor-pointer"
-                onClick={() => toggleAssignment(assignmentId)}
-              >
-                <div>
-                  <CardTitle>{assignment.name}</CardTitle>
-                  <div className="text-sm text-muted-foreground">
-                    {assignment.date.toLocaleDateString()}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteAssignment(assignmentId);
-                    }}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                  {expandedAssignments[assignmentId] ? (
-                    <ChevronUp className="h-4 w-4" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4" />
-                  )}
-                </div>
-              </CardHeader>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter by subject" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Subjects</SelectItem>
+                <SelectItem value="Math 8">Math 8</SelectItem>
+                <SelectItem value="Algebra I">Algebra I</SelectItem>
+              </SelectContent>
+            </Select>
 
-              {expandedAssignments[assignmentId] && (
-                <CardContent>
-                  <Tabs defaultValue={assignment.periods[0]} onValueChange={setActiveTab}>
-                    <TabsList className="w-full">
-                      {assignment.periods.map(periodId => (
-                        <TabsTrigger
-                          key={periodId}
-                          value={periodId}
-                          className="flex-1"
-                        >
-                          Period {periodId}
-                        </TabsTrigger>
-                      ))}
-                    </TabsList>
-                    {assignment.periods.map(periodId => (
-                      <TabsContent key={periodId} value={periodId}>
-                        <div className="space-y-4">
-                          <PeriodStudentSearch 
-                            students={Object.values(students).flat()}
-                            assignmentId={assignmentId}
-                            onSelect={(studentId, periodId) => {
-                              // Switch to correct period tab if needed
-                              const tabTrigger = document.querySelector(`[value="${periodId}"]`) as HTMLButtonElement;
-                              if (tabTrigger) tabTrigger.click();
-                              
-                              // Focus on grade input
-                              setTimeout(() => {
-                                const gradeInput = document.querySelector(
-                                  `input[id="grade-${assignmentId}-${periodId}-${studentId}"]`
-                                ) as HTMLInputElement;
-                                if (gradeInput) {
-                                  gradeInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                  gradeInput.focus();
-                                }
-                              }, 100);
-                            }}
-                            activeTab={activeTab}
-                            onTabChange={setActiveTab}
-                          />
-                          <div className="flex justify-between items-center">
-                            <Select
-                              value={studentSortOrder}
-                              onValueChange={(value: 'none' | 'highest' | 'lowest') => setStudentSortOrder(value)}
-                            >
-                              <SelectTrigger className="w-32">
-                                <SelectValue placeholder="Sort by..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">No Sort</SelectItem>
-                                <SelectItem value="highest">Highest</SelectItem>
-                                <SelectItem value="lowest">Lowest</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            
-                            {/* ...existing buttons... */}
-                          </div>
-                          <div className="space-y-2">
-                            {sortStudents(students[periodId] || [], assignmentId, periodId).map(student => (
-                              <div key={student.id} className="grid grid-cols-[auto_1fr_70px_70px_70px] gap-2 items-center">
-                                <div className="flex items-center gap-1">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleTagToggle(assignmentId, periodId, student.id, 'absent')}
-                                    className={cn(
-                                      "px-2 h-6 text-xs",
-                                      hasTag(assignmentId, periodId, String(student.id), 'absent') && "bg-red-100"
-                                    )}
-                                  >
-                                    Abs
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleTagToggle(assignmentId, periodId, student.id, 'late')}
-                                    className={cn(
-                                      "px-2 h-6 text-xs",
-                                      hasTag(assignmentId, periodId, String(student.id), 'late') && "bg-yellow-100"
-                                    )}
-                                  >
-                                    Late
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleTagToggle(assignmentId, periodId, student.id, 'incomplete')}
-                                    className={cn(
-                                      "px-2 h-6 text-xs",
-                                      hasTag(assignmentId, periodId, String(student.id), 'incomplete') && "bg-orange-100"
-                                    )}
-                                  >
-                                    Inc
-                                  </Button>
-                                  {assignment.type === 'Assessment' && (
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleTagToggle(assignmentId, periodId, student.id, 'retest')}
-                                      className={cn(
-                                        "px-2 h-6 text-xs",
-                                        hasTag(assignmentId, periodId, String(student.id), 'retest') && "bg-blue-100"
-                                      )}
-                                    >
-                                      Retest
-                                    </Button>
-                                  )}
-                                </div>
-                                <div className="flex items-center bg-secondary rounded px-2 py-1">
-                                  <span className="text-sm text-muted-foreground mr-2">
-                                    {student.id}
-                                  </span>
-                                  <span className="text-sm">{student.name}</span>
-                                </div>
-                                <Input
-                                  id={`grade-${assignmentId}-${periodId}-${student.id}`}
-                                  type="number"
-                                  min="0"
-                                  max="100"
-                                  placeholder="0"
-                                  className="text-center h-8 text-sm"
-                                  value={
-                                    editingGrades[`${assignmentId}-${periodId}`] 
-                                      ? unsavedGrades[assignmentId]?.[periodId]?.[student.id] || ''
-                                      : grades[assignmentId]?.[periodId]?.[student.id] || ''
-                                  }
-                                  onChange={(e) => handleGradeChange(assignmentId, periodId, String(student.id), e.target.value)}
-                                />
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  placeholder="+0"
-                                  className="text-center h-8 text-sm"
-                                  value={extraPoints[`${assignmentId}-${periodId}-${student.id}`] || ''}
-                                  onChange={(e) => handleExtraPointsChange(assignmentId, periodId, student.id, e.target.value)}
-                                />
-                                <div className="flex items-center justify-center bg-secondary rounded px-2 h-8">
-                                  <span className="text-sm font-medium">
-                                    {calculateTotal(
-                                      editingGrades[`${assignmentId}-${periodId}`]
-                                        ? unsavedGrades[assignmentId]?.[periodId]?.[student.id]
-                                        : grades[assignmentId]?.[periodId]?.[student.id],
-                                      extraPoints[`${assignmentId}-${periodId}-${student.id}`]
-                                    )}
-                                  </span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                        
-                        <div className="mt-4 flex justify-between items-center">
-                          <ImportScoresDialog
-                            assignmentId={assignmentId}
-                            periodId={periodId}
-                            onImport={(grades) => handleImportGrades(assignmentId, periodId, grades)}
-                            unsavedGrades={unsavedGrades}
-                            setUnsavedGrades={setUnsavedGrades}
-                            setEditingGrades={setEditingGrades}
-                            assignments={assignments}
-                            students={students}
-                            grades={grades}
-                          />
-                          <Button
-                            onClick={() => saveGrades(assignmentId)}
-                            className="flex items-center gap-2"
-                          >
-                            <Save className="h-4 w-4" />
-                            Save All Grades
-                          </Button>
-                        </div>
-                      </TabsContent>
-                    ))}
-                  </Tabs>
-                </CardContent>
+            <Select
+              value={dateFilter}
+              onValueChange={(value: 'asc' | 'desc' | 'none') => setDateFilter(value)}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Sort by date" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Manual Sort</SelectItem>
+                <SelectItem value="asc">Oldest First</SelectItem>
+                <SelectItem value="desc">Newest First</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DragDropContext onDragEnd={handleDragEnd}>
+            <Droppable droppableId="assignments" isDropDisabled={false}>
+              {(provided) => (
+                <div {...provided.droppableProps} ref={provided.innerRef}>
+                  {getSortedAndFilteredAssignments().map(([assignmentId, assignment], index) => (
+                    <Draggable 
+                      key={assignmentId} 
+                      draggableId={assignmentId} 
+                      index={index}
+                      isDragDisabled={dateFilter !== 'none'}
+                    >
+                      {(provided) => renderAssignmentCard(assignmentId, assignment, provided)}
+                    </Draggable>
+                  ))}
+                  {provided.placeholder}
+                </div>
               )}
-            </Card>
-          ))}
+            </Droppable>
+          </DragDropContext>
           <GradeExportDialog 
             assignments={assignments} 
             students={students}
