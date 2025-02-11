@@ -194,12 +194,42 @@ const ImportScoresDialog: FC<{
       const rows = text.split('\n');
       const headers = rows[0].split(',').map(h => h.trim());
       
-      // Find the indices for LocalID and Score columns
-      const localIdIndex = headers.findIndex(h => h === 'LocalID');
-      const scoreIndex = headers.findIndex(h => h === 'Score');
-      
-      if (localIdIndex === -1 || scoreIndex === -1) {
-        alert('Invalid file format. Missing LocalID or Score columns.');
+      // Initialize indices as -1
+      let studentIdIndex = -1;
+      let scoreIndex = -1;
+
+      // First try to find exact column matches
+      studentIdIndex = headers.findIndex(h => h === 'LocalID' || h === 'Student ID');
+      scoreIndex = headers.findIndex(h => h === 'Score' || h === 'Final Grade');
+
+      // If not found, scan the first data row to find columns with matching patterns
+      if (studentIdIndex === -1 || scoreIndex === -1) {
+        const firstDataRow = rows[1]?.split(',').map(col => col.trim());
+        
+        if (firstDataRow) {
+          // Look for 6-digit number (student ID)
+          studentIdIndex = firstDataRow.findIndex(col => /^\d{6}$/.test(col));
+          
+          // Look for 2-3 digit number (grade)
+          scoreIndex = firstDataRow.findIndex(col => /^\d{2,3}$/.test(col));
+
+          // If still not found, scan all columns
+          if (studentIdIndex === -1) {
+            studentIdIndex = headers.findIndex((_, index) => 
+              rows.slice(1).some(row => /^\d{6}$/.test(row.split(',')[index]?.trim()))
+            );
+          }
+          
+          if (scoreIndex === -1) {
+            scoreIndex = headers.findIndex((_, index) => 
+              rows.slice(1).some(row => /^\d{2,3}$/.test(row.split(',')[index]?.trim()))
+            );
+          }
+        }
+      }
+
+      if (studentIdIndex === -1 || scoreIndex === -1) {
+        alert('Could not find student ID (6 digits) and grade (2-3 digits) columns in the file.');
         return;
       }
 
@@ -208,13 +238,14 @@ const ImportScoresDialog: FC<{
       // Process each row (skip header)
       for (let i = 1; i < rows.length; i++) {
         const columns = rows[i].split(',').map(col => col.trim());
-        if (columns.length <= Math.max(localIdIndex, scoreIndex)) continue;
+        if (columns.length <= Math.max(studentIdIndex, scoreIndex)) continue;
         
-        const localId = columns[localIdIndex];
+        const studentId = columns[studentIdIndex];
         const score = columns[scoreIndex];
 
-        if (localId && score) {
-          importedGrades[localId] = score;
+        // Validate both studentId and score
+        if (/^\d{6}$/.test(studentId) && /^\d{2,3}$/.test(score)) {
+          importedGrades[studentId] = score;
         }
       }
 
