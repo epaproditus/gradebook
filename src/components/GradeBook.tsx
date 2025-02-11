@@ -469,7 +469,51 @@ const SUBJECT_COLORS = {
   'Algebra I': 'bg-green-100 hover:bg-green-200'
 } as const;
 
+// Add type color constants
+const TYPE_COLORS = {
+  'Daily': 'bg-yellow-50 hover:bg-yellow-100',
+  'Assessment': 'bg-red-50 hover:bg-red-100'
+} as const;
+
+// Add ColorSettings component at the top level
+const ColorSettings: FC<{
+  showColors: boolean;
+  colorMode: 'none' | 'subject' | 'type';
+  onShowColorsChange: (show: boolean) => void;
+  onColorModeChange: (mode: 'none' | 'subject' | 'type') => void;
+}> = ({ showColors, colorMode, onShowColorsChange, onColorModeChange }) => {
+  return (
+    <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2">
+        <Checkbox
+          checked={showColors}
+          onCheckedChange={(checked) => onShowColorsChange(!!checked)}
+        />
+        <span className="text-sm">Show Colors</span>
+      </div>
+      {showColors && (
+        <Select
+          value={colorMode}
+          onValueChange={(value: 'none' | 'subject' | 'type') => onColorModeChange(value)}
+        >
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Color by..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="subject">Color by Subject</SelectItem>
+            <SelectItem value="type">Color by Type</SelectItem>
+          </SelectContent>
+        </Select>
+      )}
+    </div>
+  );
+};
+
 const GradeBook: FC = () => {
+  // Add new state for color settings
+  const [showColors, setShowColors] = useState(true);
+  const [colorMode, setColorMode] = useState<'none' | 'subject' | 'type'>('subject');
+  
   // Move useState here
   const [calendarView, setCalendarView] = useState<'month' | 'week'>('month');
   
@@ -497,6 +541,7 @@ const GradeBook: FC = () => {
   const [dateFilter, setDateFilter] = useState<'asc' | 'desc' | 'none'>('none');
   const [subjectFilter, setSubjectFilter] = useState<'all' | 'Math 8' | 'Algebra I'>('all');
   const [editingAssignment, setEditingAssignment] = useState<string | null>(null);
+  const [groupBy, setGroupBy] = useState<'none' | 'type'>('none');
 
   // Fetch students from Supabase
   useEffect(() => {
@@ -1090,10 +1135,18 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return;
 
-    const items = Array.from(assignmentOrder);
-    const [reorderedItem] = items.splice(result.source.index, 1);
-    items.splice(result.destination.index, 0, reorderedItem);
+    const { source, destination } = result;
+    const assignmentId = result.draggableId;
 
+    if (groupBy === 'type' && source.droppableId !== destination.droppableId) {
+      // Change assignment type when dragging between columns
+      const newType = destination.droppableId as 'Daily' | 'Assessment';
+      handleAssignmentEdit(assignmentId, { type: newType });
+    }
+
+    const items = Array.from(assignmentOrder);
+    const [reorderedItem] = items.splice(source.index, 1);
+    items.splice(destination.index, 0, reorderedItem);
     setAssignmentOrder(items);
   };
 
@@ -1150,11 +1203,25 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
   };
 
   // Update the assignment card rendering to make editing inline
+  const getCardColor = (assignment: Assignment) => {
+    if (!showColors) return '';
+    
+    if (colorMode === 'subject') {
+      return SUBJECT_COLORS[assignment.subject];
+    }
+    
+    if (colorMode === 'type') {
+      return TYPE_COLORS[assignment.type];
+    }
+    
+    return '';
+  };
+
   const renderAssignmentCard = (assignmentId: string, assignment: Assignment, provided?: any) => (
     <Card 
       className={cn(
         "mb-2",
-        SUBJECT_COLORS[assignment.subject]
+        getCardColor(assignment)
       )}
       {...(provided ? provided.draggableProps : {})}
       {...(provided ? provided.dragHandleProps : {})}
@@ -1436,6 +1503,89 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
     </Card>
   );
 
+  // Add function to get grouped assignments
+  const getGroupedAssignments = () => {
+    const entries = getSortedAndFilteredAssignments();
+    
+    if (groupBy === 'type') {
+      return {
+        Daily: entries.filter(([_, assignment]) => assignment.type === 'Daily'),
+        Assessment: entries.filter(([_, assignment]) => assignment.type === 'Assessment')
+      };
+    }
+
+    return { all: entries };
+  };
+
+  // Update the assignments section JSX
+  const renderAssignmentsSection = () => {
+    const grouped = getGroupedAssignments();
+
+    if (groupBy === 'type') {
+      return (
+        <div className="grid grid-cols-2 gap-4">
+          <DragDropContext onDragEnd={handleDragEnd}>
+            {/* Daily Assignments Column */}
+            <div>
+              <h3 className="font-semibold mb-2">Daily Work</h3>
+              <Droppable droppableId="Daily">
+                {(provided) => (
+                  <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
+                    {(grouped.Daily || []).map(([id, assignment], index) => (
+                      <Draggable key={id} draggableId={id} index={index}>
+                        {(provided) => renderAssignmentCard(id, assignment, provided)}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            </div>
+
+            {/* Assessment Column */}
+            <div>
+              <h3 className="font-semibold mb-2">Assessments</h3>
+              <Droppable droppableId="Assessment">
+                {(provided) => (
+                  <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
+                    {(grouped.Assessment || []).map(([id, assignment], index) => (
+                      <Draggable key={id} draggableId={id} index={index}>
+                        {(provided) => renderAssignmentCard(id, assignment, provided)}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            </div>
+          </DragDropContext>
+        </div>
+      );
+    }
+
+    // Default single column view with two assignments per row
+    return (
+      <DragDropContext onDragEnd={handleDragEnd}>
+        <Droppable droppableId="assignments">
+          {(provided) => (
+            <div 
+              {...provided.droppableProps} 
+              ref={provided.innerRef}
+              className="grid grid-cols-2 gap-4"
+            >
+              {(grouped.all || []).map(([id, assignment], index) => (
+                <Draggable key={id} draggableId={id} index={index}>
+                  {(provided) => renderAssignmentCard(id, assignment, provided)}
+                </Draggable>
+              ))}
+              {provided.placeholder}
+            </div>
+          )}
+        </Droppable>
+      </DragDropContext>
+    );
+  };
+
   return (
     <div className="p-6">
       <div className="flex gap-6">
@@ -1601,30 +1751,34 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
               </SelectContent>
             </Select>
           </div>
-          <DragDropContext onDragEnd={handleDragEnd}>
-            <Droppable droppableId="assignments" isDropDisabled={false}>
-              {(provided) => (
-                <div {...provided.droppableProps} ref={provided.innerRef}>
-                  {getSortedAndFilteredAssignments().map(([assignmentId, assignment], index) => (
-                    <Draggable 
-                      key={assignmentId} 
-                      draggableId={assignmentId} 
-                      index={index}
-                      isDragDisabled={dateFilter !== 'none'}
-                    >
-                      {(provided) => renderAssignmentCard(assignmentId, assignment, provided)}
-                    </Draggable>
-                  ))}
-                  {provided.placeholder}
-                </div>
-              )}
-            </Droppable>
-          </DragDropContext>
-          <GradeExportDialog 
-            assignments={assignments} 
-            students={students}
-            onExport={exportGrades} 
-          />
+          <div className="flex justify-between items-center mb-4">
+            <div className="flex gap-4">
+              <ColorSettings 
+                showColors={showColors}
+                colorMode={colorMode}
+                onShowColorsChange={setShowColors}
+                onColorModeChange={setColorMode}
+              />
+              <Select
+                value={groupBy}
+                onValueChange={(value: 'none' | 'type') => setGroupBy(value)}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Group by..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Grouping</SelectItem>
+                  <SelectItem value="type">By Type</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <GradeExportDialog 
+              assignments={assignments} 
+              students={students}
+              onExport={exportGrades} 
+            />
+          </div>
+          {renderAssignmentsSection()}
         </div>
       </div>
     </div>
