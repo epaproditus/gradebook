@@ -402,7 +402,9 @@ const PeriodStudentSearch: FC<{
   students: Student[]; // Now takes all students
   assignmentId: string;  // Add this prop
   onSelect: (studentId: number, periodId: string) => void;  // Update this prop
-}> = ({ students, assignmentId, onSelect }) => {
+  activeTab: string;
+  onTabChange: (tabId: string) => void;
+}> = ({ students, assignmentId, onSelect, activeTab, onTabChange }) => {
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<Student[]>([]);
 
@@ -437,6 +439,9 @@ const PeriodStudentSearch: FC<{
                 key={student.id}
                 className="p-2 hover:bg-secondary cursor-pointer rounded"
                 onClick={() => {
+                  if (student.class_period !== activeTab) {
+                    onTabChange(student.class_period);
+                  }
                   onSelect(student.id, student.class_period);
                   setSearch('');
                 }}
@@ -477,6 +482,7 @@ const GradeBook: FC = () => {
   const [isCalendarVisible, setIsCalendarVisible] = useState(true);
   const [studentSortOrder, setStudentSortOrder] = useState<'none' | 'highest' | 'lowest'>('none');
   const [tags, setTags] = useState<AssignmentTag[]>([]);
+  const [activeTab, setActiveTab] = useState<string>('');
 
   // Fetch students from Supabase
   useEffect(() => {
@@ -683,52 +689,67 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
     }));
   };
 
-  const saveGrades = async (assignmentId: string, periodId: string) => {
+  const saveGrades = async (assignmentId: string) => {
     try {
-      const gradesToSave = unsavedGrades[assignmentId]?.[periodId] || {};
-      const gradeEntries = Object.entries(gradesToSave).map(([studentId, grade]) => ({
-        assignment_id: assignmentId,
-        student_id: parseInt(studentId),  // Ensure student_id is number
-        period: periodId,
-        grade: grade
-      }));
+      const assignment = assignments[assignmentId];
+      if (!assignment) return;
   
-      // Delete existing grades for this assignment and period
+      // Gather all grades to save across all periods
+      const allGradeEntries = assignment.periods.flatMap(periodId => {
+        const gradesToSave = unsavedGrades[assignmentId]?.[periodId] || {};
+        return Object.entries(gradesToSave).map(([studentId, grade]) => ({
+          assignment_id: assignmentId,
+          student_id: parseInt(studentId),
+          period: periodId,
+          grade: grade,
+          extra_points: extraPoints[`${assignmentId}-${periodId}-${studentId}`] || '0'
+        }));
+      });
+  
+      // Delete all existing grades for this assignment
       const { error: deleteError } = await supabase
         .from('grades')
         .delete()
-        .match({ assignment_id: assignmentId, period: periodId });
+        .match({ assignment_id: assignmentId });
   
       if (deleteError) {
         console.error('Error deleting existing grades:', deleteError);
         throw new Error('Failed to delete existing grades');
       }
   
-      // Insert new grades
-      const { error: insertError } = await supabase
-        .from('grades')
-        .insert(gradeEntries);
+      if (allGradeEntries.length > 0) {
+        // Insert all new grades
+        const { error: insertError } = await supabase
+          .from('grades')
+          .insert(allGradeEntries);
   
-      if (insertError) {
-        console.error('Error inserting new grades:', insertError);
-        throw new Error('Failed to insert new grades');
+        if (insertError) {
+          console.error('Error inserting new grades:', insertError);
+          throw new Error('Failed to insert new grades');
+        }
       }
   
+      // Update local state
       setGrades(prev => ({
         ...prev,
-        [assignmentId]: {
-          ...prev[assignmentId],
+        [assignmentId]: assignment.periods.reduce((acc, periodId) => ({
+          ...acc,
           [periodId]: {
             ...prev[assignmentId]?.[periodId],
             ...unsavedGrades[assignmentId]?.[periodId]
           }
-        }
+        }), {})
       }));
   
-      setEditingGrades(prev => ({
-        ...prev,
-        [`${assignmentId}-${periodId}`]: false
-      }));
+      // Clear editing state for all periods
+      assignment.periods.forEach(periodId => {
+        setEditingGrades(prev => ({
+          ...prev,
+          [`${assignmentId}-${periodId}`]: false
+        }));
+      });
+  
+      alert('All grades saved successfully!');
     } catch (error) {
       console.error('Error saving grades:', error);
       alert('Failed to save grades. Please try again.');
@@ -1197,7 +1218,7 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
 
               {expandedAssignments[assignmentId] && (
                 <CardContent>
-                  <Tabs defaultValue={assignment.periods[0]}>
+                  <Tabs defaultValue={assignment.periods[0]} onValueChange={setActiveTab}>
                     <TabsList className="w-full">
                       {assignment.periods.map(periodId => (
                         <TabsTrigger
@@ -1231,6 +1252,8 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
                                 }
                               }, 100);
                             }}
+                            activeTab={activeTab}
+                            onTabChange={setActiveTab}
                           />
                           <div className="flex justify-between items-center">
                             <Select
@@ -1356,11 +1379,11 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
                             grades={grades}
                           />
                           <Button
-                            onClick={() => saveGrades(assignmentId, periodId)}
+                            onClick={() => saveGrades(assignmentId)}
                             className="flex items-center gap-2"
                           >
                             <Save className="h-4 w-4" />
-                            Save Grades
+                            Save All Grades
                           </Button>
                         </div>
                       </TabsContent>
