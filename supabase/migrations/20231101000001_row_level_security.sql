@@ -11,25 +11,17 @@ drop policy if exists "Enable delete for authenticated users" on public.assignme
 drop policy if exists "Enable update for authenticated users" on public.assignments;
 drop policy if exists "Enable all operations for authenticated users" on public.assignments;
 
--- First disable RLS on critical tables while developing
+-- Disable RLS on all tables during development
+alter table public.students disable row level security;
 alter table public.assignments disable row level security;
+alter table public.grades disable row level security;
 alter table public.assignment_tags disable row level security;
 
--- Keep RLS on for student data (optional)
-alter table public.students enable row level security;
-alter table public.grades enable row level security;
+-- Grant all privileges to authenticated users
+grant all privileges on public.students to authenticated;
+grant all privileges on public.assignments to authenticated;
+grant all privileges on public.grades to authenticated;
+grant all privileges on public.assignment_tags to authenticated;
 
--- Add policies for student data
-create policy "enable_all_students"
-on public.students
-for all
-to authenticated
-using (true)
-with check (true);
-
-create policy "enable_all_grades"
-on public.grades
-for all
-to authenticated
-using (true)
-with check (true);
+-- Grant usage on sequences
+grant usage on all sequences in schema public to authenticated;

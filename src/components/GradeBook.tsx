@@ -451,14 +451,6 @@ const TYPE_COLORS = {
   'Assessment': 'bg-red-50 hover:bg-red-100'
 } as const;
 
-// Add grade row styling function
-const getGradeRowClassName = (grade: number) => {
-  if (grade < 70) return 'bg-red-50';
-  if (grade < 80) return 'bg-yellow-50';
-  if (grade >= 90) return 'bg-green-50';
-  return '';
-};
-
 // Add ColorSettings component at the top level
 const ColorSettings: FC<{
   showColors: boolean;
@@ -1543,12 +1535,7 @@ const handleGradeChange = async (assignmentId: string, periodId: string, student
                   </div>
                   <div className="space-y-2">
                     {sortStudents(students[periodId] || [], assignmentId, periodId).map(student => (
-                      <div key={student.id} className={cn("grid grid-cols-[auto_1fr_70px_70px_70px] gap-2 items-center", getGradeRowClassName(calculateTotal(
-                        editingGrades[`${assignmentId}-${periodId}`]
-                          ? unsavedGrades[assignmentId]?.[periodId]?.[student.id]
-                          : grades[assignmentId]?.[periodId]?.[student.id],
-                        extraPoints[`${assignmentId}-${periodId}-${student.id}`]
-                      )))}>
+                      <div key={student.id} className="grid grid-cols-[auto_1fr_70px_70px_70px] gap-2 items-center">
                         <div className="flex items-center gap-1">
                           <Button
                             variant="outline"
