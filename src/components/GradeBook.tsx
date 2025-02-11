@@ -509,6 +509,16 @@ const ColorSettings: FC<{
   );
 };
 
+// Add this utility function at the top level
+const getCardClassName = (assignment: Assignment, isExpanded: boolean, colorMode: string, showColors: boolean) => {
+  return cn(
+    "mb-2 transition-all duration-200",
+    isExpanded ? "col-span-2" : "",  // Make card span full width when expanded
+    showColors && colorMode === 'subject' && SUBJECT_COLORS[assignment.subject],
+    showColors && colorMode === 'type' && TYPE_COLORS[assignment.type]
+  );
+};
+
 const GradeBook: FC = () => {
   // Add new state for color settings
   const [showColors, setShowColors] = useState(true);
@@ -1219,9 +1229,11 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
 
   const renderAssignmentCard = (assignmentId: string, assignment: Assignment, provided?: any) => (
     <Card 
-      className={cn(
-        "mb-2",
-        getCardColor(assignment)
+      className={getCardClassName(
+        assignment, 
+        expandedAssignments[assignmentId] || editingAssignment === assignmentId,
+        colorMode,
+        showColors
       )}
       {...(provided ? provided.draggableProps : {})}
       {...(provided ? provided.dragHandleProps : {})}
@@ -1517,53 +1529,110 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
     return { all: entries };
   };
 
-  // Update the assignments section JSX
+  // Update renderAssignmentsSection to handle expanded cards in grouped view
   const renderAssignmentsSection = () => {
     const grouped = getGroupedAssignments();
-
+  
     if (groupBy === 'type') {
       return (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="relative grid grid-cols-2 gap-4">
           <DragDropContext onDragEnd={handleDragEnd}>
             {/* Daily Assignments Column */}
-            <div>
-              <h3 className="font-semibold mb-2">Daily Work</h3>
+            <div className="space-y-4">
+              <h3 className="font-semibold">Daily Work</h3>
               <Droppable droppableId="Daily">
                 {(provided) => (
-                  <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
-                    {(grouped.Daily || []).map(([id, assignment], index) => (
-                      <Draggable key={id} draggableId={id} index={index}>
-                        {(provided) => renderAssignmentCard(id, assignment, provided)}
-                      </Draggable>
-                    ))}
+                  <div 
+                    {...provided.droppableProps} 
+                    ref={provided.innerRef} 
+                    className="relative grid grid-cols-1 gap-4"
+                    // Add styles to handle expanded cards overlaying content
+                    style={{ 
+                      minHeight: '50px',
+                      position: 'relative'
+                    }}
+                  >
+                    {(grouped.Daily || []).map(([id, assignment], index) => {
+                      const isExpanded = expandedAssignments[id] || editingAssignment === id;
+                      return (
+                        <Draggable 
+                          key={id} 
+                          draggableId={id} 
+                          index={index}
+                          isDragDisabled={isExpanded}
+                        >
+                          {(provided) => (
+                            <div
+                              style={isExpanded ? {
+                                position: 'absolute',
+                                zIndex: 10,
+                                left: '-0.5rem',
+                                right: '-0.5rem',
+                                width: 'calc(200% + 2rem)',
+                              } : undefined}
+                            >
+                              {renderAssignmentCard(id, assignment, provided)}
+                            </div>
+                          )}
+                        </Draggable>
+                      );
+                    })}
                     {provided.placeholder}
                   </div>
                 )}
               </Droppable>
             </div>
-
+  
             {/* Assessment Column */}
-            <div>
-              <h3 className="font-semibold mb-2">Assessments</h3>
+            <div className="space-y-4">
+              <h3 className="font-semibold">Assessments</h3>
               <Droppable droppableId="Assessment">
                 {(provided) => (
-                  <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
-                    {(grouped.Assessment || []).map(([id, assignment], index) => (
-                      <Draggable key={id} draggableId={id} index={index}>
-                        {(provided) => renderAssignmentCard(id, assignment, provided)}
-                      </Draggable>
-                    ))}
+                  <div 
+                    {...provided.droppableProps} 
+                    ref={provided.innerRef} 
+                    className="relative grid grid-cols-1 gap-4"
+                    style={{ 
+                      minHeight: '50px',
+                      position: 'relative'
+                    }}
+                  >
+                    {(grouped.Assessment || []).map(([id, assignment], index) => {
+                      const isExpanded = expandedAssignments[id] || editingAssignment === id;
+                      return (
+                        <Draggable 
+                          key={id} 
+                          draggableId={id} 
+                          index={index}
+                          isDragDisabled={isExpanded}
+                        >
+                          {(provided) => (
+                            <div
+                              style={isExpanded ? {
+                                position: 'absolute',
+                                zIndex: 10,
+                                left: '-0.5rem',
+                                right: '-0.5rem',
+                                width: 'calc(200% + 2rem)',
+                              } : undefined}
+                            >
+                              {renderAssignmentCard(id, assignment, provided)}
+                            </div>
+                          )}
+                        </Draggable>
+                      );
+                    })}
                     {provided.placeholder}
                   </div>
                 )}
               </Droppable>
-            </div>
+            </div>"
           </DragDropContext>
         </div>
       );
     }
-
-    // Default single column view with two assignments per row
+  
+    // Default two-column view remains unchanged
     return (
       <DragDropContext onDragEnd={handleDragEnd}>
         <Droppable droppableId="assignments">
@@ -1571,7 +1640,7 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
             <div 
               {...provided.droppableProps} 
               ref={provided.innerRef}
-              className="grid grid-cols-2 gap-4"
+              className="grid grid-cols-2 gap-4 auto-rows-min"
             >
               {(grouped.all || []).map(([id, assignment], index) => (
                 <Draggable key={id} draggableId={id} index={index}>
@@ -1620,7 +1689,7 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
                 </div>
               </CardHeader>
               <CardContent>
-                {calendarView === 'month' ? (
+                {calendarView === 'week' ? (
                   <Calendar
                     mode="single"
                     selected={selectedDate || undefined}
