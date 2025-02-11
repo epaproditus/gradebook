@@ -19,6 +19,11 @@ import { Calendar as CalendarIcon } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import CustomWeekView from './WeekView'; // Update import name to avoid confusion
 import { Assignment, Student, AssignmentTag, GradeData } from '@/types/gradebook';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 // Initialize Supabase client (this is fine outside component)
 const supabase = createClient(
@@ -498,41 +503,111 @@ const getCardClassName = (assignment: Assignment, isExpanded: boolean, colorMode
   );
 };
 
-// Add Todo component
+// Update TodoList component
 const TodoList: FC<{
   tags: AssignmentTag[];
   students: Record<string, Student[]>;
   assignments: Record<string, Assignment>;
-}> = ({ tags, students, assignments }) => {
+  onRemoveTag: (tag: AssignmentTag) => Promise<void>;
+}> = ({ tags, students, assignments, onRemoveTag }) => {
   const flatStudents = Object.values(students).flat();
   const getStudentName = (id: number) => flatStudents.find(s => s.id === id)?.name || '';
-  const getAssignmentName = (id: string) => assignments[id]?.name || '';
 
   const retestTags = tags.filter(tag => tag.tag_type === 'retest');
   const absentTags = tags.filter(tag => tag.tag_type === 'absent');
 
+  // Group both retest and absent tags by assignment
+  const retestByAssignment = retestTags.reduce((acc, tag) => {
+    if (!acc[tag.assignment_id]) {
+      acc[tag.assignment_id] = [];
+    }
+    acc[tag.assignment_id].push(tag);
+    return acc;
+  }, {} as Record<string, AssignmentTag[]>);
+
+  const absentByAssignment = absentTags.reduce((acc, tag) => {
+    if (!acc[tag.assignment_id]) {
+      acc[tag.assignment_id] = [];
+    }
+    acc[tag.assignment_id].push(tag);
+    return acc;
+  }, {} as Record<string, AssignmentTag[]>);
+
   return (
     <div className="mt-4 space-y-2 text-sm">
-      <div>
-        <h3 className="font-semibold mb-1 text-red-600">Needs Retest:</h3>
-        <div className="space-y-1">
-          {retestTags.map(tag => (
-            <div key={tag.id} className="text-xs text-muted-foreground">
-              • {getStudentName(tag.student_id)} - {getAssignmentName(tag.assignment_id)}
-            </div>
-          ))}
-        </div>
-      </div>
-      <div>
-        <h3 className="font-semibold mb-1 text-yellow-600">Absent:</h3>
-        <div className="space-y-1">
-          {absentTags.map(tag => (
-            <div key={tag.id} className="text-xs text-muted-foreground">
-              • {getStudentName(tag.student_id)} - {getAssignmentName(tag.assignment_id)}
-            </div>
-          ))}
-        </div>
-      </div>
+      <Collapsible>
+        <CollapsibleTrigger className="flex items-center gap-2 text-red-600 font-semibold">
+          <ChevronRight className="h-4 w-4" />
+          Needs Retest ({retestTags.length})
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="space-y-1 pl-6 mt-1">
+            {Object.entries(retestByAssignment).map(([assignmentId, tags]) => (
+              <Collapsible key={assignmentId}>
+                <CollapsibleTrigger className="flex items-center gap-2 text-red-600">
+                  <ChevronRight className="h-3 w-3" />
+                  <span className="text-sm font-medium">
+                    {assignments[assignmentId]?.name} ({tags.length})
+                  </span>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="space-y-1 pl-6 mt-1">
+                    {tags.map(tag => (
+                      <div key={tag.id} className="flex items-center gap-2">
+                        <Checkbox
+                          className="h-3 w-3"
+                          checked={false}
+                          onCheckedChange={() => onRemoveTag(tag)}
+                        />
+                        <span className="text-xs text-muted-foreground">
+                          {getStudentName(tag.student_id)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            ))}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      <Collapsible>
+        <CollapsibleTrigger className="flex items-center gap-2 text-yellow-600 font-semibold">
+          <ChevronRight className="h-4 w-4" />
+          Absent ({absentTags.length})
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="space-y-1 pl-6 mt-1">
+            {Object.entries(absentByAssignment).map(([assignmentId, tags]) => (
+              <Collapsible key={assignmentId}>
+                <CollapsibleTrigger className="flex items-center gap-2 text-yellow-600">
+                  <ChevronRight className="h-3 w-3" />
+                  <span className="text-sm font-medium">
+                    {assignments[assignmentId]?.name} ({tags.length})
+                  </span>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="space-y-1 pl-6 mt-1">
+                    {tags.map(tag => (
+                      <div key={tag.id} className="flex items-center gap-2">
+                        <Checkbox
+                          className="h-3 w-3"
+                          checked={false}
+                          onCheckedChange={() => onRemoveTag(tag)}
+                        />
+                        <span className="text-xs text-muted-foreground">
+                          {getStudentName(tag.student_id)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            ))}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 };
@@ -736,9 +811,13 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
 
 const handleGradeChange = async (assignmentId: string, periodId: string, studentId: string, grade: string) => {
   const numericGrade = parseInt(grade) || 0;
+  const totalGrade = calculateTotal(
+    grade,
+    extraPoints[`${assignmentId}-${periodId}-${studentId}`] || '0'
+  );
   
-  // Auto-assign retest tag if grade is below 70
-  if (numericGrade < 70 && assignments[assignmentId].type === 'Assessment') {
+  // Auto-assign retest tag if total grade is below 70 and it's an Assessment
+  if (totalGrade < 70 && assignments[assignmentId].type === 'Assessment') {
     const existingTag = tags.find(tag => 
       tag.assignment_id === assignmentId && 
       tag.period === periodId && 
@@ -772,35 +851,40 @@ const handleGradeChange = async (assignmentId: string, periodId: string, student
     if (!confirm('Are you sure you want to delete this assignment?')) {
       return;
     }
-    // Delete grades first (due to foreign key constraint)
-    await supabase
-      .from('grades')
-      .delete()
-      .match({ assignment_id: assignmentId });
-  
-    // Then delete the assignment
-    const { error } = await supabase
-      .from('assignments')
-      .delete()
-      .match({ id: assignmentId });
-  
-    if (error) {
-      console.error('Error deleting assignment:', error);
-      return;
-    }
-  
-    setAssignments(prev => {
-      const newAssignments = { ...prev };
-      delete newAssignments[assignmentId];
-      return newAssignments;
-    });
-  };
+    try {
+      // Delete all related data first
+      await supabase
+        .from('grades')
+        .delete()
+        .match({ assignment_id: assignmentId });
 
-  const toggleAssignment = (assignmentId: string) => {
-    setExpandedAssignments(prev => ({
-      ...prev,
-      [assignmentId]: !prev[assignmentId]
-    }));
+      await supabase
+        .from('assignment_tags')
+        .delete()
+        .match({ assignment_id: assignmentId });
+
+      // Then delete the assignment
+      const { error } = await supabase
+        .from('assignments')
+        .delete()
+        .match({ id: assignmentId });
+
+      if (error) throw error;
+
+      // Update local state
+      setAssignments(prev => {
+        const newAssignments = { ...prev };
+        delete newAssignments[assignmentId];
+        return newAssignments;
+      });
+
+      // Update assignment order
+      setAssignmentOrder(prev => prev.filter(id => id !== assignmentId));
+
+    } catch (error) {
+      console.error('Error deleting assignment:', error);
+      alert('Failed to delete assignment. Please try again.');
+    }
   };
 
   const saveGrades = async (assignmentId: string) => {
@@ -1732,6 +1816,32 @@ const handleGradeChange = async (assignmentId: string, periodId: string, student
     );
   };
 
+  const handleRemoveTag = async (tag: AssignmentTag): Promise<void> => {
+    try {
+      const { error } = await supabase
+        .from('assignment_tags')
+        .delete()
+        .match({ id: tag.id });
+
+      if (error) {
+        throw error;
+      }
+
+      // Update local state by removing the tag
+      setTags(prev => prev.filter(t => t.id !== tag.id));
+    } catch (error) {
+      console.error('Error removing tag:', error);
+      alert('Failed to remove tag');
+    }
+  };
+
+  const toggleAssignment = (assignmentId: string) => {
+    setExpandedAssignments(prev => ({
+      ...prev,
+      [assignmentId]: !prev[assignmentId]
+    }));
+  };
+
   return (
     <div className="p-6">
       <div className="flex gap-6">
@@ -1801,6 +1911,7 @@ const handleGradeChange = async (assignmentId: string, periodId: string, student
                   tags={tags}
                   students={students}
                   assignments={assignments}
+                  onRemoveTag={handleRemoveTag}
                 />
               </CardContent>
             </Card>
