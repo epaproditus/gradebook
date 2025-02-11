@@ -446,6 +446,14 @@ const TYPE_COLORS = {
   'Assessment': 'bg-red-50 hover:bg-red-100'
 } as const;
 
+// Add grade row styling function
+const getGradeRowClassName = (grade: number) => {
+  if (grade < 70) return 'bg-red-50';
+  if (grade < 80) return 'bg-yellow-50';
+  if (grade >= 90) return 'bg-green-50';
+  return '';
+};
+
 // Add ColorSettings component at the top level
 const ColorSettings: FC<{
   showColors: boolean;
@@ -487,6 +495,45 @@ const getCardClassName = (assignment: Assignment, isExpanded: boolean, colorMode
     isExpanded ? "col-span-2" : "",  // Make card span full width when expanded
     showColors && colorMode === 'subject' && SUBJECT_COLORS[assignment.subject],
     showColors && colorMode === 'type' && TYPE_COLORS[assignment.type]
+  );
+};
+
+// Add Todo component
+const TodoList: FC<{
+  tags: AssignmentTag[];
+  students: Record<string, Student[]>;
+  assignments: Record<string, Assignment>;
+}> = ({ tags, students, assignments }) => {
+  const flatStudents = Object.values(students).flat();
+  const getStudentName = (id: number) => flatStudents.find(s => s.id === id)?.name || '';
+  const getAssignmentName = (id: string) => assignments[id]?.name || '';
+
+  const retestTags = tags.filter(tag => tag.tag_type === 'retest');
+  const absentTags = tags.filter(tag => tag.tag_type === 'absent');
+
+  return (
+    <div className="mt-4 space-y-2 text-sm">
+      <div>
+        <h3 className="font-semibold mb-1 text-red-600">Needs Retest:</h3>
+        <div className="space-y-1">
+          {retestTags.map(tag => (
+            <div key={tag.id} className="text-xs text-muted-foreground">
+              • {getStudentName(tag.student_id)} - {getAssignmentName(tag.assignment_id)}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div>
+        <h3 className="font-semibold mb-1 text-yellow-600">Absent:</h3>
+        <div className="space-y-1">
+          {absentTags.map(tag => (
+            <div key={tag.id} className="text-xs text-muted-foreground">
+              • {getStudentName(tag.student_id)} - {getAssignmentName(tag.assignment_id)}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -687,23 +734,39 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
   });
 };
 
-  const handleGradeChange = (assignmentId: string, periodId: string, studentId: string, grade: string) => {
-    const finalGrade = grade === '' ? '0' : grade;
-    setUnsavedGrades(prev => ({
-      ...prev,
-      [assignmentId]: {
-        ...prev[assignmentId],
-        [periodId]: {
-          ...prev[assignmentId]?.[periodId],
-          [studentId]: finalGrade
-        }
+const handleGradeChange = async (assignmentId: string, periodId: string, studentId: string, grade: string) => {
+  const numericGrade = parseInt(grade) || 0;
+  
+  // Auto-assign retest tag if grade is below 70
+  if (numericGrade < 70 && assignments[assignmentId].type === 'Assessment') {
+    const existingTag = tags.find(tag => 
+      tag.assignment_id === assignmentId && 
+      tag.period === periodId && 
+      tag.student_id === parseInt(studentId) && 
+      tag.tag_type === 'retest'
+    );
+    
+    if (!existingTag) {
+      await handleTagToggle(assignmentId, periodId, parseInt(studentId), 'retest');
+    }
+  }
+
+  const finalGrade = grade === '' ? '0' : grade;
+  setUnsavedGrades(prev => ({
+    ...prev,
+    [assignmentId]: {
+      ...prev[assignmentId],
+      [periodId]: {
+        ...prev[assignmentId]?.[periodId],
+        [studentId]: finalGrade
       }
-    }));
-    setEditingGrades(prev => ({
-      ...prev,
-      [`${assignmentId}-${periodId}`]: true
-    }));
-  };
+    }
+  }));
+  setEditingGrades(prev => ({
+    ...prev,
+    [`${assignmentId}-${periodId}`]: true
+  }));
+};
 
   const deleteAssignment = async (assignmentId: string) => {
     if (!confirm('Are you sure you want to delete this assignment?')) {
@@ -812,36 +875,69 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
       alert('Please fill in assignment name and select at least one period');
       return;
     }
-  
-    const assignmentId = `${newAssignment.date.toISOString()}-${newAssignment.name}`;
-    const assignmentData = {
-      id: assignmentId,
-      name: newAssignment.name,
-      date: newAssignment.date.toISOString().split('T')[0],
-      type: selectedType,
-      periods: newAssignment.periods,
-      subject: newAssignment.subject
-    };
-  
-    const { error } = await supabase
-      .from('assignments')
-      .insert(assignmentData);
-  
-    if (error) {
-      console.error('Error saving assignment:', error);
-      return;
-    }
-  
-    setAssignments(prev => ({
-      ...prev,
-      [assignmentId]: {
-        ...newAssignment,
-        date: newAssignment.date,
-        type: selectedType
+
+    try {
+      // Create a clean assignment ID (remove special characters)
+      const cleanName = newAssignment.name
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, '-')
+        .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
+        .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
+
+      const assignmentId = `${format(newAssignment.date, 'yyyy-MM-dd')}-${cleanName}`;
+
+      // Create assignment data object matching the database schema
+      const assignmentData = {
+        id: assignmentId,
+        name: newAssignment.name,
+        date: format(newAssignment.date, 'yyyy-MM-dd'),
+        type: selectedType,
+        periods: newAssignment.periods,
+        subject: newAssignment.subject
+      };
+
+      // Log the data being sent (for debugging)
+      console.log('Saving assignment:', assignmentData);
+
+      const { data, error } = await supabase
+        .from('assignments')
+        .insert([assignmentData])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Supabase error:', error);
+        throw new Error(error.message);
       }
-    }));
-    setNewAssignment(null);
-    setSelectedDate(null);
+
+      if (!data) {
+        throw new Error('No data returned from insert');
+      }
+
+      // Update local state with the new assignment
+      setAssignments(prev => ({
+        ...prev,
+        [assignmentId]: {
+          ...newAssignment,
+          date: newAssignment.date
+        }
+      }));
+
+      // Add to assignment order
+      setAssignmentOrder(prev => [...prev, assignmentId]);
+
+      // Clear form
+      setNewAssignment(null);
+      setSelectedDate(null);
+
+      // Show success message
+      alert('Assignment created successfully!');
+
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error occurred';
+      alert(`Failed to create assignment: ${message}`);
+      console.error('Error saving assignment:', error);
+    }
   };
 
   const exportSingleGradeSet = (assignmentId: string, periodId: string) => {
@@ -892,7 +988,6 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
       // Create one merged file for all selections
       const allData = assignmentIds.flatMap(assignmentId => 
         periodIds.flatMap(periodId => {
-          const assignment = assignments[assignmentId];
           const periodStudents = students[periodId] || [];
           const assignmentGrades = grades[assignmentId]?.[periodId] || {};
   
@@ -905,17 +1000,15 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
             return [
               student.id,
               finalGrade,
-              firstName,
-              lastName,
-              periodId,
-              assignment.name
+              escapeCSV(firstName),
+              escapeCSV(lastName)
             ];
           });
         })
       );
   
       const csvData = [
-        ['Student ID', 'Final Grade', 'First Name', 'Last Name', 'Period', 'Assignment'].join(','),
+        ['Student ID', 'Final Grade', 'First Name', 'Last Name'].join(','),
         ...allData.map(row => row.join(','))
       ].join('\n');
   
@@ -1366,7 +1459,12 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
                   </div>
                   <div className="space-y-2">
                     {sortStudents(students[periodId] || [], assignmentId, periodId).map(student => (
-                      <div key={student.id} className="grid grid-cols-[auto_1fr_70px_70px_70px] gap-2 items-center">
+                      <div key={student.id} className={cn("grid grid-cols-[auto_1fr_70px_70px_70px] gap-2 items-center", getGradeRowClassName(calculateTotal(
+                        editingGrades[`${assignmentId}-${periodId}`]
+                          ? unsavedGrades[assignmentId]?.[periodId]?.[student.id]
+                          : grades[assignmentId]?.[periodId]?.[student.id],
+                        extraPoints[`${assignmentId}-${periodId}-${student.id}`]
+                      )))}>
                         <div className="flex items-center gap-1">
                           <Button
                             variant="outline"
@@ -1486,6 +1584,14 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
     </Card>
   );
 
+  // Add CSV escape utility function
+  const escapeCSV = (value: string) => {
+    if (value.includes(',') || value.includes('"')) {
+      return `"${value.replace(/"/g, '""')}"`;
+    }
+    return value;
+  };
+  
   // Add function to get grouped assignments
   const getGroupedAssignments = () => {
     const entries = getSortedAndFilteredAssignments();
@@ -1690,6 +1796,11 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
                   students={Object.values(students).flat()}
                   currentDate={selectedDate || new Date()}
                   view={calendarView}
+                />
+                <TodoList 
+                  tags={tags}
+                  students={students}
+                  assignments={assignments}
                 />
               </CardContent>
             </Card>
