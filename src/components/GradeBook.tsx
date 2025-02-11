@@ -605,9 +605,9 @@ const TodoList: FC<{
 };
 
 const GradeBook: FC = () => {
-  // Add new state for color settings
-  const [showColors, setShowColors] = useState(true);
-  const [colorMode, setColorMode] = useState<'none' | 'subject' | 'type'>('subject');
+  // Change the initial value of showColors to false
+  const [showColors, setShowColors] = useState(false);
+  const [colorMode, setColorMode] = useState<'none' | 'subject' | 'type'>('none');
   
   // Move useState here
   const [calendarView, setCalendarView] = useState<'month' | 'week'>('month');
