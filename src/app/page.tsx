@@ -1,9 +1,7 @@
 'use client';
 
-import dynamic from 'next/dynamic';
-
-const GradeBook = dynamic(() => import('@/components/GradeBook'), { ssr: false });
+import { redirect } from 'next/navigation';
 
 export default function Home() {
-    return <GradeBook />;
+  redirect('/gradebook');
 }
