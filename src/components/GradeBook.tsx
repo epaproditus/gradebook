@@ -185,6 +185,7 @@ const ImportScoresDialog: FC<{
     }
   };
 
+
   const handleSubmitImport = async () => {
     if (!file) return;
 
@@ -610,7 +611,7 @@ const GradeBook: FC = () => {
   const [colorMode, setColorMode] = useState<'none' | 'subject' | 'type'>('none');
   
   // Move useState here
-  const [calendarView, setCalendarView] = useState<'month' | 'week'>('month');
+  const [calendarView, setCalendarView] = useState<'month' | 'week'>('week');
   
   // Rest of your state declarations
   const [students, setStudents] = useState<Record<string, Student[]>>({});
@@ -673,6 +674,7 @@ const GradeBook: FC = () => {
   // Load assignments and grades on component mount
   useEffect(() => {
     const loadAssignments = async () => {
+      // First load assignments
       const { data: assignmentData, error: assignmentError } = await supabase
         .from('assignments')
         .select('*');
@@ -693,7 +695,7 @@ const GradeBook: FC = () => {
       setAssignments(formattedAssignments);
       setAssignmentOrder(Object.keys(formattedAssignments));
   
-      // Load grades for all assignments
+      // Then load grades in a separate query
       const { data: gradeData, error: gradeError } = await supabase
         .from('grades')
         .select('*');
@@ -703,20 +705,25 @@ const GradeBook: FC = () => {
         return;
       }
   
+      // Create properly structured grade data
       const formattedGrades: GradeData = {};
       const loadedExtraPoints: Record<string, string> = {};
   
-      gradeData.forEach(grade => {
+      gradeData?.forEach(grade => {
         if (!formattedGrades[grade.assignment_id]) {
           formattedGrades[grade.assignment_id] = {};
         }
         if (!formattedGrades[grade.assignment_id][grade.period]) {
           formattedGrades[grade.assignment_id][grade.period] = {};
         }
-        formattedGrades[grade.assignment_id][grade.period][grade.student_id] = grade.grade;
         
-        // Load extra points
-        if (grade.extra_points) {
+        // Only set grade if it exists and isn't empty
+        if (grade.grade && grade.grade !== '0') {
+          formattedGrades[grade.assignment_id][grade.period][grade.student_id] = grade.grade;
+        }
+        
+        // Only set extra points if they exist and aren't zero
+        if (grade.extra_points && grade.extra_points !== '0') {
           const key = `${grade.assignment_id}-${grade.period}-${grade.student_id}`;
           loadedExtraPoints[key] = grade.extra_points;
         }
@@ -769,6 +776,12 @@ const GradeBook: FC = () => {
       setSelectedDate(date);
       checkBirthdays(date);
     }
+  };
+
+  // Handle week change
+  const handleWeekChange = (newDate: Date) => {
+    setSelectedDate(newDate);
+    checkBirthdays(newDate);
   };
 
   // Add a new button for creating assignments
@@ -844,24 +857,37 @@ const handleGradeChange = async (assignmentId: string, periodId: string, student
       return;
     }
     try {
-      // Delete all related data first
-      await supabase
-        .from('grades')
-        .delete()
-        .match({ assignment_id: assignmentId });
-
-      await supabase
+      // First delete all related tags
+      const { error: tagsError } = await supabase
         .from('assignment_tags')
         .delete()
-        .match({ assignment_id: assignmentId });
+        .eq('assignment_id', assignmentId);
 
-      // Then delete the assignment
-      const { error } = await supabase
+      if (tagsError) {
+        console.error('Error deleting tags:', tagsError);
+        throw new Error('Failed to delete related tags');
+      }
+
+      // Then delete all related grades
+      const { error: gradesError } = await supabase
+        .from('grades')
+        .delete()
+        .eq('assignment_id', assignmentId);
+
+      if (gradesError) {
+        console.error('Error deleting grades:', gradesError);
+        throw new Error('Failed to delete related grades');
+      }
+
+      // Finally delete the assignment itself
+      const { error: assignmentError } = await supabase
         .from('assignments')
         .delete()
-        .match({ id: assignmentId });
+        .eq('id', assignmentId);
 
-      if (error) throw error;
+      if (assignmentError) {
+        throw assignmentError;
+      }
 
       // Update local state
       setAssignments(prev => {
@@ -872,6 +898,16 @@ const handleGradeChange = async (assignmentId: string, periodId: string, student
 
       // Update assignment order
       setAssignmentOrder(prev => prev.filter(id => id !== assignmentId));
+
+      // Clear any related tags from local state
+      setTags(prev => prev.filter(tag => tag.assignment_id !== assignmentId));
+
+      // Clear any related grades from local state
+      setGrades(prev => {
+        const newGrades = { ...prev };
+        delete newGrades[assignmentId];
+        return newGrades;
+      });
 
     } catch (error) {
       console.error('Error deleting assignment:', error);
@@ -884,37 +920,37 @@ const handleGradeChange = async (assignmentId: string, periodId: string, student
       const assignment = assignments[assignmentId];
       if (!assignment) return;
   
-      // Gather all grades to save across all periods
-      const allGradeEntries = assignment.periods.flatMap(periodId => {
-        const gradesToSave = unsavedGrades[assignmentId]?.[periodId] || {};
-        return Object.entries(gradesToSave).map(([studentId, grade]) => ({
-          assignment_id: assignmentId,
-          student_id: parseInt(studentId),
-          period: periodId,
-          grade: grade,
-          extra_points: extraPoints[`${assignmentId}-${periodId}-${studentId}`] || '0'
-        }));
+      // Collect all the grades we want to save
+      const gradesToSave = assignment.periods.flatMap(periodId => {
+        const periodGrades = unsavedGrades[assignmentId]?.[periodId] || {};
+        return Object.entries(periodGrades)
+          .filter(([_, grade]) => grade !== '' && grade !== '0') // Only save non-empty, non-zero grades
+          .map(([studentId, grade]) => ({
+            assignment_id: assignmentId,
+            student_id: parseInt(studentId),
+            period: periodId,
+            grade: grade,
+            extra_points: extraPoints[`${assignmentId}-${periodId}-${studentId}`] || '0'
+          }));
       });
   
-      // Delete all existing grades for this assignment
-      const { error: deleteError } = await supabase
-        .from('grades')
-        .delete()
-        .match({ assignment_id: assignmentId });
+      if (gradesToSave.length > 0) {
+        // First, delete existing grades for this assignment
+        const { error: deleteError } = await supabase
+          .from('grades')
+          .delete()
+          .eq('assignment_id', assignmentId);
   
-      if (deleteError) {
-        console.error('Error deleting existing grades:', deleteError);
-        throw new Error('Failed to delete existing grades');
-      }
+        if (deleteError) {
+          throw new Error('Failed to delete existing grades');
+        }
   
-      if (allGradeEntries.length > 0) {
-        // Insert all new grades
+        // Then insert new grades
         const { error: insertError } = await supabase
           .from('grades')
-          .insert(allGradeEntries);
+          .insert(gradesToSave);
   
         if (insertError) {
-          console.error('Error inserting new grades:', insertError);
           throw new Error('Failed to insert new grades');
         }
       }
@@ -931,7 +967,7 @@ const handleGradeChange = async (assignmentId: string, periodId: string, student
         }), {})
       }));
   
-      // Clear editing state for all periods
+      // Clear editing state
       assignment.periods.forEach(periodId => {
         setEditingGrades(prev => ({
           ...prev,
@@ -939,7 +975,7 @@ const handleGradeChange = async (assignmentId: string, periodId: string, student
         }));
       });
   
-      alert('All grades saved successfully!');
+      alert('Grades saved successfully!');
     } catch (error) {
       console.error('Error saving grades:', error);
       alert('Failed to save grades. Please try again.');
@@ -1453,6 +1489,23 @@ const handleGradeChange = async (assignmentId: string, periodId: string, student
                   <SelectItem value="Algebra I">Algebra I</SelectItem>
                 </SelectContent>
               </Select>
+              <Select
+                value={assignment.type}
+                onValueChange={(value: 'Daily' | 'Assessment') => {
+                  setAssignments(prev => ({
+                    ...prev,
+                    [assignmentId]: { ...prev[assignmentId], type: value }
+                  }));
+                }}
+              >
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Daily">Daily</SelectItem>
+                  <SelectItem value="Assessment">Assessment</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
         ) : (
@@ -1887,6 +1940,7 @@ const handleGradeChange = async (assignmentId: string, periodId: string, student
                     date={selectedDate || new Date()}
                     onDateSelect={handleDateSelect}
                     assignments={assignments}
+                    onWeekChange={handleWeekChange}
                   />
                 )}
                 <BirthdayList
@@ -1907,6 +1961,12 @@ const handleGradeChange = async (assignmentId: string, periodId: string, student
 
         {/* Right side */}
         <div className="flex-grow space-y-4">
+          <Button
+            onClick={handleNewAssignment}
+            className="w-full"
+          >
+            Create New Assignment
+          </Button>
           {selectedDate && (
             <Button
               onClick={handleNewAssignment}

@@ -3,7 +3,8 @@ create table if not exists public.students (
     id bigint primary key,
     name text not null,
     birthday date,
-    class_period text not null
+    class_period text not null,
+    created_at timestamptz default now()
 );
 
 -- Create assignments table
@@ -13,7 +14,8 @@ create table if not exists public.assignments (
     date date not null,
     type text not null check (type in ('Daily', 'Assessment')),
     subject text not null check (subject in ('Math 8', 'Algebra I')),
-    periods text[] not null
+    periods text[] not null,
+    created_at timestamptz default now()
 );
 
 -- Create grades table
@@ -24,6 +26,8 @@ create table if not exists public.grades (
     period text not null,
     grade text not null,
     extra_points text default '0',
+    created_at timestamptz default now(),
+    updated_at timestamptz default now(),
     unique(assignment_id, student_id, period)
 );
 
@@ -45,3 +49,23 @@ create index if not exists idx_grades_assignment on public.grades(assignment_id)
 create index if not exists idx_grades_student on public.grades(student_id);
 create index if not exists idx_tags_assignment on public.assignment_tags(assignment_id);
 create index if not exists idx_tags_student on public.assignment_tags(student_id);
+
+-- Create function to update updated_at
+CREATE OR REPLACE FUNCTION update_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for grades
+DROP TRIGGER IF EXISTS update_grades_updated_at ON public.grades;
+CREATE TRIGGER update_grades_updated_at
+  BEFORE UPDATE ON public.grades
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at();
+
+-- Grant all privileges to authenticated users
+GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
