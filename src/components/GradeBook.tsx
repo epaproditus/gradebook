@@ -17,6 +17,8 @@ import { startOfWeek, addDays, isSameDay, format } from 'date-fns';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import { Calendar as CalendarIcon } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import CustomWeekView from './WeekView'; // Update import name to avoid confusion
+import { Assignment, Student, AssignmentTag, GradeData } from '@/types/gradebook';
 
 // Initialize Supabase client (this is fine outside component)
 const supabase = createClient(
@@ -25,28 +27,6 @@ const supabase = createClient(
 );
 
 // Move interfaces outside component
-interface Student {
-  id: number;  // Changed from string to number to match bigint in database
-  name: string;
-  birthday: string;
-  class_period: string;
-}
-
-interface Assignment {
-  date: Date;
-  name: string;
-  periods: string[];
-  type: 'Daily' | 'Assessment';
-  subject: 'Math 8' | 'Algebra I';
-}
-
-interface GradeData {
-  [key: string]: {
-    [key: string]: {
-      [key: string]: string;
-    };
-  };
-}
 
 interface ExportDialogProps {
   assignments: Record<string, Assignment>;
@@ -65,15 +45,6 @@ interface DMACScore {
   LocalID: string;
   Score: string;
   // ... other DMAC fields if needed
-}
-
-interface AssignmentTag {
-  id: string;
-  assignment_id: string;
-  student_id: number;  // Changed from string to number
-  period: string;
-  tag_type: 'absent' | 'late' | 'incomplete' | 'retest';
-  created_at: string;
 }
 
 // Update BirthdayList component
@@ -1626,7 +1597,7 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
                   </div>
                 )}
               </Droppable>
-            </div>"
+            </div>
           </DragDropContext>
         </div>
       );
@@ -1689,7 +1660,7 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
                 </div>
               </CardHeader>
               <CardContent>
-                {calendarView === 'week' ? (
+                {calendarView === 'month' ? (
                   <Calendar
                     mode="single"
                     selected={selectedDate || undefined}
@@ -1709,9 +1680,9 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
                     }}
                   />
                 ) : (
-                  <WeekView
+                  <CustomWeekView
                     date={selectedDate || new Date()}
-                    onDateSelect={(date) => handleDateSelect(date)}
+                    onDateSelect={handleDateSelect}
                     assignments={assignments}
                   />
                 )}
@@ -1853,6 +1824,5 @@ const handlePeriodsSelect = (selectedPeriod: string) => {
     </div>
   );
 };
-
 export default GradeBook;
 
