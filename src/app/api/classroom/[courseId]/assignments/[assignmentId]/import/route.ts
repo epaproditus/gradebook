@@ -3,74 +3,75 @@ import { supabase } from '@/lib/supabaseConfig';
 
 export async function POST(
   request: Request,
-  { params }: { params: { courseId: string; assignmentId: string } }
+  context: { params: Promise<{ courseId: string; assignmentId: string }> }
 ) {
+  const { courseId, assignmentId } = await context.params;
   const authHeader = request.headers.get("authorization");
+  
   if (!authHeader) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    // Fetch assignment details from Google Classroom
-    const res = await fetch(
-      `https://classroom.googleapis.com/v1/courses/${params.courseId}/courseWork/${params.assignmentId}`,
-      {
-        headers: { Authorization: authHeader }
-      }
-    );
-    const assignment = await res.json();
+    // Get assignment details
+    const [assignmentRes, studentsRes] = await Promise.all([
+      fetch(
+        `https://classroom.googleapis.com/v1/courses/${courseId}/courseWork/${assignmentId}`,
+        { headers: { Authorization: authHeader } }
+      ),
+      fetch(
+        `https://classroom.googleapis.com/v1/courses/${courseId}/students`,
+        { headers: { Authorization: authHeader } }
+      )
+    ]);
 
-    // Insert into your assignments table
+    const [assignment, studentsData] = await Promise.all([
+      assignmentRes.json(),
+      studentsRes.json()
+    ]);
+
+    // Try inserting without specifying subject first to see the error details
     const { data: importedAssignment, error: insertError } = await supabase
       .from('assignments')
       .upsert({
-        id: assignment.id,
+        id: assignmentId,
         name: assignment.title,
         date: assignment.dueDate 
           ? `${assignment.dueDate.year}-${assignment.dueDate.month}-${assignment.dueDate.day}`
           : new Date().toISOString().split('T')[0],
         type: 'classroom',
-        subject: assignment.subject,
-        periods: ['1'], // You'll need to determine the correct period
-        google_classroom_id: assignment.id // Add this column to your schema
+        periods: ['1'],
+        google_classroom_id: assignmentId,
+        google_classroom_link: `https://classroom.google.com/c/${courseId}/a/${assignmentId}`
       })
       .select()
       .single();
 
-    if (insertError) throw insertError;
-
-    // Fetch and store student submissions
-    const submissionsRes = await fetch(
-      `https://classroom.googleapis.com/v1/courses/${params.courseId}/courseWork/${params.assignmentId}/studentSubmissions`,
-      {
-        headers: { Authorization: authHeader }
-      }
-    );
-    const submissions = await submissionsRes.json();
-
-    // Create grades for each submission
-    if (submissions.studentSubmissions) {
-      await Promise.all(submissions.studentSubmissions.map(async (sub: any) => {
-        // Find matching student in your gradebook
-        const { data: student } = await supabase
-          .from('students')
-          .select('id')
-          .eq('google_id', sub.userId)
-          .single();
-
-        if (student) {
-          await supabase.from('grades').upsert({
-            assignment_id: importedAssignment.id,
-            student_id: student.id,
-            grade: sub.assignedGrade?.toString() || '0',
-            period: '1', // You'll need to determine the correct period
-            google_submission_id: sub.id // Add this column to your schema
-          });
-        }
-      }));
+    if (insertError) {
+      console.error('Full assignment insert error:', insertError);
+      throw insertError;
     }
 
-    return NextResponse.json({ success: true, assignment: importedAssignment });
+    // Update or create student mappings if needed
+    for (const student of studentsData.students || []) {
+      const email = student.profile.emailAddress;
+      await supabase.from('students')
+        .update({ 
+          google_id: student.userId,
+          google_email: email 
+        })
+        .filter('name->first', 'ilike', email.split('.')[0])
+        .filter('name->last', 'ilike', email.split('.')[1].split('@')[0]);
+    }
+
+    return NextResponse.json({ 
+      success: true, 
+      assignment: importedAssignment,
+      redirect: `/gradebook?assignment=${importedAssignment.id}`
+    });
   } catch (error) {
-    console.error('Import error:', error);
-    return NextResponse.json({ error: "Import failed" }, { status: 500 });
+    console.error('Import error details:', error);
+    return NextResponse.json({ 
+      error: "Import failed", 
+      details: error 
+    }, { status: 500 });
   }
 }

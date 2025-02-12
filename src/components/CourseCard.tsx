@@ -6,12 +6,12 @@ import { useSession } from 'next-auth/react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { StudentMappingModal } from './StudentMappingModal';
+import type { StudentMapping } from '../types/studentMapping';
 
 interface CourseCardProps {
   name: string;
   section?: string;
   id: string;
-  onSync: (courseId: string) => Promise<void>;
 }
 
 interface Assignment {
@@ -36,9 +36,8 @@ interface Assignment {
   }>;
 }
 
-export function CourseCard({ name, section, id, onSync }: CourseCardProps) {
+export function CourseCard({ name, section, id }: CourseCardProps) {
   const { data: session } = useSession();
-  const [isSyncing, setIsSyncing] = useState(false);
   const [showAssignments, setShowAssignments] = useState(false);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
@@ -52,15 +51,6 @@ export function CourseCard({ name, section, id, onSync }: CourseCardProps) {
   const filteredAssignments = assignments.filter(assignment => 
     assignment.title.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
-  const handleSync = async () => {
-    setIsSyncing(true);
-    try {
-      await onSync(id);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
 
   const formatDueDate = (dueDate?: Assignment['dueDate']) => {
     if (!dueDate) return 'No due date';
@@ -112,43 +102,51 @@ export function CourseCard({ name, section, id, onSync }: CourseCardProps) {
 
   const handleImportAssignment = async (assignment: Assignment) => {
     try {
-      setImportStatus(prev => ({ ...prev, [assignment.id]: null })); // Reset status
+      setImportStatus(prev => ({ ...prev, [assignment.id]: null }));
       
-      // Fetch student mappings first
-      const res = await fetch(`/api/classroom/${id}/students`, {
+      // Direct import without student mapping
+      const res = await fetch(`/api/classroom/${id}/assignments/${assignment.id}/import`, {
+        method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session?.accessToken}`
+          'Authorization': `Bearer ${session?.accessToken}`,
+          'Content-Type': 'application/json'
         }
       });
-      const data = await res.json();
+
+      if (!res.ok) throw new Error('Failed to import');
       
-      setStudentMappings(data.students);
-      setSelectedAssignment(assignment);
-      setShowMapping(true);
+      const data = await res.json();
+      setImportStatus(prev => ({ ...prev, [assignment.id]: 'success' }));
+      
+      // Optional: Show success message or redirect to gradebook
+      // window.location.href = `/gradebook?assignment=${data.assignment.id}`;
+      
     } catch (error) {
-      console.error('Error fetching students:', error);
+      console.error('Import error:', error);
       setImportStatus(prev => ({ ...prev, [assignment.id]: 'error' }));
     }
   };
 
-  const handleConfirmMapping = async (mappings: any[]) => {
+  const handleConfirmMapping = async (mappings: StudentMapping[]) => {
     if (!selectedAssignment) return;
     
     try {
+      setImportStatus(prev => ({ ...prev, [selectedAssignment.id]: null }));
+      
       const res = await fetch(`/api/classroom/${id}/assignments/${selectedAssignment.id}/import`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session?.accessToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          studentMappings: mappings
-        })
+        body: JSON.stringify({ studentMappings: mappings })
       });
 
-      if (!res.ok) throw new Error('Failed to import');
+      if (!res.ok) throw new Error('Failed to import with mappings');
+      
       setImportStatus(prev => ({ ...prev, [selectedAssignment.id]: 'success' }));
       setShowMapping(false);
+      
     } catch (error) {
       console.error('Import error:', error);
       setImportStatus(prev => ({ ...prev, [selectedAssignment.id]: 'error' }));
@@ -286,16 +284,6 @@ export function CourseCard({ name, section, id, onSync }: CourseCardProps) {
             </div>
           </DialogContent>
         </Dialog>
-
-        <div className="flex justify-end items-center gap-2">
-          {isSyncing && <LoadingSpinner />}
-          <Button 
-            onClick={handleSync}
-            disabled={isSyncing}
-          >
-            {isSyncing ? 'Syncing...' : 'Sync Assignments'}
-          </Button>
-        </div>
       </Card>
 
       <StudentMappingModal

@@ -3,8 +3,9 @@ import { supabase } from '@/lib/supabaseConfig';
 
 export async function GET(
   request: Request,
-  { params }: { params: { courseId: string } }
+  context: { params: Promise<{ courseId: string }> }
 ) {
+  const { courseId } = await context.params;
   const authHeader = request.headers.get("authorization");
   const { searchParams } = new URL(request.url);
   const pageSize = Number(searchParams.get('pageSize')) || 5;
@@ -13,7 +14,7 @@ export async function GET(
   if (!authHeader) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const url = new URL(`https://classroom.googleapis.com/v1/courses/${params.courseId}/courseWork`);
+    const url = new URL(`https://classroom.googleapis.com/v1/courses/${courseId}/courseWork`);
     url.searchParams.set('pageSize', pageSize.toString());
     if (pageToken) url.searchParams.set('pageToken', pageToken);
     
