@@ -1,6 +1,11 @@
-import NextAuth from "next-auth";
+import NextAuth, { DefaultSession } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
-import { JWT } from "next-auth/jwt";
+
+declare module "next-auth" {
+  interface Session extends DefaultSession {
+    accessToken?: string;
+  }
+}
 
 const handler = NextAuth({
   providers: [
@@ -9,7 +14,6 @@ const handler = NextAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       authorization: {
         params: {
-          prompt: "consent",
           access_type: "offline",
           response_type: "code",
           scope: [
@@ -18,32 +22,34 @@ const handler = NextAuth({
             'profile',
             'https://www.googleapis.com/auth/classroom.courses.readonly',
             'https://www.googleapis.com/auth/classroom.coursework.students',
-            'https://www.googleapis.com/auth/classroom.rosters.readonly'
+            'https://www.googleapis.com/auth/classroom.rosters.readonly',
+            'https://www.googleapis.com/auth/classroom.coursework.me',
+            'https://www.googleapis.com/auth/classroom.profile.emails',
+            'https://www.googleapis.com/auth/classroom.profile.photos',
+            'https://www.googleapis.com/auth/classroom.guardianlinks.students',
+            'https://www.googleapis.com/auth/classroom.announcements',
+            'https://www.googleapis.com/auth/classroom.topics',
+            'https://www.googleapis.com/auth/classroom.courseworkmaterials',
+            'https://www.googleapis.com/auth/classroom.push-notifications',
+            'https://www.googleapis.com/auth/classroom.student-submissions.students.readonly'
           ].join(' ')
-        },
-      },
+        }
+      }
     }),
   ],
   callbacks: {
-    async jwt({ token, account, user }) {
-      // Initial sign in
-      if (account && user) {
-        return {
-          accessToken: account.access_token,
-          accessTokenExpires: account.expires_at! * 1000,
-          refreshToken: account.refresh_token,
-          user,
-        };
+    async jwt({ token, account }) {
+      if (account) {
+        token.accessToken = account.access_token;
       }
       return token;
     },
-    async session({ session, token }: { session: any, token: JWT }) {
-      session.accessToken = token.accessToken;
-      session.error = token.error;
+    async session({ session, token }: { session: any, token: any }) {
+      session.accessToken = token.accessToken as string;
       return session;
-    },
+    }
   },
-  debug: process.env.NODE_ENV === 'development',
+  debug: true,
 });
 
 export { handler as GET, handler as POST };

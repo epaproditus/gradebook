@@ -13,7 +13,7 @@ export default function CourseGrid({ courses }: { courses: Course[] }) {
         <CourseCard 
           key={course.id}
           {...course}
-          onSync={(courseId: string): void => {
+          onSync={async (courseId: string): Promise<void> => {
             // Will implement sync logic later
             console.log('Syncing course:', courseId);
           }}
