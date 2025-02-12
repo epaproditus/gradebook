@@ -1,0 +1,38 @@
+model Course {
+  id          String       @id
+  name        String
+  section     String?
+  assignments Assignment[]
+  students    Student[]
+}
+
+model Student {
+  id        String     @id
+  email     String     @unique
+  firstName String
+  lastName  String
+  studentId String
+  courses   Course[]
+  grades    Grade[]
+}
+
+model Assignment {
+  id          String   @id
+  courseId    String
+  course      Course   @relation(fields: [courseId], references: [id])
+  title       String
+  dueDate     DateTime?
+  grades      Grade[]
+  syncedId    String?  // Google Classroom assignment ID
+}
+
+model Grade {
+  id           String     @id @default(cuid())
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id])
+  studentId    String
+  student      Student    @relation(fields: [studentId], references: [id])
+  score        Float
+  synced       Boolean    @default(false)
+  updatedAt    DateTime   @updatedAt
+}

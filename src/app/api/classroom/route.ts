@@ -1,40 +1,29 @@
-import { google } from 'googleapis';
+import { getServerSession } from "next-auth/next";
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
 
 export async function GET(request: Request) {
+  const session = await getServerSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const courseId = searchParams.get('courseId');
+  
+  if (!courseId) {
+    return NextResponse.json({ error: "Course ID required" }, { status: 400 });
+  }
+
   try {
-    const session = await getServerSession();
-    if (!session?.accessToken) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const auth = new google.auth.OAuth2(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET
-    );
-    auth.setCredentials({ access_token: session.accessToken });
-
-    const classroom = google.classroom({ version: 'v1', auth });
-    
-    // Get URL parameters
-    const { searchParams } = new URL(request.url);
-    const courseId = searchParams.get('courseId');
-
-    if (!courseId) {
-      // List courses if no courseId provided
-      const { data: courses } = await classroom.courses.list({
-        courseStates: ['ACTIVE']
-      });
-      return NextResponse.json({ courses: courses.courses || [] });
-    }
-
-    // Get course work if courseId is provided
-    const { data: courseWork } = await classroom.courses.courseWork.list({
-      courseId
+    // Use session token or access token for API calls
+    const res = await fetch(`https://classroom.googleapis.com/v1/courses/${courseId}`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'Accept': 'application/json',
+      }
     });
-
-    return NextResponse.json({ courseWork: courseWork.courseWork || [] });
+    const data = await res.json();
+    return NextResponse.json(data);
   } catch (error) {
     console.error('Classroom API error:', error);
     return NextResponse.json({ error: 'Failed to fetch classroom data' }, { status: 500 });

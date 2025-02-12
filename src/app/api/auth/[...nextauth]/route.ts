@@ -1,12 +1,6 @@
-import NextAuth from 'next-auth';
-import GoogleProvider from 'next-auth/providers/google';
-import { JWT } from 'next-auth/jwt';
-
-declare module "next-auth" {
-  interface Session {
-    accessToken?: string;
-  }
-}
+import NextAuth from "next-auth";
+import GoogleProvider from "next-auth/providers/google";
+import { JWT } from "next-auth/jwt";
 
 const handler = NextAuth({
   providers: [
@@ -15,25 +9,41 @@ const handler = NextAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       authorization: {
         params: {
-          scope: 'openid email profile https://www.googleapis.com/auth/classroom.courses.readonly https://www.googleapis.com/auth/classroom.coursework.students https://www.googleapis.com/auth/classroom.rosters.readonly',
+          prompt: "consent",
+          access_type: "offline",
+          response_type: "code",
+          scope: [
+            'openid',
+            'email',
+            'profile',
+            'https://www.googleapis.com/auth/classroom.courses.readonly',
+            'https://www.googleapis.com/auth/classroom.coursework.students',
+            'https://www.googleapis.com/auth/classroom.rosters.readonly'
+          ].join(' ')
         },
       },
     }),
   ],
   callbacks: {
-    async jwt({ token, account }) {
-      if (account) {
-        token.accessToken = account.access_token;
+    async jwt({ token, account, user }) {
+      // Initial sign in
+      if (account && user) {
+        return {
+          accessToken: account.access_token,
+          accessTokenExpires: account.expires_at! * 1000,
+          refreshToken: account.refresh_token,
+          user,
+        };
       }
       return token;
     },
     async session({ session, token }: { session: any, token: JWT }) {
-      if (token.accessToken) {
-        session.accessToken = token.accessToken;
-      }
+      session.accessToken = token.accessToken;
+      session.error = token.error;
       return session;
     },
   },
+  debug: process.env.NODE_ENV === 'development',
 });
 
 export { handler as GET, handler as POST };
