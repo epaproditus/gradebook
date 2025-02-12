@@ -1,11 +1,9 @@
-import GradeBook from '@/components/GradeBook';
-import Navigation from '@/components/Navigation';
+import GradebookWrapper from '@/components/GradebookWrapper';
 
 export default function GradebookPage() {
   return (
-    <div>
-      <Navigation />
-      <GradeBook />
-    </div>
+    <main>
+      <GradebookWrapper />
+    </main>
   );
 }

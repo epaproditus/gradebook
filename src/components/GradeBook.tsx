@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { X, Save, ChevronDown, ChevronUp, Download, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Save, ChevronDown, ChevronUp, Download, ChevronLeft, ChevronRight, PlusCircle } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
@@ -669,6 +669,7 @@ const GradeBook: FC = () => {
   const [subjectFilter, setSubjectFilter] = useState<'all' | 'Math 8' | 'Algebra I'>('all');
   const [editingAssignment, setEditingAssignment] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState<'none' | 'type'>('none');
+  const [showImport, setShowImport] = useState(false);
 
   // Fetch students from Supabase
   useEffect(() => {

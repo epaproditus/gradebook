@@ -1,40 +1,39 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabaseConfig';
 
 export async function GET(
-  request: Request,
-  context: { params: Promise<{ courseId: string }> }
+  request: Request, 
+  { params }: { params: { courseId: string } }
 ) {
-  const { courseId } = await context.params;
+  const { courseId } = await params;
   const authHeader = request.headers.get("authorization");
   const { searchParams } = new URL(request.url);
-  const pageSize = Number(searchParams.get('pageSize')) || 5;
-  const pageToken = searchParams.get('pageToken');
+  const pageSize = searchParams.get('pageSize') || '5';
 
-  if (!authHeader) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!authHeader) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   try {
-    const url = new URL(`https://classroom.googleapis.com/v1/courses/${courseId}/courseWork`);
-    url.searchParams.set('pageSize', pageSize.toString());
-    if (pageToken) url.searchParams.set('pageToken', pageToken);
-    
-    const res = await fetch(url, {
-      headers: { Authorization: authHeader }
-    });
-    
+    const res = await fetch(
+      `https://classroom.googleapis.com/v1/courses/${courseId}/courseWork?pageSize=${pageSize}&orderBy=updateTime desc`,
+      { 
+        headers: { 
+          Authorization: authHeader,
+          Accept: 'application/json',
+        }
+      }
+    );
+
     const data = await res.json();
-    
-    if (res.ok) {
-      return NextResponse.json({
-        courseWork: data.courseWork || [],
-        nextPageToken: data.nextPageToken || null
-      });
-    } else {
-      console.error('Google Classroom error:', data);
-      return NextResponse.json({ error: data.error?.message || "Error" }, { status: res.status });
+
+    if (!res.ok) {
+      console.error('Google API error:', data);
+      throw new Error(data.error?.message || 'Failed to fetch assignments');
     }
+
+    return NextResponse.json(data);
   } catch (error) {
-    console.error('Failed to fetch assignments:', error);
+    console.error('Error fetching assignments:', error);
     return NextResponse.json({ error: "Failed to fetch assignments" }, { status: 500 });
   }
 }

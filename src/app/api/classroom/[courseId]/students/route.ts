@@ -1,32 +1,48 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabaseConfig';
 
-export async function GET(request: Request, context: { params: Promise<{ courseId: string }> }) {
+interface GoogleClassroomStudent {
+  userId: string;
+  profile: {
+    name: {
+      givenName: string;
+      familyName: string;
+      fullName: string;
+    };
+    emailAddress: string;
+  }
+}
+
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ courseId: string }> }
+) {
   const { courseId } = await context.params;
   const authHeader = request.headers.get("authorization");
-  
+
   if (!authHeader) {
-    console.error('Missing auth header');
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "Missing authorization header" }, { status: 401 });
   }
 
   try {
-    // First get gradebook students
-    const { data: gradebookStudents, error: dbError } = await supabase
-      .from('students')
-      .select('id, name, class_period, google_id, google_email')
-      .order('name');
+    // First get the course mapping to check period
+    const { data: mapping } = await supabase
+      .from('course_mappings')
+      .select('period')
+      .eq('google_course_id', courseId)
+      .single();
 
-    if (dbError) throw dbError;
+    // Get Google Classroom students
+    console.log('Fetching Google students with auth:', authHeader?.substring(0, 20) + '...');
     
-    // Fetch Google Classroom students with full profile
     const googleRes = await fetch(
-      `https://classroom.googleapis.com/v1/courses/${courseId}/students?fields=students.userId,students.profile.name,students.profile.emailAddress`,
-      { 
-        headers: { 
+      `https://classroom.googleapis.com/v1/courses/${courseId}/students`,
+      {
+        headers: {
           'Authorization': authHeader,
-          'Accept': 'application/json'
-        }
+          'Accept': 'application/json',
+        },
+        cache: 'no-store'
       }
     );
 
@@ -39,60 +55,40 @@ export async function GET(request: Request, context: { params: Promise<{ courseI
 
     console.log('Raw Google response:', JSON.stringify(googleData, null, 2));
 
-    // Map the students with better error handling
-    const mappedStudents = (googleData.students || []).map(gStudent => {
-      try {
-        // Extract name components
-        const { givenName, familyName } = gStudent.profile.name;
-        
-        // Generate email pattern (firstname.lastname)
-        const expectedEmail = `${givenName.toLowerCase()}.${familyName.toLowerCase()}`;
-        
-        // Try to find matching student
-        const matchedStudent = gradebookStudents?.find(s => {
-          if (!s.name) return false;
-          
-          // Parse gradebook name (LASTNAME, FIRSTNAME M)
-          const [lastName = '', firstName = ''] = s.name.split(',').map(part => 
-            part.trim().toLowerCase().replace(/\s+.*$/, '') // Remove middle initial/name
-          );
-          
-          // Match by name pattern
-          return firstName === givenName.toLowerCase() && 
-                 lastName === familyName.toLowerCase();
-        });
+    // Get gradebook students for matching
+    const { data: gradebookStudents, error: dbError } = await supabase
+      .from('students')
+      .select('*')
+      .order('name');
 
-        console.log('Matching result:', {
-          googleName: `${givenName} ${familyName}`,
-          matched: matchedStudent?.name,
-          expectedEmail
-        });
+    if (dbError) throw dbError;
 
-        return {
-          googleId: gStudent.userId,
-          googleName: `${givenName} ${familyName}`,
-          googleEmail: expectedEmail,
-          matchedStudent: matchedStudent ? {
-            id: matchedStudent.id,
-            name: matchedStudent.name,
-            period: matchedStudent.class_period
-          } : undefined
-        };
-      } catch (err) {
-        console.error('Error mapping student:', gStudent, err);
-        return null;
+    // Get existing mappings
+    const { data: existingMappings } = await supabase
+      .from('student_mappings')
+      .select('*')
+      .eq('period', mapping?.period);
+
+    // Format Google students data
+    const formattedStudents = googleData.students?.map((s: GoogleClassroomStudent) => ({
+      googleId: s.userId,
+      googleEmail: s.profile?.emailAddress || '', // Make email optional
+      googleName: {
+        givenName: s.profile.name.givenName,
+        familyName: s.profile.name.familyName,
+        fullName: s.profile.name.fullName
       }
-    }).filter(Boolean);
+    })) || [];
 
-    return NextResponse.json({ 
-      students: mappedStudents,
-      gradebookStudents: gradebookStudents || []
+    return NextResponse.json({
+      students: formattedStudents,
+      gradebookStudents
     });
   } catch (error) {
     console.error('Handler error:', error);
-    return NextResponse.json({ 
-      error: error instanceof Error ? error.message : "Failed to fetch students",
-      details: error instanceof Error ? error.stack : undefined
-    }, { status: 500 });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to fetch students' },
+      { status: 500 }
+    );
   }
 }

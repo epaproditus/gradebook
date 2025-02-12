@@ -1,133 +1,89 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabaseConfig';
+import { v4 as uuidv4 } from 'uuid';
 
 export async function POST(
   request: Request,
   context: { params: Promise<{ courseId: string; assignmentId: string }> }
 ) {
   const { courseId, assignmentId } = await context.params;
+  const { forceUpdate, period } = await request.json();
   const authHeader = request.headers.get("authorization");
-  
-  if (!authHeader) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (!authHeader) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   try {
-    const { studentMappings, period, type, force = false } = await request.json();
-
-    // Check for existing assignment
+    // Check if assignment exists first
     const { data: existingAssignment } = await supabase
       .from('assignments')
-      .select('*')
+      .select('id')
       .eq('google_classroom_id', assignmentId)
       .single();
 
-    // If force is true, delete existing assignment and its grades
-    if (existingAssignment) {
-      console.log('Deleting existing assignment:', existingAssignment.id);
-      
-      // Delete grades first
-      const { error: gradesDeleteError } = await supabase
-        .from('grades')
-        .delete()
-        .eq('assignment_id', existingAssignment.id);
-
-      if (gradesDeleteError) {
-        console.error('Error deleting grades:', gradesDeleteError);
-        throw gradesDeleteError;
-      }
-
-      // Then delete assignment
-      const { error: assignmentDeleteError } = await supabase
-        .from('assignments')
-        .delete()
-        .eq('id', existingAssignment.id);
-
-      if (assignmentDeleteError) {
-        console.error('Error deleting assignment:', assignmentDeleteError);
-        throw assignmentDeleteError;
-      }
+    if (existingAssignment && !forceUpdate) {
+      return NextResponse.json({ 
+        error: "Assignment already exists",
+        existing: existingAssignment
+      }, { status: 400 });
     }
 
-    // Get assignment details
-    const [assignmentRes, studentsRes] = await Promise.all([
-      fetch(
-        `https://classroom.googleapis.com/v1/courses/${courseId}/courseWork/${assignmentId}`,
-        { headers: { Authorization: authHeader } }
-      ),
-      fetch(
-        `https://classroom.googleapis.com/v1/courses/${courseId}/students`,
-        { headers: { Authorization: authHeader } }
-      )
-    ]);
+    // Validate period exists in course mappings
+    const { data: courseMapping } = await supabase
+      .from('course_mappings')
+      .select('setup_completed')
+      .eq('google_course_id', courseId)
+      .eq('period', period)
+      .single();
 
-    const [assignment, studentsData] = await Promise.all([
-      assignmentRes.json(),
-      studentsRes.json()
-    ]);
-
-    // Track student mapping success
-    let mappedStudentCount = 0;
-
-    // Update or create student mappings
-    for (const student of studentsData.students || []) {
-      const email = student.profile.emailAddress;
-      const { data: updatedStudent } = await supabase
-        .from('students')
-        .update({ 
-          google_id: student.userId,
-          google_email: email 
-        })
-        .filter('name->first', 'ilike', email.split('.')[0])
-        .filter('name->last', 'ilike', email.split('.')[1].split('@')[0])
-        .select()
-        .single();
-
-      if (updatedStudent) mappedStudentCount++;
+    if (!courseMapping?.setup_completed) {
+      return NextResponse.json({ 
+        error: "Course period not set up. Please complete course setup first." 
+      }, { status: 400 });
     }
 
-    // Create assignment after student mapping
-    const { data: importedAssignment, error: insertError } = await supabase
+    // Get assignment details from Google
+    const res = await fetch(
+      `https://classroom.googleapis.com/v1/courses/${courseId}/courseWork/${assignmentId}`,
+      { headers: { Authorization: authHeader } }
+    );
+
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(errorData.error?.message || 'Failed to fetch assignment');
+    }
+
+    const assignment = await res.json();
+
+    // Insert or update the assignment
+    const { data: savedAssignment, error } = await supabase
       .from('assignments')
-      .insert({
-        id: assignmentId,
-        name: assignment.title,
-        date: assignment.dueDate 
-          ? `${assignment.dueDate.year}-${String(assignment.dueDate.month).padStart(2, '0')}-${String(assignment.dueDate.day).padStart(2, '0')}`
-          : null,
-        type: type,
-        periods: [period],
-        maxPoints: assignment.maxPoints,
+      .upsert({
+        id: existingAssignment?.id || uuidv4(),
         google_classroom_id: assignmentId,
-        google_classroom_link: `https://classroom.google.com/c/${courseId}/a/${assignmentId}`
+        name: assignment.title,
+        type: 'Daily',
+        periods: [period],
+        date: new Date().toISOString().split('T')[0],
+        subject: 'Math 8',
+        max_points: assignment.maxPoints || 100
       })
       .select()
       .single();
 
-    if (insertError) throw insertError;
-
-    // Create student mappings
-    for (const mapping of studentMappings) {
-      if (mapping.gradebookStudentId) {
-        await supabase
-          .from('student_google_mappings')
-          .upsert({
-            student_id: mapping.gradebookStudentId,
-            google_id: mapping.googleId,
-            google_email: mapping.googleEmail
-          });
-      }
-    }
+    if (error) throw error;
 
     return NextResponse.json({ 
-      success: true, 
-      assignment: importedAssignment,
-      mappedStudents: mappedStudentCount,
-      totalStudents: studentsData.students?.length || 0
+      success: true,
+      assignment: savedAssignment
     });
+
   } catch (error) {
-    console.error('Import error details:', error);
+    console.error('Import error:', error);
     return NextResponse.json({ 
-      error: "Import failed", 
-      details: error 
+      error: error instanceof Error ? error.message : "Import failed",
+      details: error
     }, { status: 500 });
   }
 }

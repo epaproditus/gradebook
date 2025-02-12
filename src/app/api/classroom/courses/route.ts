@@ -1,46 +1,41 @@
+import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import { NextResponse } from 'next/server';
 
-export async function GET() {
+export async function GET(request: Request) {
+  const session = await getServerSession(authOptions);
+  
+  if (!session?.accessToken) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const session = await getServerSession(authOptions);
+    console.log('Fetching courses with token:', session.accessToken.substring(0, 20) + '...');
     
-    if (!session?.accessToken) {
-      console.log('No access token in session:', session);
-      return NextResponse.json({ error: "No access token" }, { status: 401 });
-    }
-
-    console.log('Using access token:', session.accessToken);
-
-    const res = await fetch(
-      "https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE",
+    const response = await fetch(
+      'https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE',
       {
-        headers: { 
+        headers: {
           'Authorization': `Bearer ${session.accessToken}`,
-          'Accept': 'application/json'
+          'Accept': 'application/json',
         },
-        next: { revalidate: 0 }
+        cache: 'no-store'
       }
     );
-    
-    const data = await res.json();
-    
-    if (!res.ok) {
-      console.error('Google API Error Response:', {
-        status: res.status,
-        statusText: res.statusText,
-        data: data
-      });
-      return NextResponse.json({ error: data.error?.message || "Failed to fetch courses" }, { status: res.status });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('Google API Error:', data);
+      throw new Error(data.error?.message || 'Failed to fetch courses');
     }
-    
-    return NextResponse.json({ courses: data.courses || [] });
+
+    return NextResponse.json(data);
   } catch (error) {
-    console.error('Caught error:', error);
-    return NextResponse.json({ 
-      error: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined
-    }, { status: 500 });
+    console.error('Courses API Error:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to fetch courses' },
+      { status: 500 }
+    );
   }
 }

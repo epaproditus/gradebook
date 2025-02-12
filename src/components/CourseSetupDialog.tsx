@@ -7,36 +7,110 @@ import { useSession } from 'next-auth/react';
 import LoadingSpinner from './ui/loading-spinner';
 import { supabase } from '@/lib/supabaseConfig';
 
+interface RosterStudent {
+  id: string;
+  name: string;
+  email?: string;
+  class_period: string;
+}
+
+interface GoogleStudent {
+  googleId: string;
+  googleEmail?: string;
+  googleName: {
+    givenName: string;
+    familyName: string;
+    fullName: string;
+  };
+}
+
+interface GoogleClassroomStudent {
+  userId: string;
+  profile: {
+    emailAddress: string;
+    name: {
+      givenName: string;
+      familyName: string;
+      fullName: string;
+    }
+  }
+}
+
 interface StudentMatch {
   googleId: string;
-  googleEmail: string;
+  googleEmail?: string;
   googleName: string;
-  matchedStudent?: {
-    id: string;
-    name: string;
-    email: string;
-  };
+  matchedStudent?: RosterStudent;
   manuallyMatched?: boolean;
 }
+
+function normalizeString(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '') // Remove all non-alphanumeric characters
+    .trim();
+}
+
+function getNameMatchScore(googleName: { givenName: string; familyName: string }, rosterName: string): number {
+  try {
+    // Split roster name (assuming format: "LastName, FirstName")
+    const [rosterLast, rosterFirst] = rosterName.split(',').map(s => s.trim().toLowerCase());
+    const googleFirst = googleName.givenName.toLowerCase();
+    const googleLast = googleName.familyName.toLowerCase();
+
+    // Direct match
+    if (googleFirst === rosterFirst && googleLast === rosterLast) {
+      return 1;
+    }
+
+    // Partial matches
+    const firstNameScore = googleFirst.includes(rosterFirst) || rosterFirst.includes(googleFirst) ? 0.5 : 0;
+    const lastNameScore = googleLast.includes(rosterLast) || rosterLast.includes(googleLast) ? 0.5 : 0;
+
+    return firstNameScore + lastNameScore;
+  } catch (error) {
+    console.error('Error matching names:', { googleName, rosterName, error });
+    return 0;
+  }
+}
+
+function extractNameParts(fullName: string): [string, string] {
+  const parts = fullName.split(',').map(s => s.trim().toLowerCase());
+  if (parts.length === 2) {
+    return [parts[0], parts[1]]; // lastName, firstName
+  }
+  // Fallback: treat the whole thing as lastName if no comma
+  return [fullName.toLowerCase(), ''];
+}
+
+interface DialogProps {
+  courseId: string;
+  courseName: string;
+  open: boolean;
+  onClose: () => void;
+}
+
+const SUBJECTS = ['Math 8', 'Algebra I'] as const;
+type Subject = typeof SUBJECTS[number];
 
 export function CourseSetupDialog({ 
   courseId, 
   courseName,
   open, 
   onClose 
-}: { 
-  courseId: string;
-  courseName: string;
-  open: boolean;
-  onClose: () => void;
-}) {
+}: DialogProps) {
   const { data: session } = useSession();
   const [period, setPeriod] = useState<string>('');
   const [availablePeriods, setAvailablePeriods] = useState<string[]>([]);
   const [students, setStudents] = useState<StudentMatch[]>([]);
-  const [rosterStudents, setRosterStudents] = useState<any[]>([]);
+  const [rosterStudents, setRosterStudents] = useState<RosterStudent[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingPeriods, setLoadingPeriods] = useState(true);
+  const [error, setError] = useState<string | null>(null); // Moved inside component
+  const [mappedPeriods, setMappedPeriods] = useState<string[]>([]);
+  const [setupStatus, setSetupStatus] = useState<'checking' | 'new' | 'existing'>('checking');
+  const [activePeriod, setActivePeriod] = useState<string | null>(null);
+  const [selectedSubject, setSelectedSubject] = useState<Subject>('Math 8');
 
   // Add helper function for period display
   const formatPeriodDisplay = (period: string) => {
@@ -74,9 +148,7 @@ export function CourseSetupDialog({
         console.log('Found periods:', uniquePeriods);
 
         setAvailablePeriods(uniquePeriods);
-        if (uniquePeriods.length > 0) {
-          setPeriod(uniquePeriods[0]);
-        }
+        // Remove auto-selection of first period
       } catch (error) {
         console.error('Error fetching periods:', error);
       } finally {
@@ -90,6 +162,21 @@ export function CourseSetupDialog({
   }, [open]);
 
   useEffect(() => {
+    async function fetchMappedPeriods() {
+      const { data } = await supabase
+        .from('course_mappings')
+        .select('period')
+        .eq('google_course_id', courseId);
+        
+      setMappedPeriods(data?.map(d => d.period) || []);
+    }
+
+    if (open) {
+      fetchMappedPeriods();
+    }
+  }, [courseId, open]);
+
+  useEffect(() => {
     async function loadStudents() {
       if (!period) return;
       
@@ -97,6 +184,37 @@ export function CourseSetupDialog({
       try {
         console.log('Loading students for period:', period);
 
+        // First check if period is already mapped
+        const { data: existingMapping } = await supabase
+          .from('course_mappings')
+          .select('*')
+          .eq('google_course_id', courseId)
+          .eq('period', period)
+          .single();
+
+        if (existingMapping) {
+          // Load existing mappings
+          const { data: mappedStudents } = await supabase
+            .from('student_mappings')
+            .select(`
+              *,
+              students (*)
+            `)
+            .eq('period', period);
+
+          // Set existing mappings
+          if (mappedStudents?.length) {
+            setStudents(mappedStudents.map(m => ({
+              googleId: m.google_id,
+              googleEmail: m.google_email,
+              googleName: m.students.name,
+              matchedStudent: m.students,
+              manuallyMatched: true
+            })));
+          }
+        }
+
+        // Fetch fresh Google Classroom data
         const res = await fetch(`/api/classroom/${courseId}/students`, {
           headers: {
             'Authorization': `Bearer ${session?.accessToken}`,
@@ -106,29 +224,47 @@ export function CourseSetupDialog({
 
         const data = await res.json();
         
-        // Log full response for debugging
-        console.log('API Response:', data);
+        if (!res.ok) throw new Error(data.error || 'Failed to fetch students');
 
-        if (!res.ok) {
-          console.error('API Error:', data);
-          throw new Error(data.error || 'Failed to fetch students');
-        }
+        // Get gradebook students for this period
+        const { data: gradebookStudents, error: dbError } = await supabase
+          .from('students')
+          .select('*')
+          .eq('class_period', period)
+          .order('name');
 
-        // Filter gradebook students for current period
-        const periodStudents = (data.gradebookStudents || []).filter(
-          (s: any) => s.class_period === period
-        );
+        if (dbError) throw dbError;
 
-        // Set the students
-        setRosterStudents(periodStudents);
-        setStudents(data.students || []);
+        // Auto-match students based on name similarity
+        const matchedStudents = data.students.map((googleStudent: any) => {
+          let bestMatch = null;
+          let bestScore = 0;
 
-        // Log what we're setting
-        console.log('Setting state:', {
-          periodStudents: periodStudents.length,
-          googleStudents: data.students?.length,
-          period
+          gradebookStudents.forEach(gs => {
+            const score = getNameMatchScore(
+              googleStudent.googleName,
+              gs.name
+            );
+            if (score > bestScore) {
+              bestScore = score;
+              if (score >= 0.8) {
+                bestMatch = gs;
+              }
+            }
+          });
+
+          return {
+            googleId: googleStudent.googleId,
+            googleEmail: googleStudent.googleEmail || '',
+            googleName: googleStudent.googleName.fullName,
+            matchedStudent: bestMatch,
+            manuallyMatched: false
+          };
         });
+
+        console.log('Matched students:', matchedStudents);
+        setRosterStudents(gradebookStudents);
+        setStudents(matchedStudents);
 
       } catch (error) {
         console.error('Load error:', error);
@@ -143,33 +279,135 @@ export function CourseSetupDialog({
     }
   }, [courseId, period, open, session?.accessToken]);
 
+  // Add setup status check
+  useEffect(() => {
+    const checkSetupStatus = async () => {
+      if (!period) return;
+
+      const { data } = await supabase
+        .from('course_mappings')
+        .select('setup_completed')
+        .eq('google_course_id', courseId)
+        .eq('period', period)
+        .eq('setup_completed', true)
+        .maybeSingle();
+
+      setSetupStatus(data ? 'existing' : 'new');
+      setLoading(false);
+    };
+
+    if (period) {
+      checkSetupStatus();
+    }
+  }, [courseId, period, setSetupStatus, setLoading]);
+
   const handleSave = async () => {
     try {
-      await supabase
+      console.log('Starting save with:', {
+        courseId,
+        period,
+        subject: selectedSubject,
+        isUpdate: setupStatus === 'existing'
+      });
+
+      // First check if mapping exists
+      const { data: existingMapping } = await supabase
         .from('course_mappings')
-        .upsert({ 
+        .select('*')
+        .eq('google_course_id', courseId)
+        .eq('period', period)
+        .maybeSingle();
+
+      console.log('Existing mapping:', existingMapping);
+
+      // Then save course mapping
+      const { data: savedMapping, error: mappingError } = await supabase
+        .from('course_mappings')
+        .upsert({
+          ...(existingMapping || {}),
           google_course_id: courseId,
-          period 
-        });
+          period: period,
+          subject: selectedSubject,
+          setup_completed: true,
+          setup_completed_at: new Date().toISOString()
+        })
+        .select()
+        .single();
 
-      const mappings = students
-        .filter(s => s.matchedStudent)
-        .map(s => ({
-          google_id: s.googleId,
-          google_email: s.googleEmail,
-          student_id: s.matchedStudent!.id
-        }));
+      if (mappingError) {
+        console.error('Course mapping error:', { error: mappingError, details: mappingError.details });
+        throw new Error(`Course mapping failed: ${mappingError.message || 'Unknown error'}`);
+      }
 
-      await supabase
-        .from('student_mappings')
-        .upsert(mappings);
+      console.log('Successfully saved mapping:', savedMapping);
 
-      onClose();
+      if (setupStatus === 'existing') {
+        // For updates, we're done
+        onClose();
+        return;
+      }
+
+      // For new setups, continue with student mappings
+      // ...rest of student mapping code...
+
     } catch (error) {
-      console.error('Error saving mappings:', error);
+      console.error('Save error:', error);
+      alert(error instanceof Error ? error.message : 'Failed to save mappings');
     }
   };
 
+  const handlePeriodSelect = (selectedPeriod: string) => {
+    setPeriod(selectedPeriod);
+    setActivePeriod(selectedPeriod);
+  };
+
+  // Only show loading when fetching students
+  const showLoading = loading && setupStatus === 'new';
+
+  // Modified subject selector component
+  const SubjectSelector = () => (
+    <div className="space-y-2">
+      <Label>Subject</Label>
+      <Select
+        value={selectedSubject}
+        onValueChange={(value: Subject) => setSelectedSubject(value)}
+      >
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder="Select subject..." />
+        </SelectTrigger>
+        <SelectContent>
+          {SUBJECTS.map(subject => (
+            <SelectItem key={subject} value={subject}>
+              {subject}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
+  // Show completed setup message
+  if (setupStatus === 'existing') {
+    return (
+      <Dialog open={open} onOpenChange={onClose}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{courseName} - Period {period}</DialogTitle>
+          </DialogHeader>
+          <div className="p-4">
+            <p className="text-green-600 mb-4">✓ This period is already set up.</p>
+            <SubjectSelector />
+          </div>
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
+            <Button onClick={handleSave}>Update Setup</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  // Main setup view
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
@@ -180,6 +418,11 @@ export function CourseSetupDialog({
         <div className="space-y-6 flex-1 overflow-y-auto pr-2">
           <div className="sticky top-0 bg-white z-10 pb-4 border-b">
             <Label>Select Period</Label>
+            {!period && (
+              <p className="text-sm text-gray-500 mb-2">
+                Please select a class period to continue
+              </p>
+            )}
             {loadingPeriods ? (
               <div className="flex items-center space-x-2">
                 <LoadingSpinner className="w-4 h-4" />
@@ -191,12 +434,16 @@ export function CourseSetupDialog({
                   <Button
                     key={p}
                     variant={period === p ? "default" : "outline"}
-                    onClick={() => setPeriod(p)}
-                    className={p.includes('SPED') ? 'bg-blue-50' : ''}
+                    onClick={() => handlePeriodSelect(p)}
+                    disabled={!!activePeriod && activePeriod !== p}
+                    className={`
+                      ${p.includes('SPED') ? 'bg-blue-50' : ''}
+                      ${mappedPeriods.includes(p) ? 'border-green-500' : ''}
+                    `}
                   >
                     {formatPeriodDisplay(p)}
-                    {p.includes('SPED') && (
-                      <span className="ml-1 text-xs text-blue-600">(SPED)</span>
+                    {mappedPeriods.includes(p) && (
+                      <span className="ml-2 text-xs text-green-600">✓</span>
                     )}
                   </Button>
                 ))}
@@ -220,7 +467,9 @@ export function CourseSetupDialog({
             </div>
           </div>
 
-          {loading ? (
+          {period && <SubjectSelector />}
+
+          {showLoading ? (
             <div className="flex justify-center p-4">
               <LoadingSpinner />
             </div>
@@ -301,10 +550,11 @@ export function CourseSetupDialog({
             onClick={handleSave}
             disabled={students.some(s => !s.matchedStudent)}
           >
-            Save Mappings
+            Complete Setup
           </Button>
         </div>
       </DialogContent>
     </Dialog>
   );
 }
+

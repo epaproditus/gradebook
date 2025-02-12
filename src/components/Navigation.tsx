@@ -1,43 +1,31 @@
 'use client';
 
-import { FC } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
-const Navigation: FC = () => {
+export function Navigation() {
   const pathname = usePathname();
 
+  const links = [
+    { href: '/gradebook', label: 'Gradebook', match: '/gradebook' },
+    { href: '/classroom', label: 'Google Classroom', match: '/classroom' }
+  ];
+
   return (
-    <nav className="border-b">
-      <div className="px-6 flex h-14 items-center">
-        <div className="flex space-x-4">
-          <Link 
-            href="/gradebook"
-            className={cn(
-              "text-sm font-medium transition-colors hover:text-primary",
-              pathname === "/gradebook" 
-                ? "text-foreground" 
-                : "text-muted-foreground"
-            )}
-          >
-            Gradebook
-          </Link>
-          <Link
-            href="/classroom"
-            className={cn(
-              "text-sm font-medium transition-colors hover:text-primary",
-              pathname === "/classroom"
-                ? "text-foreground"
-                : "text-muted-foreground"
-            )}
-          >
-            Google Classroom
-          </Link>
-        </div>
-      </div>
+    <nav className="flex gap-6 border-b">
+      {links.map(({ href, label, match }) => (
+        <Link
+          key={href}
+          href={href}
+          className={cn(
+            "px-4 py-3 text-sm font-medium hover:text-primary transition-colors",
+            pathname?.startsWith(match) ? "border-b-2 border-primary text-primary" : "text-muted-foreground"
+          )}
+        >
+          {label}
+        </Link>
+      ))}
     </nav>
   );
-};
-
-export default Navigation;
+}

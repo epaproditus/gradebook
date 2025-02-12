@@ -1,326 +1,174 @@
-import { useState } from 'react';
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import LoadingSpinner from "@/components/ui/loading-spinner";
+import { useState, useEffect } from 'react';
+import { CourseSetupDialog } from './CourseSetupDialog';
+import { Button } from './ui/button';
 import { useSession } from 'next-auth/react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { StudentMappingModal } from './StudentMappingModal';
-import type { StudentMapping } from '../types/studentMapping';
-import { Toast } from "@/components/ui/toast";
-import { ImportDialog } from './ImportDialog';
-import { StudentMappingDialog } from './StudentMappingDialog';
+import LoadingSpinner from './ui/loading-spinner';
+import { supabase } from '@/lib/supabaseConfig';
+import type { Course } from '@/types/classroom';
+import { AssignmentSelectDialog } from './AssignmentSelectDialog';
+import type { GoogleAssignment } from './AssignmentSelectDialog';
 
 interface CourseCardProps {
-  name: string;
-  section?: string;
-  id: string;
+  course: Course;
+  onSetupClick: (course: Course) => void;
 }
 
-interface Assignment {
-  id: string;
-  title: string;
-  dueDate?: {
-    year: number;
-    month: number;
-    day: number;
-  };
-  workType?: string;
-  maxPoints?: number;
-  state?: 'PUBLISHED' | 'DRAFT';
-  description?: string;
-  materials?: Array<{
-    driveFile?: {
-      driveFile: {
-        title: string;
-        url: string;
-      }
-    }
-  }>;
-}
-
-export function CourseCard({ name, section, id }: CourseCardProps) {
+export function CourseCard({ course, onSetupClick }: CourseCardProps) {
   const { data: session } = useSession();
+  const [loading, setLoading] = useState(false);
+  const [showSetup, setShowSetup] = useState(false);
+  const [setupStatus, setSetupStatus] = useState<{ completed: boolean, periods: string[] }>({
+    completed: false,
+    periods: []
+  });
   const [showAssignments, setShowAssignments] = useState(false);
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showMapping, setShowMapping] = useState(false);
-  const [studentMappings, setStudentMappings] = useState<any[]>([]);
-  const [importStatus, setImportStatus] = useState<{[key: string]: 'success' | 'error' | null}>({});
-  const [nextPageToken, setNextPageToken] = useState<string | null>(null);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [showImportDialog, setShowImportDialog] = useState(false);
-  const [showMappingDialog, setShowMappingDialog] = useState(false);
 
-  const filteredAssignments = assignments.filter(assignment => 
-    assignment.title.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  useEffect(() => {
+    async function checkSetupStatus() {
+      const { data } = await supabase
+        .from('course_mappings')
+        .select('period')
+        .eq('google_course_id', course.id)
+        .eq('setup_completed', true);
 
-  const formatDueDate = (dueDate?: Assignment['dueDate']) => {
-    if (!dueDate) return 'No due date';
-    return new Date(dueDate.year, dueDate.month - 1, dueDate.day).toLocaleDateString();
-  };
-
-  const loadAssignments = async (pageToken?: string) => {
-    try {
-      const url = new URL(`/api/classroom/${id}/assignments`, window.location.origin);
-      url.searchParams.set('pageSize', '5');
-      if (pageToken) url.searchParams.set('pageToken', pageToken);
-
-      const res = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${session?.accessToken}`,
-          'Content-Type': 'application/json'
-        }
+      setSetupStatus({
+        completed: (data?.length || 0) > 0,
+        periods: data?.map(d => d.period) || []
       });
-      
-      if (!res.ok) throw new Error('Failed to fetch assignments');
-      
-      const data = await res.json();
-      
-      if (pageToken) {
-        setAssignments(prev => [...prev, ...(data.courseWork || [])]);
-      } else {
-        setAssignments(data.courseWork || []);
-      }
-      setNextPageToken(data.nextPageToken);
-    } catch (error) {
-      console.error('Error fetching assignments:', error);
-    } finally {
-      setIsLoadingMore(false);
     }
-  };
 
-  const toggleAssignments = async () => {
-    setShowAssignments(!showAssignments);
-    if (!assignments.length && session?.accessToken) {
-      await loadAssignments();
+    checkSetupStatus();
+  }, [course.id]);
+
+  const handleImportAssignment = async (assignment: GoogleAssignment) => {
+    if (!session?.accessToken || !setupStatus.completed) {
+      alert('Course not set up. Please complete course setup first.');
+      return;
     }
-  };
-
-  const handleLoadMore = async () => {
-    if (!nextPageToken || isLoadingMore) return;
-    setIsLoadingMore(true);
-    await loadAssignments(nextPageToken);
-  };
-
-  const handleImportAssignment = async (assignment: Assignment) => {
-    setSelectedAssignment(assignment);
-    setShowImportDialog(true);
-  };
-
-  const [importDetails, setImportDetails] = useState<{ period: string; type: string } | null>(null);
-
-  const handleImportConfirm = async (details: { period: string; type: string }) => {
-    if (!selectedAssignment || !session?.accessToken) return;
     
-    setImportDetails(details);
-    setShowImportDialog(false);
-    setShowMappingDialog(true);
-  };
-
-  const handleMappingSave = async (mappings: StudentMapping[], details: { period: string; type: string }) => {
-    if (!selectedAssignment || !session?.accessToken) return;
-
+    setLoading(true);
     try {
-      const res = await fetch(`/api/classroom/${id}/assignments/${selectedAssignment.id}/import`, {
+      const importRes = await fetch(`/api/classroom/${course.id}/assignments/${assignment.id}/import`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session.accessToken}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.accessToken}`
         },
-        body: JSON.stringify({
-          studentMappings: mappings,
-          period: details.period,
-          type: details.type
+        body: JSON.stringify({ 
+          period: setupStatus.periods[0],
+          forceUpdate: assignment.forceUpdate === true
         })
       });
 
-      // ...existing success/error handling...
+      const importData = await importRes.json();
+      
+      if (!importRes.ok) {
+        if (importData.error === "Assignment already exists") {
+          setShowAssignments(false);
+           // Instead of calling handleAssignmentClick, show the AssignmentSelectDialog again
+          return;
+        }
+        throw new Error(importData.error || 'Import failed');
+      }
+
+      alert('Assignment imported successfully!');
+      setShowAssignments(false);
     } catch (error) {
-      // ...existing error handling...
+      console.error('Import error:', error);
+      alert(error instanceof Error ? error.message : 'Failed to import assignment');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleConfirmMapping = (mappings: StudentMapping[]) => {
-    setStudentMappings(mappings);
-    setShowMapping(false);
-    setToast({
-      message: "Student mappings updated successfully",
-      type: "success"
-    });
+  const handleImportRecent = async () => {
+    if (!session?.accessToken || !setupStatus.completed) {
+      alert('Course setup not completed. Please set up the course first.');
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/classroom/${course.id}/assignments?pageSize=1`, {
+        headers: { 'Authorization': `Bearer ${session.accessToken}` }
+      });
+      
+      const data = await res.json();
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to fetch assignments');
+      }
+      
+      if (!data.courseWork?.[0]) {
+        alert('No recent assignments found');
+        return;
+      }
+
+      await handleImportAssignment(data.courseWork[0]);
+    } catch (error) {
+      console.error('Import error:', error);
+      alert(error instanceof Error ? error.message : 'Failed to import assignment');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSetupClose = () => {
+    setShowSetup(false);
+    onSetupClick(course);
   };
 
   return (
-    <>
-      <Card className="p-6 space-y-4">
-        <div className="flex justify-between items-start">
-          <div>
-            <h3 className="text-lg font-semibold">{name}</h3>
-            {section && <p className="text-sm text-gray-500">{section}</p>}
-          </div>
+    <div className="border rounded-lg p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-medium">{course.name}</h3>
+          {course.section && (
+            <p className="text-sm text-gray-500">{course.section}</p>
+          )}
+          {setupStatus.completed ? (
+            <span className="text-sm text-green-600">
+              ✓ Setup complete for periods: {setupStatus.periods.join(', ')}
+            </span>
+          ) : (
+            <span className="text-sm text-orange-600">Needs Setup</span>
+          )}
+        </div>
+        <div className="flex gap-2">
+          {setupStatus.completed && (
+            <Button
+              variant="outline"
+              onClick={() => setShowAssignments(true)}
+              disabled={loading}
+            >
+              {loading ? <LoadingSpinner className="w-4 h-4 mr-2" /> : null}
+              Import Assignment
+            </Button>
+          )}
           <Button 
-            onClick={toggleAssignments}
-            variant="outline"
-            size="sm"
+            variant={setupStatus.completed ? "outline" : "default"}
+            onClick={() => setShowSetup(true)}
           >
-            {showAssignments ? 'Hide' : 'View'} Assignments
+            {setupStatus.completed ? 'Edit Setup' : 'Setup Course'}
           </Button>
         </div>
-        
-        {showAssignments && (
-          <div className="space-y-4">
-            <Input
-              placeholder="Search assignments..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full"
-            />
-            
-            <div className="space-y-2">
-              {filteredAssignments.sort((a, b) => {
-                if (!a.dueDate) return 1;
-                if (!b.dueDate) return -1;
-                return new Date(b.dueDate.year, b.dueDate.month - 1, b.dueDate.day).getTime() -
-                      new Date(a.dueDate.year, a.dueDate.month - 1, a.dueDate.day).getTime();
-              }).map((assignment) => (
-                <div 
-                  key={assignment.id}
-                  className="p-4 bg-gray-50 rounded-md text-sm space-y-1 hover:bg-gray-100 transition-colors cursor-pointer"
-                  onClick={() => setSelectedAssignment(assignment)}
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-medium">{assignment.title}</h4>
-                      <p className="text-gray-500 text-xs">
-                        Due: {formatDueDate(assignment.dueDate)}
-                      </p>
-                    </div>
-                    {assignment.maxPoints && (
-                      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                        {assignment.maxPoints} points
-                      </span>
-                    )}
-                  </div>
-                  <Button
-                    size="sm"
-                    variant={importStatus[assignment.id] === 'success' ? "ghost" : "default"}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleImportAssignment(assignment);
-                    }}
-                    className="mt-2"
-                    disabled={importStatus[assignment.id] === 'success'}
-                  >
-                    {importStatus[assignment.id] === 'success' ? 
-                      '✓ Imported' : 
-                      importStatus[assignment.id] === 'error' ? 
-                        'Retry Import' : 
-                        'Import to Gradebook'}
-                  </Button>
-                </div>
-              ))}
-              {nextPageToken && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleLoadMore}
-                  disabled={isLoadingMore}
-                  className="w-full mt-4"
-                >
-                  {isLoadingMore ? (
-                    <div className="flex items-center justify-center">
-                      <LoadingSpinner className="mr-2" />
-                      <span>Loading more...</span>
-                    </div>
-                  ) : (
-                    'Load more assignments'
-                  )}
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
+      </div>
 
-        <Dialog open={!!selectedAssignment} onOpenChange={() => setSelectedAssignment(null)}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{selectedAssignment?.title}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <h4 className="font-medium">Due Date</h4>
-                <p>{formatDueDate(selectedAssignment?.dueDate)}</p>
-              </div>
-              {selectedAssignment?.description && (
-                <div>
-                  <h4 className="font-medium">Description</h4>
-                  <p className="whitespace-pre-wrap">{selectedAssignment.description}</p>
-                </div>
-              )}
-              {selectedAssignment?.materials && selectedAssignment.materials.length > 0 && (
-                <div>
-                  <h4 className="font-medium">Materials</h4>
-                  <ul className="list-disc pl-4">
-                    {selectedAssignment.materials.map((material, index) => (
-                      material.driveFile && (
-                        <li key={index}>
-                          <a 
-                            href={material.driveFile.driveFile.url} 
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline"
-                          >
-                            {material.driveFile.driveFile.title}
-                          </a>
-                        </li>
-                      )
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
-      </Card>
+      {showSetup && (
+        <CourseSetupDialog
+          courseId={course.id}
+          courseName={course.name}
+          open={showSetup}
+          onClose={handleSetupClose}
+        />
+      )}
 
-      <StudentMappingModal
-        open={showMapping}
-        onClose={() => setShowMapping(false)}
-        students={studentMappings}
-        onConfirm={handleConfirmMapping}
+      <AssignmentSelectDialog
+        courseId={course.id}
+        open={showAssignments}
+        onClose={() => setShowAssignments(false)}
+        onSelect={handleImportAssignment}
       />
-
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
-
-      {showImportDialog && selectedAssignment && (
-        <ImportDialog
-          assignment={selectedAssignment}
-          onConfirm={handleImportConfirm}
-          onCancel={() => setShowImportDialog(false)}
-        />
-      )}
-
-      {showMappingDialog && (
-        <StudentMappingDialog
-          open={showMappingDialog}
-          onSave={(mappings) => {
-            if (importDetails && Array.isArray(mappings) && mappings.every(m => 'email' in m && 'name' in m && 'matched' in m)) {
-              void handleMappingSave(mappings as StudentMapping[], importDetails);
-            }
-          }}
-          courseId={id}
-          onClose={() => setShowMappingDialog(false)}
-        />
-      )}
-    </>
+    </div>
   );
 }
