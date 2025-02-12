@@ -190,7 +190,7 @@ export function CourseCard({ name, section, id, onSync }: CourseCardProps) {
                 <p className="whitespace-pre-wrap">{selectedAssignment.description}</p>
               </div>
             )}
-            {selectedAssignment?.materials?.length > 0 && (
+            {selectedAssignment?.materials && selectedAssignment.materials.length > 0 && (
               <div>
                 <h4 className="font-medium">Materials</h4>
                 <ul className="list-disc pl-4">
