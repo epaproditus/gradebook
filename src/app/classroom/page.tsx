@@ -5,6 +5,7 @@ import { useSession, signIn } from 'next-auth/react';
 import { CourseCard } from '@/components/CourseCard';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { Button } from '@/components/ui/button';
+import Navigation from '@/components/Navigation';
 
 interface Course {
   id: string;
@@ -59,34 +60,6 @@ export default function ClassroomPage() {
     fetchCourses();
   }, [session, status]);
 
-  if (status === 'loading') {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <LoadingSpinner />
-        <p className="ml-2">Loading session...</p>
-      </div>
-    );
-  }
-
-  if (status === 'unauthenticated') {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <p>Please sign in to view courses</p>
-        <Button onClick={() => signIn('google')} className="ml-4">
-          Sign in with Google
-        </Button>
-      </div>
-    );
-  }
-
-  if (loading) return (
-    <div className="flex justify-center items-center min-h-screen">
-      <LoadingSpinner />
-    </div>
-  );
-  if (error) return <div>Error: {error}</div>;
-  if (!session) return <div>Please sign in to view courses</div>;
-
   async function handleSync(courseId: string): Promise<void> {
     try {
       const res = await fetch(`/api/classroom/courses/${courseId}/sync`, {
@@ -106,18 +79,36 @@ export default function ClassroomPage() {
     }
   }
 
-
   return (
-    <div className="container mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6">Google Classroom Courses</h1>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {courses.map((course) => (
-          <CourseCard
-            key={course.id}
-            {...course}
-            onSync={handleSync}
-          />
-        ))}
+    <div>
+      <Navigation />
+      <div className="container mx-auto p-6">
+        {status === 'loading' ? (
+          <div className="flex justify-center items-center min-h-screen">
+            <LoadingSpinner />
+            <p className="ml-2">Loading session...</p>
+          </div>
+        ) : status === 'unauthenticated' ? (
+          <div className="flex justify-center items-center min-h-screen">
+            <p>Please sign in to view courses</p>
+            <Button onClick={() => signIn('google')} className="ml-4">
+              Sign in with Google
+            </Button>
+          </div>
+        ) : (
+          <>
+            <h1 className="text-2xl font-bold mb-6">Google Classroom Courses</h1>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {courses.map((course) => (
+                <CourseCard
+                  key={course.id}
+                  {...course}
+                  onSync={handleSync}
+                />
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

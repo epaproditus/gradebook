@@ -6,41 +6,25 @@ export async function GET(
   { params }: { params: { courseId: string } }
 ) {
   const authHeader = request.headers.get("authorization");
-  if (!authHeader) {
-    console.log('No auth header present in assignments request');
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  if (!authHeader) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    console.log('Fetching assignments for course:', params.courseId);
     const res = await fetch(
       `https://classroom.googleapis.com/v1/courses/${params.courseId}/courseWork`,
       {
-        headers: { 
-          Authorization: authHeader,
-          'Accept': 'application/json'
-        }
+        headers: { Authorization: authHeader }
       }
     );
     
     const data = await res.json();
-    console.log('Assignments response status:', res.status);
-
-    if (res.ok && data.courseWork) {
-      // Match your existing schema
-      await supabase.from('assignments').upsert(
-        data.courseWork.map((work: any) => ({
-          id: work.id,
-          name: work.title,
-          date: work.dueDate?.day ? `${work.dueDate.year}-${work.dueDate.month}-${work.dueDate.day}` : new Date().toISOString().split('T')[0],
-          type: 'classroom', // or map from work.workType
-          periods: ['1'], // Default to first period, adjust as needed
-          subject: work.subject
-        }))
-      );
+    
+    if (res.ok) {
+      // Just return the assignments without importing
+      return NextResponse.json(data);
+    } else {
+      console.error('Google Classroom error:', data);
+      return NextResponse.json({ error: data.error?.message || "Error" }, { status: res.status });
     }
-
-    return NextResponse.json(data);
   } catch (error) {
     console.error('Failed to fetch assignments:', error);
     return NextResponse.json({ error: "Failed to fetch assignments" }, { status: 500 });
