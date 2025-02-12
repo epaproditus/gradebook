@@ -1,27 +1,30 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
 import { supabase } from '@/lib/supabaseConfig';
 
 export async function GET(
   request: Request,
   { params }: { params: { courseId: string } }
 ) {
-  const session = await getServerSession();
-  if (!session?.accessToken) {
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader) {
+    console.log('No auth header present in assignments request');
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
+    console.log('Fetching assignments for course:', params.courseId);
     const res = await fetch(
       `https://classroom.googleapis.com/v1/courses/${params.courseId}/courseWork`,
       {
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-          'Accept': 'application/json',
+        headers: { 
+          Authorization: authHeader,
+          'Accept': 'application/json'
         }
       }
     );
+    
     const data = await res.json();
+    console.log('Assignments response status:', res.status);
 
     if (res.ok && data.courseWork) {
       // Match your existing schema

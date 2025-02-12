@@ -28,14 +28,24 @@ export function CourseCard({ name, section, id, onSync }: CourseCardProps) {
 
   const toggleAssignments = async () => {
     setShowAssignments(!showAssignments);
-    if (!assignments.length) {
-      const res = await fetch(`/api/classroom/${id}/assignments`, {
-        headers: {
-          Authorization: `Bearer ${session?.accessToken}`
+    if (!assignments.length && session?.accessToken) {
+      try {
+        const res = await fetch(`/api/classroom/${id}/assignments`, {
+          headers: {
+            'Authorization': `Bearer ${session.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!res.ok) {
+          throw new Error('Failed to fetch assignments');
         }
-      });
-      const data = await res.json();
-      setAssignments(data.courseWork || []);
+        
+        const data = await res.json();
+        setAssignments(data.courseWork || []);
+      } catch (error) {
+        console.error('Error fetching assignments:', error);
+      }
     }
   };
 
