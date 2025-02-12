@@ -79,6 +79,22 @@ export default function ClassroomPage() {
     }
   }
 
+  const handleCleanup = async () => {
+    try {
+      const res = await fetch('/api/classroom/cleanup', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session?.accessToken}`
+        }
+      });
+      
+      if (!res.ok) throw new Error('Cleanup failed');
+      // Optionally refresh your gradebook data here
+    } catch (error) {
+      console.error('Cleanup error:', error);
+    }
+  };
+
   return (
     <div>
       <Navigation />
@@ -97,7 +113,15 @@ export default function ClassroomPage() {
           </div>
         ) : (
           <>
-            <h1 className="text-2xl font-bold mb-6">Google Classroom Courses</h1>
+            <div className="flex justify-between items-center mb-6">
+              <h1 className="text-2xl font-bold">Google Classroom Courses</h1>
+              <Button 
+                variant="destructive" 
+                onClick={handleCleanup}
+              >
+                Clear Imported Assignments
+              </Button>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {courses.map((course) => (
                 <CourseCard

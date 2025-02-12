@@ -6,21 +6,28 @@ export async function GET(
   { params }: { params: { courseId: string } }
 ) {
   const authHeader = request.headers.get("authorization");
+  const { searchParams } = new URL(request.url);
+  const pageSize = Number(searchParams.get('pageSize')) || 5;
+  const pageToken = searchParams.get('pageToken');
+
   if (!authHeader) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const res = await fetch(
-      `https://classroom.googleapis.com/v1/courses/${params.courseId}/courseWork`,
-      {
-        headers: { Authorization: authHeader }
-      }
-    );
+    const url = new URL(`https://classroom.googleapis.com/v1/courses/${params.courseId}/courseWork`);
+    url.searchParams.set('pageSize', pageSize.toString());
+    if (pageToken) url.searchParams.set('pageToken', pageToken);
+    
+    const res = await fetch(url, {
+      headers: { Authorization: authHeader }
+    });
     
     const data = await res.json();
     
     if (res.ok) {
-      // Just return the assignments without importing
-      return NextResponse.json(data);
+      return NextResponse.json({
+        courseWork: data.courseWork || [],
+        nextPageToken: data.nextPageToken || null
+      });
     } else {
       console.error('Google Classroom error:', data);
       return NextResponse.json({ error: data.error?.message || "Error" }, { status: res.status });

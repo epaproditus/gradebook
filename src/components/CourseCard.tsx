@@ -46,6 +46,8 @@ export function CourseCard({ name, section, id, onSync }: CourseCardProps) {
   const [showMapping, setShowMapping] = useState(false);
   const [studentMappings, setStudentMappings] = useState<any[]>([]);
   const [importStatus, setImportStatus] = useState<{[key: string]: 'success' | 'error' | null}>({});
+  const [nextPageToken, setNextPageToken] = useState<string | null>(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   const filteredAssignments = assignments.filter(assignment => 
     assignment.title.toLowerCase().includes(searchTerm.toLowerCase())
@@ -65,27 +67,47 @@ export function CourseCard({ name, section, id, onSync }: CourseCardProps) {
     return new Date(dueDate.year, dueDate.month - 1, dueDate.day).toLocaleDateString();
   };
 
+  const loadAssignments = async (pageToken?: string) => {
+    try {
+      const url = new URL(`/api/classroom/${id}/assignments`, window.location.origin);
+      url.searchParams.set('pageSize', '5');
+      if (pageToken) url.searchParams.set('pageToken', pageToken);
+
+      const res = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${session?.accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!res.ok) throw new Error('Failed to fetch assignments');
+      
+      const data = await res.json();
+      
+      if (pageToken) {
+        setAssignments(prev => [...prev, ...(data.courseWork || [])]);
+      } else {
+        setAssignments(data.courseWork || []);
+      }
+      setNextPageToken(data.nextPageToken);
+    } catch (error) {
+      console.error('Error fetching assignments:', error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
   const toggleAssignments = async () => {
     setShowAssignments(!showAssignments);
     if (!assignments.length && session?.accessToken) {
-      try {
-        const res = await fetch(`/api/classroom/${id}/assignments`, {
-          headers: {
-            'Authorization': `Bearer ${session.accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        if (!res.ok) {
-          throw new Error('Failed to fetch assignments');
-        }
-        
-        const data = await res.json();
-        setAssignments(data.courseWork || []);
-      } catch (error) {
-        console.error('Error fetching assignments:', error);
-      }
+      await loadAssignments();
     }
+  };
+
+  const handleLoadMore = async () => {
+    if (!nextPageToken || isLoadingMore) return;
+    setIsLoadingMore(true);
+    await loadAssignments(nextPageToken);
   };
 
   const handleImportAssignment = async (assignment: Assignment) => {
@@ -202,6 +224,24 @@ export function CourseCard({ name, section, id, onSync }: CourseCardProps) {
                   </Button>
                 </div>
               ))}
+              {nextPageToken && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleLoadMore}
+                  disabled={isLoadingMore}
+                  className="w-full mt-4"
+                >
+                  {isLoadingMore ? (
+                    <div className="flex items-center justify-center">
+                      <LoadingSpinner className="mr-2" />
+                      <span>Loading more...</span>
+                    </div>
+                  ) : (
+                    'Load more assignments'
+                  )}
+                </Button>
+              )}
             </div>
           </div>
         )}
