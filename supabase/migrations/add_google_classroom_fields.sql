@@ -1,17 +1,20 @@
--- Add Google Classroom fields to existing tables
-ALTER TABLE students
-ADD COLUMN google_id text,
-ADD COLUMN google_email text;
+-- Add Google Classroom integration fields
+ALTER TABLE students 
+ADD COLUMN IF NOT EXISTS google_id TEXT UNIQUE,
+ADD COLUMN IF NOT EXISTS google_email TEXT UNIQUE,
+ADD COLUMN IF NOT EXISTS period TEXT;
 
+-- Add Google Classroom fields to assignments
 ALTER TABLE assignments
-ADD COLUMN google_classroom_id text,
-ADD COLUMN google_classroom_link text;
+ADD COLUMN IF NOT EXISTS google_classroom_id TEXT,
+ADD COLUMN IF NOT EXISTS google_classroom_link TEXT;
 
+-- Add tracking fields to grades
 ALTER TABLE grades
-ADD COLUMN google_submission_id text,
-ADD COLUMN last_synced timestamp with time zone;
+ADD COLUMN IF NOT EXISTS google_submission_id TEXT,
+ADD COLUMN IF NOT EXISTS last_synced TIMESTAMP WITH TIME ZONE;
 
--- Add indexes for faster lookups
-CREATE INDEX idx_students_google_id ON students(google_id);
-CREATE INDEX idx_assignments_google_id ON assignments(google_classroom_id);
-CREATE INDEX idx_grades_google_sub ON grades(google_submission_id);
+-- Create indexes for performance
+CREATE INDEX IF NOT EXISTS idx_students_google_id ON students(google_id) WHERE google_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_students_google_email ON students(google_email) WHERE google_email IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_students_period ON students(period) WHERE period IS NOT NULL;

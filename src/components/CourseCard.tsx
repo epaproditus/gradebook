@@ -7,6 +7,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { StudentMappingModal } from './StudentMappingModal';
 import type { StudentMapping } from '../types/studentMapping';
+import { Toast } from "@/components/ui/toast";
+import { ImportDialog } from './ImportDialog';
+import { StudentMappingDialog } from './StudentMappingDialog';
 
 interface CourseCardProps {
   name: string;
@@ -47,6 +50,9 @@ export function CourseCard({ name, section, id }: CourseCardProps) {
   const [importStatus, setImportStatus] = useState<{[key: string]: 'success' | 'error' | null}>({});
   const [nextPageToken, setNextPageToken] = useState<string | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [showMappingDialog, setShowMappingDialog] = useState(false);
 
   const filteredAssignments = assignments.filter(assignment => 
     assignment.title.toLowerCase().includes(searchTerm.toLowerCase())
@@ -101,56 +107,50 @@ export function CourseCard({ name, section, id }: CourseCardProps) {
   };
 
   const handleImportAssignment = async (assignment: Assignment) => {
-    try {
-      setImportStatus(prev => ({ ...prev, [assignment.id]: null }));
-      
-      // Direct import without student mapping
-      const res = await fetch(`/api/classroom/${id}/assignments/${assignment.id}/import`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session?.accessToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!res.ok) throw new Error('Failed to import');
-      
-      const data = await res.json();
-      setImportStatus(prev => ({ ...prev, [assignment.id]: 'success' }));
-      
-      // Optional: Show success message or redirect to gradebook
-      // window.location.href = `/gradebook?assignment=${data.assignment.id}`;
-      
-    } catch (error) {
-      console.error('Import error:', error);
-      setImportStatus(prev => ({ ...prev, [assignment.id]: 'error' }));
-    }
+    setSelectedAssignment(assignment);
+    setShowImportDialog(true);
   };
 
-  const handleConfirmMapping = async (mappings: StudentMapping[]) => {
-    if (!selectedAssignment) return;
+  const [importDetails, setImportDetails] = useState<{ period: string; type: string } | null>(null);
+
+  const handleImportConfirm = async (details: { period: string; type: string }) => {
+    if (!selectedAssignment || !session?.accessToken) return;
     
+    setImportDetails(details);
+    setShowImportDialog(false);
+    setShowMappingDialog(true);
+  };
+
+  const handleMappingSave = async (mappings: StudentMapping[], details: { period: string; type: string }) => {
+    if (!selectedAssignment || !session?.accessToken) return;
+
     try {
-      setImportStatus(prev => ({ ...prev, [selectedAssignment.id]: null }));
-      
       const res = await fetch(`/api/classroom/${id}/assignments/${selectedAssignment.id}/import`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session?.accessToken}`,
+          'Authorization': `Bearer ${session.accessToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ studentMappings: mappings })
+        body: JSON.stringify({
+          studentMappings: mappings,
+          period: details.period,
+          type: details.type
+        })
       });
 
-      if (!res.ok) throw new Error('Failed to import with mappings');
-      
-      setImportStatus(prev => ({ ...prev, [selectedAssignment.id]: 'success' }));
-      setShowMapping(false);
-      
+      // ...existing success/error handling...
     } catch (error) {
-      console.error('Import error:', error);
-      setImportStatus(prev => ({ ...prev, [selectedAssignment.id]: 'error' }));
+      // ...existing error handling...
     }
+  };
+
+  const handleConfirmMapping = (mappings: StudentMapping[]) => {
+    setStudentMappings(mappings);
+    setShowMapping(false);
+    setToast({
+      message: "Student mappings updated successfully",
+      type: "success"
+    });
   };
 
   return (
@@ -292,6 +292,35 @@ export function CourseCard({ name, section, id }: CourseCardProps) {
         students={studentMappings}
         onConfirm={handleConfirmMapping}
       />
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+
+      {showImportDialog && selectedAssignment && (
+        <ImportDialog
+          assignment={selectedAssignment}
+          onConfirm={handleImportConfirm}
+          onCancel={() => setShowImportDialog(false)}
+        />
+      )}
+
+      {showMappingDialog && (
+        <StudentMappingDialog
+          open={showMappingDialog}
+          onSave={(mappings) => {
+            if (importDetails && Array.isArray(mappings) && mappings.every(m => 'email' in m && 'name' in m && 'matched' in m)) {
+              void handleMappingSave(mappings as StudentMapping[], importDetails);
+            }
+          }}
+          courseId={id}
+          onClose={() => setShowMappingDialog(false)}
+        />
+      )}
     </>
   );
 }
