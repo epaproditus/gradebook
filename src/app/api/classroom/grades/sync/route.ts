@@ -1,42 +1,43 @@
+import { getServerSession } from 'next-auth';
 import { NextResponse } from 'next/server';
+import { syncGradeToClassroom } from '@/lib/classroom/gradeSync';
+import { StudentSubmissionPatchRequest } from '@/lib/classroom/types';
 
 export async function POST(request: Request) {
-  const authHeader = request.headers.get("authorization");
-  if (!authHeader) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const session = await getServerSession();
+  
+  if (!session?.user) {
+    return NextResponse.json(
+      { error: 'Unauthorized' },
+      { status: 401 }
+    );
   }
 
   try {
-    // Fetch all courses first
-    const coursesRes = await fetch("https://classroom.googleapis.com/v1/courses", {
-      headers: { Authorization: authHeader }
-    });
-    const coursesData = await coursesRes.json();
-    
-    if (!coursesRes.ok) {
-      throw new Error(coursesData.error?.message || "Failed to fetch courses");
-    }
+    const body: StudentSubmissionPatchRequest = await request.json();
 
-    const courses = coursesData.courses || [];
-    const allGrades = [];
-
-    // Fetch grades for each course
-    for (const course of courses) {
-      const gradeRes = await fetch(
-        `https://classroom.googleapis.com/v1/courses/${course.id}/courseWork`,
-        { headers: { Authorization: authHeader } }
+    // Validate required fields
+    if (!body.courseId || !body.courseWorkId || !body.id) {
+      return NextResponse.json(
+        { error: 'Missing required fields' },
+        { status: 400 }
       );
-      const gradeData = await gradeRes.json();
-      
-      if (gradeRes.ok) {
-        allGrades.push(...(gradeData.courseWork || []));
-      }
     }
 
-    return NextResponse.json({ success: true, grades: allGrades });
-  } catch (error) {
+    // Need either draftGrade or assignedGrade
+    if (body.draftGrade === undefined && body.assignedGrade === undefined) {
+      return NextResponse.json(
+        { error: 'Either draftGrade or assignedGrade must be provided' },
+        { status: 400 }
+      );
+    }
+
+    const result = await syncGradeToClassroom(session, body);
+
+    return NextResponse.json(result);
+  } catch (error: any) {
     return NextResponse.json(
-      { error: "Failed to sync grades" },
+      { error: error.message },
       { status: 500 }
     );
   }

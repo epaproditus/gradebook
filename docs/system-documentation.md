@@ -58,6 +58,25 @@ A Next.js application that manages teacher gradebooks with Google Classroom inte
   - Grade synchronization
   - Student roster updates
 
+### Google Classroom Grade Sync
+- **API Endpoint**: `/api/classroom/grades/sync`
+  - Handles grade synchronization with Google Classroom
+  - Supports both draft and assigned grades
+  - Validates request parameters
+  - Requires authentication
+  - Uses Google Classroom API v1
+
+- **Grade Sync Flow**:
+  1. Validate request parameters
+  2. Check user authentication
+  3. Call Google Classroom API
+  4. Update local database
+  5. Return sync status
+
+- **Required Permissions**:
+  - `https://www.googleapis.com/auth/classroom.coursework.students`
+  - `https://www.googleapis.com/auth/classroom.coursework.me`
+
 ## Database Structure
 
 ### Primary Tables

@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { useSession } from 'next-auth/react';
 import LoadingSpinner from './ui/loading-spinner';
 import { supabase } from '@/lib/supabaseConfig';
+import { useToast } from '@/hooks/use-toast';
 
 interface RosterStudent {
   id: string;
@@ -303,27 +304,56 @@ export function CourseSetupDialog({
     }
   }, [courseId, period, setSetupStatus, setLoading]);
 
+  useEffect(() => {
+    const loadExistingSetup = async () => {
+      if (!period) return;
+
+      // Load existing mapping
+      const { data: mapping } = await supabase
+        .from('course_mappings')
+        .select('*')
+        .eq('google_course_id', courseId)
+        .eq('period', period)
+        .single();
+
+      console.log('Existing mapping:', mapping);
+
+      // Load student mappings
+      const { data: studentMappings } = await supabase
+        .from('student_mappings')
+        .select(`
+          *,
+          students (*)
+        `)
+        .eq('period', period);
+
+      console.log('Existing student mappings:', studentMappings);
+
+      // Update subject if it exists
+      if (mapping?.subject) {
+        setSelectedSubject(mapping.subject as Subject);
+      }
+    };
+
+    loadExistingSetup();
+  }, [period, courseId]);
+
   const handleSave = async () => {
     try {
-      console.log('Starting save with:', {
-        courseId,
-        period,
-        subject: selectedSubject,
-        isUpdate: setupStatus === 'existing'
-      });
-
-      // First check if mapping exists
+      console.log('Starting save process...');
+      
+      // 1. Update course mapping
       const { data: existingMapping } = await supabase
         .from('course_mappings')
         .select('*')
         .eq('google_course_id', courseId)
         .eq('period', period)
         .maybeSingle();
-
+  
       console.log('Existing mapping:', existingMapping);
-
-      // Then save course mapping
-      const { data: savedMapping, error: mappingError } = await supabase
+  
+      // Create or update course mapping
+      const { error: mappingError } = await supabase
         .from('course_mappings')
         .upsert({
           ...(existingMapping || {}),
@@ -332,29 +362,55 @@ export function CourseSetupDialog({
           subject: selectedSubject,
           setup_completed: true,
           setup_completed_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-
-      if (mappingError) {
-        console.error('Course mapping error:', { error: mappingError, details: mappingError.details });
-        throw new Error(`Course mapping failed: ${mappingError.message || 'Unknown error'}`);
+        }, {
+          onConflict: 'google_course_id,period'
+        });
+  
+      if (mappingError) throw mappingError;
+  
+      // 2. Clear existing student mappings for this period first
+      const { error: deleteError } = await supabase
+        .from('student_mappings')
+        .delete()
+        .eq('period', period);
+  
+      if (deleteError) throw deleteError;
+  
+      // 3. Insert new student mappings
+      const matchedStudents = students.filter(s => s.matchedStudent);
+      if (matchedStudents.length > 0) {
+        const mappingUpdates = matchedStudents.map(student => ({
+          google_id: student.googleId,
+          google_email: student.googleEmail,
+          student_id: student.matchedStudent!.id,
+          period: period
+        }));
+  
+        console.log('Inserting new mappings:', mappingUpdates);
+  
+        // Use upsert with the correct unique constraint
+        const { error: mappingsError } = await supabase
+          .from('student_mappings')
+          .upsert(mappingUpdates, {
+            onConflict: 'student_id,period'  // This is the key change
+          });
+  
+        if (mappingsError) throw mappingsError;
       }
-
-      console.log('Successfully saved mapping:', savedMapping);
-
-      if (setupStatus === 'existing') {
-        // For updates, we're done
-        onClose();
-        return;
-      }
-
-      // For new setups, continue with student mappings
-      // ...rest of student mapping code...
-
+  
+      toast({
+        title: "Success",
+        description: `Mapped ${matchedStudents.length} students for period ${period}`
+      });
+  
+      onClose();
     } catch (error) {
       console.error('Save error:', error);
-      alert(error instanceof Error ? error.message : 'Failed to save mappings');
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : 'Failed to save mappings'
+      });
     }
   };
 
@@ -596,5 +652,17 @@ export function CourseSetupDialog({
       </DialogContent>
     </Dialog>
   );
+}
+function toast({ title, description, variant = "default" }: { 
+  title: string; 
+  description: string; 
+  variant?: "default" | "destructive" 
+}) {
+  const { toast: showToast } = useToast();
+  showToast({
+    title,
+    description,
+    variant
+  });
 }
 
