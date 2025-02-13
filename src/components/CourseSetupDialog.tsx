@@ -111,6 +111,8 @@ export function CourseSetupDialog({
   const [setupStatus, setSetupStatus] = useState<'checking' | 'new' | 'existing'>('checking');
   const [activePeriod, setActivePeriod] = useState<string | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<Subject>('Math 8');
+  const [localStudents, setLocalStudents] = useState<any[]>([]);
+  const [mappings, setMappings] = useState<Record<string, string>>({});
 
   // Add helper function for period display
   const formatPeriodDisplay = (period: string) => {
@@ -136,7 +138,7 @@ export function CourseSetupDialog({
         }
 
         // Get unique periods preserving the full period string
-        const uniquePeriods = [...new Set(data.map(s => s.class_period))]
+        const uniquePeriods = Array.from(new Set(data.map(s => s.class_period)))
           .filter(Boolean)
           .sort((a, b) => {
             // Sort by numeric value of period
@@ -406,6 +408,44 @@ export function CourseSetupDialog({
       </Dialog>
     );
   }
+
+  const autoMapStudents = () => {
+    const newMappings: Record<string, string> = {};
+    
+    students.forEach(googleStudent => {
+      // Try to find matching student by name
+      const matchingStudent = localStudents.find(local => {
+        const googleName = googleStudent.googleName;
+        return local.name.toLowerCase() === googleName.toLowerCase();
+      });
+
+      if (matchingStudent) {
+        newMappings[matchingStudent.id] = googleStudent.googleId;
+      }
+    });
+
+    setMappings(newMappings);
+  };
+
+  const saveStudentMappings = async () => {
+    // Update student records with Google IDs
+    const updates = Object.entries(mappings).map(([localId, googleId]) => ({
+      id: localId,
+      google_id: googleId,
+      google_email: students.find(s => s.googleId === googleId)?.googleEmail
+    }));
+
+    const { error } = await supabase
+      .from('students')
+      .upsert(updates, { onConflict: 'id' });
+
+    if (error) {
+      console.error('Error saving mappings:', error);
+      return;
+    }
+
+    onClose();
+  };
 
   // Main setup view
   return (

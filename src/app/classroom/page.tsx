@@ -6,6 +6,7 @@ import { CourseCard } from '@/components/CourseCard';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { Button } from '@/components/ui/button';
 import type { Course } from '@/types/classroom';
+import TokenDebug from '@/components/TokenDebug';
 
 export default function ClassroomPage() {
   const { data: session, status } = useSession();
@@ -85,27 +86,30 @@ export default function ClassroomPage() {
   }
 
   return (
-    <main className="p-6">
-      <h1 className="text-2xl font-bold mb-6">Google Classroom</h1>
-      {courses.length === 0 ? (
-        <p className="text-gray-600">No courses found.</p>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {courses.map((course) => (
-            <CourseCard 
-              key={course.id} 
-              course={course}
-              onSetupClick={(updatedCourse) => {
-                setCourses(current => 
-                  current.map(c => 
-                    c.id === updatedCourse.id ? updatedCourse : c
-                  )
-                );
-              }}
-            />
-          ))}
-        </div>
-      )}
-    </main>
+    <div className="p-6 space-y-6">
+      <TokenDebug />
+      <main>
+        <h1 className="text-2xl font-bold mb-6">Google Classroom</h1>
+        {courses.length === 0 ? (
+          <p className="text-gray-600">No courses found.</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {courses.map((course) => (
+              <CourseCard 
+                key={course.id} 
+                course={course}
+                onSetupClick={(updatedCourse) => {
+                  setCourses(current => 
+                    current.map(c => 
+                      c.id === updatedCourse.id ? updatedCourse : c
+                    )
+                  );
+                }}
+              />
+            ))}
+          </div>
+        )}
+      </main>
+    </div>
   );
 }

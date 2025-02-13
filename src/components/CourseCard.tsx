@@ -7,6 +7,8 @@ import { supabase } from '@/lib/supabaseConfig';
 import type { Course } from '@/types/classroom';
 import { AssignmentSelectDialog } from './AssignmentSelectDialog';
 import type { GoogleAssignment } from './AssignmentSelectDialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toast } from '@/components/ui/use-toast';
 
 interface CourseCardProps {
   course: Course;
@@ -22,6 +24,18 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
     periods: []
   });
   const [showAssignments, setShowAssignments] = useState(false);
+  const [isSettingUp, setIsSettingUp] = useState(false);
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('');
+  const [selectedSubject, setSelectedSubject] = useState<'Math 8' | 'Algebra I'>('Math 8');
+
+  // Detect if course is likely Algebra based on name
+  useEffect(() => {
+    const isAlgebraCourse = course.name.toLowerCase().includes('alg') || 
+                           course.name.toLowerCase().includes('algebra');
+    if (isAlgebraCourse) {
+      setSelectedSubject('Algebra I');
+    }
+  }, [course.name]);
 
   useEffect(() => {
     async function checkSetupStatus() {
@@ -113,6 +127,41 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
     }
   };
 
+  const handleSetupSubmit = async () => {
+    setIsSettingUp(true);
+    try {
+      const response = await fetch('/api/classroom/setup-course', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          courseId: course.id,
+          period: selectedPeriod,
+          subject: selectedSubject, // Include subject in setup
+          name: course.name
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to setup course');
+      }
+
+      const updatedCourse = await response.json();
+      onSetupClick(updatedCourse);
+      
+    } catch (error) {
+      console.error('Setup error:', error);
+      toast({
+        variant: "destructive",
+        title: "Setup failed",
+        description: error instanceof Error ? error.message : "Failed to setup course"
+      });
+    } finally {
+      setIsSettingUp(false);
+    }
+  };
+
   const handleSetupClose = () => {
     setShowSetup(false);
     onSetupClick(course);
@@ -169,6 +218,56 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
         onClose={() => setShowAssignments(false)}
         onSelect={handleImportAssignment}
       />
+
+      <div className="mt-4 space-y-4">
+        <div className="flex items-center gap-4">
+          <Select
+            value={selectedPeriod}
+            onValueChange={setSelectedPeriod}
+          >
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Select period" />
+            </SelectTrigger>
+            <SelectContent>
+              {['1', '2', '3', '4', '5', '6', '7', '8'].map(period => (
+                <SelectItem key={period} value={period}>
+                  Period {period}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={selectedSubject}
+            onValueChange={(value: 'Math 8' | 'Algebra I') => setSelectedSubject(value)}
+          >
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Select subject" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Math 8">Math 8</SelectItem>
+              <SelectItem value="Algebra I">Algebra I</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {selectedPeriod && (
+          <Button 
+            onClick={handleSetupSubmit}
+            disabled={isSettingUp}
+            className="w-full"
+          >
+            {isSettingUp ? (
+              <>
+                <LoadingSpinner className="mr-2 h-4 w-4" />
+                Setting up...
+              </>
+            ) : (
+              'Complete Setup'
+            )}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

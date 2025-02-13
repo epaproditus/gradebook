@@ -11,8 +11,10 @@ export interface Assignment {
 export interface Student {
   id: number;
   name: string;
-  birthday: string;
   class_period: string;
+  birthday?: string;
+  google_id?: string;  // Add this field
+  google_email?: string;  // Add this optional field too
 }
 
 export interface AssignmentTag {

@@ -889,1336 +889,1375 @@ const handleGradeChange = async (assignmentId: string, periodId: string, student
   }));
 };
 
-  const deleteAssignment = async (assignmentId: string) => {
-    if (!confirm('Are you sure you want to delete this assignment?')) {
-      return;
+const deleteAssignment = async (assignmentId: string) => {
+  if (!confirm('Are you sure you want to delete this assignment?')) {
+    return;
+  }
+
+  try {
+    // Validate UUID format
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(assignmentId)) {
+      throw new Error('Invalid assignment ID format');
     }
-    try {
-      // First delete all related tags
-      const { error: tagsError } = await supabase
-        .from('assignment_tags')
-        .delete()
-        .eq('assignment_id', assignmentId);
 
-      if (tagsError) {
-        console.error('Error deleting tags:', tagsError);
-        throw new Error('Failed to delete related tags');
-      }
+    // Delete all related data in order
+    console.log('Deleting assignment:', assignmentId);
 
-      // Then delete all related grades
-      const { error: gradesError } = await supabase
+    const { error: tagsError } = await supabase
+      .from('assignment_tags')
+      .delete()
+      .eq('assignment_id', assignmentId);
+
+    if (tagsError) throw tagsError;
+
+    const { error: gradesError } = await supabase
+      .from('grades')
+      .delete()
+      .eq('assignment_id', assignmentId);
+
+    if (gradesError) throw gradesError;
+
+    const { error: assignmentError } = await supabase
+      .from('assignments')
+      .delete()
+      .eq('id', assignmentId);
+
+    if (assignmentError) throw assignmentError;
+
+    // Update local state
+    setAssignments(prev => {
+      const newAssignments = { ...prev };
+      delete newAssignments[assignmentId];
+      return newAssignments;
+    });
+
+    setAssignmentOrder(prev => prev.filter(id => id !== assignmentId));
+    setTags(prev => prev.filter(tag => tag.assignment_id !== assignmentId));
+
+    toast({
+      title: "Success",
+      description: "Assignment deleted successfully"
+    });
+
+  } catch (error) {
+    console.error('Error deleting assignment:', error);
+    toast({
+      variant: "destructive",
+      title: "Error",
+      description: error instanceof Error ? error.message : 'Failed to delete assignment'
+    });
+  }
+};
+
+const saveGrades = async (assignmentId: string) => {
+  try {
+    const assignment = assignments[assignmentId];
+    if (!assignment) return;
+
+    // Collect all the grades we want to save
+    const gradesToSave = assignment.periods.flatMap(periodId => {
+      const periodGrades = unsavedGrades[assignmentId]?.[periodId] || {};
+      return Object.entries(periodGrades)
+        .filter(([_, grade]) => grade !== '' && grade !== '0') // Only save non-empty, non-zero grades
+        .map(([studentId, grade]) => ({
+          assignment_id: assignmentId,
+          student_id: parseInt(studentId),
+          period: periodId,
+          grade: grade,
+          extra_points: extraPoints[`${assignmentId}-${periodId}-${studentId}`] || '0'
+        }));
+    });
+
+    if (gradesToSave.length > 0) {
+      // First, delete existing grades for this assignment
+      const { error: deleteError } = await supabase
         .from('grades')
         .delete()
         .eq('assignment_id', assignmentId);
 
-      if (gradesError) {
-        console.error('Error deleting grades:', gradesError);
-        throw new Error('Failed to delete related grades');
+      if (deleteError) {
+        throw new Error('Failed to delete existing grades');
       }
 
-      // Finally delete the assignment itself
-      const { error: assignmentError } = await supabase
-        .from('assignments')
-        .delete()
-        .eq('id', assignmentId);
+      // Then insert new grades
+      const { error: insertError } = await supabase
+        .from('grades')
+        .insert(gradesToSave);
 
-      if (assignmentError) {
-        throw assignmentError;
-      }
-
-      // Update local state
-      setAssignments(prev => {
-        const newAssignments = { ...prev };
-        delete newAssignments[assignmentId];
-        return newAssignments;
-      });
-
-      // Update assignment order
-      setAssignmentOrder(prev => prev.filter(id => id !== assignmentId));
-
-      // Clear any related tags from local state
-      setTags(prev => prev.filter(tag => tag.assignment_id !== assignmentId));
-
-      // Clear any related grades from local state
-      setGrades(prev => {
-        const newGrades = { ...prev };
-        delete newGrades[assignmentId];
-        return newGrades;
-      });
-
-    } catch (error) {
-      console.error('Error deleting assignment:', error);
-      alert('Failed to delete assignment. Please try again.');
-    }
-  };
-
-  const saveGrades = async (assignmentId: string) => {
-    try {
-      const assignment = assignments[assignmentId];
-      if (!assignment) return;
-  
-      // Collect all the grades we want to save
-      const gradesToSave = assignment.periods.flatMap(periodId => {
-        const periodGrades = unsavedGrades[assignmentId]?.[periodId] || {};
-        return Object.entries(periodGrades)
-          .filter(([_, grade]) => grade !== '' && grade !== '0') // Only save non-empty, non-zero grades
-          .map(([studentId, grade]) => ({
-            assignment_id: assignmentId,
-            student_id: parseInt(studentId),
-            period: periodId,
-            grade: grade,
-            extra_points: extraPoints[`${assignmentId}-${periodId}-${studentId}`] || '0'
-          }));
-      });
-  
-      if (gradesToSave.length > 0) {
-        // First, delete existing grades for this assignment
-        const { error: deleteError } = await supabase
-          .from('grades')
-          .delete()
-          .eq('assignment_id', assignmentId);
-  
-        if (deleteError) {
-          throw new Error('Failed to delete existing grades');
-        }
-  
-        // Then insert new grades
-        const { error: insertError } = await supabase
-          .from('grades')
-          .insert(gradesToSave);
-  
-        if (insertError) {
-          throw new Error('Failed to insert new grades');
-        }
-      }
-  
-      // Update local state
-      setGrades(prev => ({
-        ...prev,
-        [assignmentId]: assignment.periods.reduce((acc, periodId) => ({
-          ...acc,
-          [periodId]: {
-            ...prev[assignmentId]?.[periodId],
-            ...unsavedGrades[assignmentId]?.[periodId]
-          }
-        }), {})
-      }));
-  
-      // Clear editing state
-      assignment.periods.forEach(periodId => {
-        setEditingGrades(prev => ({
-          ...prev,
-          [`${assignmentId}-${periodId}`]: false
-        }));
-      });
-  
-      alert('Grades saved successfully!');
-    } catch (error) {
-      console.error('Error saving grades:', error);
-      alert('Failed to save grades. Please try again.');
-    }
-  };
-
-  const saveAssignment = async () => {
-    if (!newAssignment?.name || newAssignment.periods.length === 0) {
-      alert('Please fill in assignment name and select at least one period');
-      return;
-    }
-
-    try {
-      const assignmentId = uuidv4();
-      
-      // Log the Supabase URL and key (without the actual key value)
-      console.log('Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
-      console.log('Supabase key present:', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-  
-      const assignmentData = {
-        id: assignmentId,
-        name: newAssignment.name,
-        date: format(newAssignment.date, 'yyyy-MM-dd'),
-        type: selectedType,
-        periods: newAssignment.periods,
-        subject: newAssignment.subject,
-        max_points: 100,
-        created_at: new Date().toISOString()  // Add created_at field
-      };
-  
-      console.log('Attempting to save assignment:', assignmentData);
-  
-      const { data, error } = await supabase
-        .from('assignments')
-        .insert([assignmentData])
-        .select()
-        .single();
-  
-      if (error) {
-        console.error('Detailed Supabase error:', {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint
-        });
-        throw error;
-      }
-  
-      console.log('Assignment saved successfully:', data);
-  
-      // Update local state
-      setAssignments(prev => ({
-        ...prev,
-        [assignmentId]: {
-          ...assignmentData,
-          date: newAssignment.date
-        }
-      }));
-  
-      setAssignmentOrder(prev => [...prev, assignmentId]);
-      setNewAssignment(null);
-      setSelectedDate(null);
-  
-      alert('Assignment created successfully!');
-  
-    } catch (error) {
-      console.error('Full error object:', error);
-      if (error instanceof Error) {
-        alert(`Failed to create assignment: ${error.message}`);
-      } else {
-        alert('Failed to create assignment: Unexpected error occurred');
+      if (insertError) {
+        throw new Error('Failed to insert new grades');
       }
     }
-  };
 
-  const exportSingleGradeSet = (assignmentId: string, periodId: string) => {
-    const assignment = assignments[assignmentId];
-    const periodStudents = students[periodId] || [];
-    const assignmentGrades = grades[assignmentId]?.[periodId] || {};
-  
-    // Function to escape commas in values
-    const escapeCSV = (value: string) => {
-      if (value.includes(',') || value.includes('"')) {
-        return `"${value.replace(/"/g, '""')}"`;
-      }
-      return value;
-    };
-  
-    // Create CSV data with comma separation
-    const csvData = [
-      ['Student ID', 'Final Grade', 'First Name', 'Last Name'].join(','),
-      ...periodStudents.map(student => {
-        const [lastName, firstName] = student.name.split(',').map(part => part.trim());
-        const finalGrade = calculateTotal(
-          assignmentGrades[student.id] || '0',
-          extraPoints[`${assignmentId}-${periodId}-${student.id}`] || '0'
-        );
-        return [
-          student.id,
-          finalGrade,
-          escapeCSV(firstName),
-          escapeCSV(lastName)
-        ].join(',');
-      })
-    ].join('\n');
-  
-    // Create and trigger download
-    const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${assignment.name}-${periodId}-grades.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-  };
-
-  const exportGrades = (assignmentIds: string[], periodIds: string[], merge: boolean) => {
-    if (merge) {
-      // Create one merged file for all selections
-      const allData = assignmentIds.flatMap(assignmentId => 
-        periodIds.flatMap(periodId => {
-          const periodStudents = students[periodId] || [];
-          const assignmentGrades = grades[assignmentId]?.[periodId] || {};
-  
-          return periodStudents.map(student => {
-            const [lastName, firstName] = student.name.split(',').map(part => part.trim());
-            const finalGrade = calculateTotal(
-              assignmentGrades[student.id] || '0',
-              extraPoints[`${assignmentId}-${periodId}-${student.id}`] || '0'
-            );
-            return [
-              student.id,
-              finalGrade,
-              escapeCSV(firstName),
-              escapeCSV(lastName)
-            ];
-          });
-        })
-      );
-  
-      const csvData = [
-        ['Student ID', 'Final Grade', 'First Name', 'Last Name'].join(','),
-        ...allData.map(row => row.join(','))
-      ].join('\n');
-  
-      // Download merged file
-      const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `grades-export.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    } else {
-      // Create separate files for each assignment-period combination
-      assignmentIds.forEach(assignmentId => {
-        periodIds.forEach(periodId => {
-          exportSingleGradeSet(assignmentId, periodId);
-        });
-      });
-    }
-  };
-
-  const handleAbsenceToggle = async (assignmentId: string, periodId: string, studentId: string) => {
-    const key = `${assignmentId}-${periodId}-${studentId}`;
-    
-    if (absences[key]) {
-      // Remove absence
-      await supabase
-        .from('absences')
-        .delete()
-        .match({ 
-          assignment_id: assignmentId,
-          student_id: studentId,
-          period: periodId 
-        });
-    } else {
-      // Add absence
-      await supabase
-        .from('absences')
-        .insert({
-          assignment_id: assignmentId,
-          student_id: studentId,
-          period: periodId
-        });
-    }
-  
-    setAbsences(prev => ({
+    // Update local state
+    setGrades(prev => ({
       ...prev,
-      [key]: !prev[key]
-    }));
-  };
-
-  const handleImportGrades = async (assignmentId: string, periodId: string, grades: Record<string, string>) => {
-    const updatedGrades = { ...unsavedGrades };
-    
-    if (!updatedGrades[assignmentId]) {
-      updatedGrades[assignmentId] = {};
-    }
-
-    // Get all periods from the assignment
-    const assignmentPeriods = assignments[assignmentId].periods;
-
-    // Process each grade entry
-    Object.entries(grades).forEach(([localId, score]) => {
-      // Look for student in any period
-      assignmentPeriods.forEach(period => {
-        const studentExists = students[period]?.some(s => s.id === parseInt(localId));
-        if (studentExists) {
-          if (!updatedGrades[assignmentId][period]) {
-            updatedGrades[assignmentId][period] = {};
-          }
-          updatedGrades[assignmentId][period][parseInt(localId)] = score;
+      [assignmentId]: assignment.periods.reduce((acc, periodId) => ({
+        ...acc,
+        [periodId]: {
+          ...prev[assignmentId]?.[periodId],
+          ...unsavedGrades[assignmentId]?.[periodId]
         }
-      });
-    });
+      }), {})
+    }));
 
-    setUnsavedGrades(updatedGrades);
-    assignmentPeriods.forEach(period => {
+    // Clear editing state
+    assignment.periods.forEach(periodId => {
       setEditingGrades(prev => ({
         ...prev,
-        [`${assignmentId}-${period}`]: true
+        [`${assignmentId}-${periodId}`]: false
       }));
     });
-  };
 
-  const handleLateToggle = (assignmentId: string, periodId: string, studentId: string) => {
-    const key = `${assignmentId}-${periodId}-${studentId}`;
-    setLateWork(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
-  };
+    alert('Grades saved successfully!');
+  } catch (error) {
+    console.error('Error saving grades:', error);
+    alert('Failed to save grades. Please try again.');
+  }
+};
 
-  const handleIncompleteToggle = (assignmentId: string, periodId: string, studentId: string) => {
-    const key = `${assignmentId}-${periodId}-${studentId}`;
-    setIncomplete(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
-  };
+const saveAssignment = async () => {
+  if (!newAssignment?.name || newAssignment.periods.length === 0) {
+    alert('Please fill in assignment name and select at least one period');
+    return;
+  }
 
-  const handleExtraPointsChange = (assignmentId: string, periodId: string, studentId: number, points: string) => {
-    setExtraPoints(prev => ({
-      ...prev,
-      [`${assignmentId}-${periodId}-${studentId}`]: points
-    }));
-  };
+  try {
+    // Create assignment data with a new UUID
+    const assignmentData = {
+      id: crypto.randomUUID(), // Use crypto.randomUUID() instead of uuidv4()
+      name: newAssignment.name,
+      date: format(newAssignment.date, 'yyyy-MM-dd'),
+      type: selectedType,
+      periods: newAssignment.periods,
+      subject: newAssignment.subject,
+      max_points: 100,
+      created_at: new Date().toISOString()
+    };
 
-  const calculateTotal = (grade: string = '0', extra: string = '0'): number => {
-    const baseGrade = Math.max(0, Math.min(100, parseInt(grade) || 0));
-    const extraGrade = Math.max(0, Math.min(100, parseInt(extra) || 0));
-    return Math.min(100, baseGrade + extraGrade);
-  };
+    console.log('Attempting to save assignment:', assignmentData);
 
-  const handleRetestToggle = (assignmentId: string, periodId: string, studentId: string) => {
-    const key = `${assignmentId}-${periodId}-${studentId}`;
-    setRetest(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
-  };
+    const { data, error } = await supabase
+      .from('assignments')
+      .insert([assignmentData])
+      .select()
+      .single();
 
-  // Update tag handling functions
-  const hasTag = (assignmentId: string, periodId: string, studentId: string, tagType: string) => {
-    return tags.some(tag => 
-      tag.assignment_id === assignmentId && 
-      tag.period === periodId && 
-      String(tag.student_id) === String(studentId) && 
-      tag.tag_type === tagType
-    );
-  };
-
-  const handleTagToggle = async (
-    assignmentId: string, 
-    periodId: string, 
-    studentId: number, 
-    tagType: 'absent' | 'late' | 'incomplete' | 'retest'
-  ) => {
-    // For retest, check if assignment type is Assessment
-    if (tagType === 'retest' && assignments[assignmentId]?.type !== 'Assessment') {
-      return;
+    if (error) {
+      console.error('Supabase error:', error);
+      throw error;
     }
 
-    const existingTag = tags.find(tag => 
-      tag.assignment_id === assignmentId && 
-      tag.period === periodId && 
-      tag.student_id === studentId && 
-      tag.tag_type === tagType
-    );
-
-    if (existingTag) {
-      // Remove tag
-      const { error } = await supabase
-        .from('assignment_tags')
-        .delete()
-        .match({ id: existingTag.id });
-
-      if (!error) {
-        setTags(prev => prev.filter(tag => tag.id !== existingTag.id));
+    // Update local state with the correct UUID
+    setAssignments(prev => ({
+      ...prev,
+      [assignmentData.id]: {
+        ...assignmentData,
+        date: newAssignment.date
       }
-    } else {
-      // Add tag
-      const { data, error } = await supabase
-        .from('assignment_tags')
-        .insert({
-          assignment_id: assignmentId,
-          student_id: studentId,
-          period: periodId,
-          tag_type: tagType
-        })
-        .select()
-        .single();
+    }));
 
-      if (!error && data) {
-        setTags(prev => [...prev, data]);
-      }
-    }
-  };
+    setAssignmentOrder(prev => [...prev, assignmentData.id]);
+    setNewAssignment(null);
+    setSelectedDate(null);
 
-  const sortStudents = (students: Student[], assignmentId: string, periodId: string) => {
-    if (studentSortOrder === 'none') return students;
-
-    return [...students].sort((a, b) => {
-      const gradeA = calculateTotal(
-        grades[assignmentId]?.[periodId]?.[a.id] || '0',
-        extraPoints[`${assignmentId}-${periodId}-${a.id}`] || '0'
-      );
-      const gradeB = calculateTotal(
-        grades[assignmentId]?.[periodId]?.[b.id] || '0',
-        extraPoints[`${assignmentId}-${periodId}-${b.id}`] || '0'
-      );
-      return studentSortOrder === 'highest' ? gradeB - gradeA : gradeA - gradeB;
+    toast({
+      title: "Success",
+      description: "Assignment created successfully"
     });
-  };
 
-  // Add function to handle assignment reordering
-  const handleDragEnd = (result: DropResult) => {
-    if (!result.destination) return;
+  } catch (error) {
+    console.error('Error creating assignment:', error);
+    toast({
+      variant: "destructive",
+      title: "Error",
+      description: error instanceof Error ? error.message : 'Failed to create assignment'
+    });
+  }
+};
 
-    const { source, destination } = result;
-    const assignmentId = result.draggableId;
+const exportSingleGradeSet = (assignmentId: string, periodId: string) => {
+  const assignment = assignments[assignmentId];
+  const periodStudents = students[periodId] || [];
+  const assignmentGrades = grades[assignmentId]?.[periodId] || {};
 
-    if (groupBy === 'type' && source.droppableId !== destination.droppableId) {
-      // Change assignment type when dragging between columns
-      const newType = destination.droppableId as 'Daily' | 'Assessment';
-      handleAssignmentEdit(assignmentId, { type: newType });
-    }
-
-    const items = Array.from(assignmentOrder);
-    const [reorderedItem] = items.splice(source.index, 1);
-    items.splice(destination.index, 0, reorderedItem);
-    setAssignmentOrder(items);
-  };
-
-  // Add function to edit assignment
-  const handleAssignmentEdit = async (assignmentId: string, updates: Partial<Assignment>) => {
-    try {
-      // Convert date to ISO string for Supabase
-      const supabaseUpdates = {
-        ...updates,
-        date: updates.date ? updates.date.toISOString().split('T')[0] : undefined
-      };
-
-      const { error } = await supabase
-        .from('assignments')
-        .update(supabaseUpdates)
-        .eq('id', assignmentId);
-
-      if (error) throw error;
-
-      setAssignments(prev => ({
-        ...prev,
-        [assignmentId]: {
-          ...prev[assignmentId],
-          ...updates
-        }
-      }));
-    } catch (error) {
-      console.error('Error updating assignment:', error);
-      alert('Failed to update assignment');
-    }
-  };
-
-  // Add function to sort and filter assignments
-  const getSortedAndFilteredAssignments = () => {
-    let entries = assignmentOrder
-      .filter(id => assignments[id]) // Filter out any invalid IDs
-      .map(id => [id, assignments[id]] as [string, Assignment]);
-    
-    // Apply subject filter
-    if (subjectFilter !== 'all') {
-      entries = entries.filter(([_, assignment]) => assignment.subject === subjectFilter);
-    }
-
-    // Apply date sorting
-    if (dateFilter !== 'none') {
-      entries.sort(([, a], [, b]) => {
-        const dateA = new Date(a.date).getTime();
-        const dateB = new Date(b.date).getTime();
-        return dateFilter === 'asc' ? dateA - dateB : dateB - dateA;
-      });
-    }
-
-    return entries;
-  };
-
-  // Update the assignment card rendering to make editing inline
-  const getCardColor = (assignment: Assignment) => {
-    if (!showColors) return '';
-    
-    if (colorMode === 'subject') {
-      return SUBJECT_COLORS[assignment.subject];
-    }
-    
-    if (colorMode === 'type') {
-      return TYPE_COLORS[assignment.type];
-    }
-    
-    return '';
-  };
-
-  const renderAssignmentCard = (assignmentId: string, assignment: Assignment, provided?: any) => (
-    <Card 
-      className={getCardClassName(
-        assignment, 
-        expandedAssignments[assignmentId] || editingAssignment === assignmentId,
-        colorMode,
-        showColors
-      )}
-      {...(provided ? provided.draggableProps : {})}
-      {...(provided ? provided.dragHandleProps : {})}
-      ref={provided?.innerRef}
-    >
-      <CardHeader
-        className="flex flex-row items-center justify-between cursor-pointer"
-        onClick={() => toggleAssignment(assignmentId)}
-      >
-        {editingAssignment === assignmentId ? (
-          <div className="space-y-2 flex-1" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center gap-2">
-              <Input
-                value={assignment.name}
-                onChange={(e) => {
-                  setAssignments(prev => ({
-                    ...prev,
-                    [assignmentId]: { ...prev[assignmentId], name: e.target.value }
-                  }));
-                }}
-                className="flex-1"
-              />
-              <Button 
-                size="sm"
-                onClick={() => {
-                  handleAssignmentEdit(assignmentId, assignments[assignmentId]);
-                  setEditingAssignment(null);
-                }}
-              >
-                Save
-              </Button>
-              <Button 
-                size="sm" 
-                variant="outline"
-                onClick={() => setEditingAssignment(null)}
-              >
-                Cancel
-              </Button>
-            </div>
-            <div className="flex gap-2">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    {format(assignment.date, 'PPP')}
-                    <CalendarIcon className="ml-2 h-4 w-4" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={assignment.date}
-                    onSelect={(date) => {
-                      if (date) {
-                        setAssignments(prev => ({
-                          ...prev,
-                          [assignmentId]: { ...prev[assignmentId], date }
-                        }));
-                      }
-                    }}
-                  />
-                </PopoverContent>
-              </Popover>
-              <Select
-                value={assignment.subject}
-                onValueChange={(value: 'Math 8' | 'Algebra I') => {
-                  setAssignments(prev => ({
-                    ...prev,
-                    [assignmentId]: { ...prev[assignmentId], subject: value }
-                  }));
-                }}
-              >
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Math 8">Math 8</SelectItem>
-                  <SelectItem value="Algebra I">Algebra I</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={assignment.type}
-                onValueChange={(value: 'Daily' | 'Assessment') => {
-                  setAssignments(prev => ({
-                    ...prev,
-                    [assignmentId]: { ...prev[assignmentId], type: value }
-                  }));
-                }}
-              >
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Daily">Daily</SelectItem>
-                  <SelectItem value="Assessment">Assessment</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        ) : (
-          <div onClick={() => setEditingAssignment(assignmentId)}>
-            <CardTitle>{assignment.name}</CardTitle>
-            <div className="text-sm text-muted-foreground">
-              {format(assignment.date, 'PPP')} - {assignment.subject}
-            </div>
-          </div>
-        )}
-        <div className="flex items-center gap-2 ml-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={(e) => {
-              e.stopPropagation();
-              deleteAssignment(assignmentId);
-            }}
-          >
-            <X className="h-4 w-4" />
-          </Button>
-          {expandedAssignments[assignmentId] ? (
-            <ChevronUp className="h-4 w-4" />
-          ) : (
-            <ChevronDown className="h-4 w-4" />
-          )}
-        </div>
-      </CardHeader>
-      {expandedAssignments[assignmentId] && (
-        <CardContent>
-          <Tabs defaultValue={assignment.periods[0]} onValueChange={setActiveTab}>
-            <TabsList className="w-full">
-              {assignment.periods.map(periodId => (
-                <TabsTrigger
-                  key={periodId}
-                  value={periodId}
-                  className="flex-1"
-                >
-                  Period {periodId}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-            {assignment.periods.map(periodId => (
-              <TabsContent key={periodId} value={periodId}>
-                <div className="space-y-4">
-                  <PeriodStudentSearch 
-                    students={Object.values(students).flat()}
-                    assignmentId={assignmentId}
-                    onSelect={(studentId, periodId) => {
-                      const tabTrigger = document.querySelector(`[value="${periodId}"]`) as HTMLButtonElement;
-                      if (tabTrigger) tabTrigger.click();
-                      
-                      setTimeout(() => {
-                        const gradeInput = document.querySelector(
-                          `input[id="grade-${assignmentId}-${periodId}-${studentId}"]`
-                        ) as HTMLInputElement;
-                        if (gradeInput) {
-                          gradeInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                          gradeInput.focus();
-                        }
-                      }, 100);
-                    }}
-                    activeTab={activeTab}
-                    onTabChange={setActiveTab}
-                  />
-                  <div className="flex justify-between items-center">
-                    <Select
-                      value={studentSortOrder}
-                      onValueChange={(value: 'none' | 'highest' | 'lowest') => setStudentSortOrder(value)}
-                    >
-                      <SelectTrigger className="w-32">
-                        <SelectValue placeholder="Sort by..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No Sort</SelectItem>
-                        <SelectItem value="highest">Highest</SelectItem>
-                        <SelectItem value="lowest">Lowest</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    {sortStudents(students[periodId] || [], assignmentId, periodId).map(student => (
-                      <div key={student.id} className="grid grid-cols-[auto_1fr_70px_70px_70px] gap-2 items-center">
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleTagToggle(assignmentId, periodId, student.id, 'absent')}
-                            className={cn(
-                              "px-2 h-6 text-xs",
-                              hasTag(assignmentId, periodId, String(student.id), 'absent') && "bg-red-100"
-                            )}
-                          >
-                            Abs
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleTagToggle(assignmentId, periodId, student.id, 'late')}
-                            className={cn(
-                              "px-2 h-6 text-xs",
-                              hasTag(assignmentId, periodId, String(student.id), 'late') && "bg-yellow-100"
-                            )}
-                          >
-                            Late
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleTagToggle(assignmentId, periodId, student.id, 'incomplete')}
-                            className={cn(
-                              "px-2 h-6 text-xs",
-                              hasTag(assignmentId, periodId, String(student.id), 'incomplete') && "bg-orange-100"
-                            )}
-                          >
-                            Inc
-                          </Button>
-                          {assignment.type === 'Assessment' && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleTagToggle(assignmentId, periodId, student.id, 'retest')}
-                              className={cn(
-                                "px-2 h-6 text-xs",
-                                hasTag(assignmentId, periodId, String(student.id), 'retest') && "bg-blue-100"
-                              )}
-                            >
-                              Retest
-                            </Button>
-                          )}
-                        </div>
-                        <div className="flex items-center bg-secondary rounded px-2 py-1">
-                          <span className="text-sm text-muted-foreground mr-2">
-                            {student.id}
-                          </span>
-                          <span className="text-sm">{student.name}</span>
-                        </div>
-                        <Input
-                          id={`grade-${assignmentId}-${periodId}-${student.id}`}
-                          type="number"
-                          min="0"
-                          max="100"
-                          placeholder="0"
-                          className="text-center h-8 text-sm"
-                          value={
-                            editingGrades[`${assignmentId}-${periodId}`] 
-                              ? unsavedGrades[assignmentId]?.[periodId]?.[student.id] || ''
-                              : grades[assignmentId]?.[periodId]?.[student.id] || ''
-                          }
-                          onChange={(e) => handleGradeChange(assignmentId, periodId, String(student.id), e.target.value)}
-                        />
-                        <Input
-                          type="number"
-                          min="0"
-                          placeholder="+0"
-                          className="text-center h-8 text-sm"
-                          value={extraPoints[`${assignmentId}-${periodId}-${student.id}`] || ''}
-                          onChange={(e) => handleExtraPointsChange(assignmentId, periodId, student.id, e.target.value)}
-                        />
-                        <div className="flex items-center justify-center bg-secondary rounded px-2 h-8">
-                          <span className="text-sm font-medium">
-                            {calculateTotal(
-                              editingGrades[`${assignmentId}-${periodId}`]
-                                ? unsavedGrades[assignmentId]?.[periodId]?.[student.id]
-                                : grades[assignmentId]?.[periodId]?.[student.id],
-                              extraPoints[`${assignmentId}-${periodId}-${student.id}`]
-                            )}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                
-                <div className="mt-4 flex justify-between items-center">
-                  <ImportScoresDialog
-                    assignmentId={assignmentId}
-                    periodId={periodId}
-                    onImport={(grades) => handleImportGrades(assignmentId, periodId, grades)}
-                    unsavedGrades={unsavedGrades}
-                    setUnsavedGrades={setUnsavedGrades}
-                    setEditingGrades={setEditingGrades}
-                    assignments={assignments}
-                    students={students}
-                    grades={grades}
-                  />
-                  {assignment.google_classroom_id && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => syncGradesToClassroom(assignmentId, periodId)}
-                      disabled={syncingAssignments[assignmentId]}
-                      className="ml-2"
-                    >
-                      <RefreshCw className={cn(
-                        "h-4 w-4 mr-2",
-                        syncingAssignments[assignmentId] && "animate-spin"
-                      )} />
-                      {syncingAssignments[assignmentId] ? 'Syncing...' : 'Sync to Classroom'}
-                    </Button>
-                  )}
-                  <div className="text-xs text-muted-foreground">
-                    <pre className="bg-slate-50 p-2 rounded">
-                      {JSON.stringify({
-                        hasGoogleId: !!assignment.google_classroom_id,
-                        googleId: assignment.google_classroom_id,
-                        isLinked: !!assignment.google_classroom_id
-                      }, null, 2)}
-                    </pre>
-                  </div>
-                  <Button
-                    onClick={() => saveGrades(assignmentId)}
-                    className="flex items-center gap-2"
-                  >
-                    <Save className="h-4 w-4" />
-                    Save All Grades
-                  </Button>
-                </div>
-              </TabsContent>
-            ))}
-          </Tabs>
-        </CardContent>
-      )}
-    </Card>
-  );
-
-  // Add CSV escape utility function
+  // Function to escape commas in values
   const escapeCSV = (value: string) => {
     if (value.includes(',') || value.includes('"')) {
       return `"${value.replace(/"/g, '""')}"`;
     }
     return value;
   };
-  
-  // Add function to get grouped assignments
-  const getGroupedAssignments = () => {
-    const entries = getSortedAndFilteredAssignments();
-    
-    if (groupBy === 'type') {
-      return {
-        Daily: entries.filter(([_, assignment]) => assignment.type === 'Daily'),
-        Assessment: entries.filter(([_, assignment]) => assignment.type === 'Assessment')
-      };
-    }
 
-    return { all: entries };
-  };
-
-  // Update renderAssignmentsSection to handle expanded cards in grouped view
-  const renderAssignmentsSection = () => {
-    const grouped = getGroupedAssignments();
-  
-    if (groupBy === 'type') {
-      return (
-        <div className="relative grid grid-cols-2 gap-4">
-          <DragDropContext onDragEnd={handleDragEnd}>
-            {/* Daily Assignments Column */}
-            <div className="space-y-4">
-              <h3 className="font-semibold">Daily Work</h3>
-              <Droppable droppableId="Daily">
-                {(provided) => (
-                  <div 
-                    {...provided.droppableProps} 
-                    ref={provided.innerRef} 
-                    className="relative grid grid-cols-1 gap-4"
-                    // Add styles to handle expanded cards overlaying content
-                    style={{ 
-                      minHeight: '50px',
-                      position: 'relative'
-                    }}
-                  >
-                    {(grouped.Daily || []).map(([id, assignment], index) => {
-                      const isExpanded = expandedAssignments[id] || editingAssignment === id;
-                      return (
-                        <Draggable 
-                          key={id} 
-                          draggableId={id} 
-                          index={index}
-                          isDragDisabled={isExpanded}
-                        >
-                          {(provided) => (
-                            <div
-                              style={isExpanded ? {
-                                position: 'absolute',
-                                zIndex: 10,
-                                left: '-0.5rem',
-                                right: '-0.5rem',
-                                width: 'calc(200% + 2rem)',
-                              } : undefined}
-                            >
-                              {renderAssignmentCard(id, assignment, provided)}
-                            </div>
-                          )}
-                        </Draggable>
-                      );
-                    })}
-                    {provided.placeholder}
-                  </div>
-                )}
-              </Droppable>
-            </div>
-  
-            {/* Assessment Column */}
-            <div className="space-y-4">
-              <h3 className="font-semibold">Assessments</h3>
-              <Droppable droppableId="Assessment">
-                {(provided) => (
-                  <div 
-                    {...provided.droppableProps} 
-                    ref={provided.innerRef} 
-                    className="relative grid grid-cols-1 gap-4"
-                    style={{ 
-                      minHeight: '50px',
-                      position: 'relative'
-                    }}
-                  >
-                    {(grouped.Assessment || []).map(([id, assignment], index) => {
-                      const isExpanded = expandedAssignments[id] || editingAssignment === id;
-                      return (
-                        <Draggable 
-                          key={id} 
-                          draggableId={id} 
-                          index={index}
-                          isDragDisabled={isExpanded}
-                        >
-                          {(provided) => (
-                            <div
-                              style={isExpanded ? {
-                                position: 'absolute',
-                                zIndex: 10,
-                                left: '-0.5rem',
-                                right: '-0.5rem',
-                                width: 'calc(200% + 2rem)',
-                              } : undefined}
-                            >
-                              {renderAssignmentCard(id, assignment, provided)}
-                            </div>
-                          )}
-                        </Draggable>
-                      );
-                    })}
-                    {provided.placeholder}
-                  </div>
-                )}
-              </Droppable>
-            </div>
-          </DragDropContext>
-        </div>
+  // Create CSV data with comma separation
+  const csvData = [
+    ['Student ID', 'Final Grade', 'First Name', 'Last Name'].join(','),
+    ...periodStudents.map(student => {
+      const [lastName, firstName] = student.name.split(',').map(part => part.trim());
+      const finalGrade = calculateTotal(
+        assignmentGrades[student.id] || '0',
+        extraPoints[`${assignmentId}-${periodId}-${student.id}`] || '0'
       );
-    }
-  
-    // Default two-column view remains unchanged
-    return (
-      <DragDropContext onDragEnd={handleDragEnd}>
-        <Droppable droppableId="assignments">
-          {(provided) => (
-            <div 
-              {...provided.droppableProps} 
-              ref={provided.innerRef}
-              className="grid grid-cols-2 gap-4 auto-rows-min"
-            >
-              {(grouped.all || []).map(([id, assignment], index) => (
-                <Draggable key={id} draggableId={id} index={index}>
-                  {(provided) => renderAssignmentCard(id, assignment, provided)}
-                </Draggable>
-              ))}
-              {provided.placeholder}
-            </div>
-          )}
-        </Droppable>
-      </DragDropContext>
+      return [
+        student.id,
+        finalGrade,
+        escapeCSV(firstName),
+        escapeCSV(lastName)
+      ].join(',');
+    })
+  ].join('\n');
+
+  // Create and trigger download
+  const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${assignment.name}-${periodId}-grades.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+};
+
+const exportGrades = (assignmentIds: string[], periodIds: string[], merge: boolean) => {
+  if (merge) {
+    // Create one merged file for all selections
+    const allData = assignmentIds.flatMap(assignmentId => 
+      periodIds.flatMap(periodId => {
+        const periodStudents = students[periodId] || [];
+        const assignmentGrades = grades[assignmentId]?.[periodId] || {};
+
+        return periodStudents.map(student => {
+          const [lastName, firstName] = student.name.split(',').map(part => part.trim());
+          const finalGrade = calculateTotal(
+            assignmentGrades[student.id] || '0',
+            extraPoints[`${assignmentId}-${periodId}-${student.id}`] || '0'
+          );
+          return [
+            student.id,
+            finalGrade,
+            escapeCSV(firstName),
+            escapeCSV(lastName)
+          ];
+        });
+      })
     );
-  };
 
-  const handleRemoveTag = async (tag: AssignmentTag): Promise<void> => {
-    try {
-      const { error } = await supabase
-        .from('assignment_tags')
-        .delete()
-        .match({ id: tag.id });
+    const csvData = [
+      ['Student ID', 'Final Grade', 'First Name', 'Last Name'].join(','),
+      ...allData.map(row => row.join(','))
+    ].join('\n');
 
-      if (error) {
-        throw error;
-      }
-
-      // Update local state by removing the tag
-      setTags(prev => prev.filter(t => t.id !== tag.id));
-    } catch (error) {
-      console.error('Error removing tag:', error);
-      alert('Failed to remove tag');
-    }
-  };
-
-  const toggleAssignment = (assignmentId: string) => {
-    setExpandedAssignments(prev => ({
-      ...prev,
-      [assignmentId]: !prev[assignmentId]
-    }));
-  };
-
-  const syncGradesToClassroom = async (assignmentId: string, periodId: string) => {
-    const assignment = assignments[assignmentId];
-    
-    if (!assignment.google_classroom_id) {
-      toast({
-        variant: "destructive", 
-        title: "Cannot sync grades",
-        description: "This assignment is not linked to Google Classroom"
+    // Download merged file
+    const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `grades-export.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  } else {
+    // Create separate files for each assignment-period combination
+    assignmentIds.forEach(assignmentId => {
+      periodIds.forEach(periodId => {
+        exportSingleGradeSet(assignmentId, periodId);
       });
-      return;
-    }
+    });
+  }
+};
+
+const handleAbsenceToggle = async (assignmentId: string, periodId: string, studentId: string) => {
+  const key = `${assignmentId}-${periodId}-${studentId}`;
   
-    try {
-      setSyncingAssignments(prev => ({ ...prev, [assignmentId]: true }));
+  if (absences[key]) {
+    // Remove absence
+    await supabase
+      .from('absences')
+      .delete()
+      .match({ 
+        assignment_id: assignmentId,
+        student_id: studentId,
+        period: periodId 
+      });
+  } else {
+    // Add absence
+    await supabase
+      .from('absences')
+      .insert({
+        assignment_id: assignmentId,
+        student_id: studentId,
+        period: periodId
+      });
+  }
+
+  setAbsences(prev => ({
+    ...prev,
+    [key]: !prev[key]
+  }));
+};
+
+const handleImportGrades = async (assignmentId: string, periodId: string, grades: Record<string, string>) => {
+  const updatedGrades = { ...unsavedGrades };
   
-      const { data: studentMappings, error: mappingError } = await supabase
-        .from('student_mappings')
-        .select('student_id, google_id')
-        .eq('period', periodId);
-  
-      if (mappingError) throw new Error('Failed to get student mappings');
-  
-      const studentIdToGoogleId = Object.fromEntries(
-        studentMappings.map(m => [m.student_id.toString(), m.google_id])
-      );
-  
-      const periodGrades = grades[assignmentId]?.[periodId] || {};
-      const googleGrades: Record<string, string> = {};
-  
-      Object.entries(periodGrades).forEach(([studentId, grade]) => {
-        const googleId = studentIdToGoogleId[studentId];
-        if (googleId) {
-          googleGrades[googleId] = grade;
+  if (!updatedGrades[assignmentId]) {
+    updatedGrades[assignmentId] = {};
+  }
+
+  // Get all periods from the assignment
+  const assignmentPeriods = assignments[assignmentId].periods;
+
+  // Process each grade entry
+  Object.entries(grades).forEach(([localId, score]) => {
+    // Look for student in any period
+    assignmentPeriods.forEach(period => {
+      const studentExists = students[period]?.some(s => s.id === parseInt(localId));
+      if (studentExists) {
+        if (!updatedGrades[assignmentId][period]) {
+          updatedGrades[assignmentId][period] = {};
         }
-      });
-  
-      if (Object.keys(googleGrades).length === 0) {
-        throw new Error('No mapped students found for sync');
+        updatedGrades[assignmentId][period][parseInt(localId)] = score;
       }
-  
-      const response = await fetch(`/api/classroom/grades/${assignment.google_classroom_id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ grades: googleGrades })
-      });
-  
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to sync grades');
-      }
-  
-      toast({
-        title: "Grades synced",
-        description: `Synced ${Object.keys(googleGrades).length} grades to Google Classroom`
-      });
-  
-    } catch (error) {
-      console.error('Error syncing grades:', error);
-      toast({
-        variant: "destructive",
-        title: "Failed to sync grades",
-        description: error instanceof Error ? error.message : 'Could not sync with Google Classroom'
-      });
-    } finally {
-      setSyncingAssignments(prev => ({ ...prev, [assignmentId]: false }));
+    });
+  });
+
+  setUnsavedGrades(updatedGrades);
+  assignmentPeriods.forEach(period => {
+    setEditingGrades(prev => ({
+      ...prev,
+      [`${assignmentId}-${period}`]: true
+    }));
+  });
+};
+
+const handleLateToggle = (assignmentId: string, periodId: string, studentId: string) => {
+  const key = `${assignmentId}-${periodId}-${studentId}`;
+  setLateWork(prev => ({
+    ...prev,
+    [key]: !prev[key]
+  }));
+};
+
+const handleIncompleteToggle = (assignmentId: string, periodId: string, studentId: string) => {
+  const key = `${assignmentId}-${periodId}-${studentId}`;
+  setIncomplete(prev => ({
+    ...prev,
+    [key]: !prev[key]
+  }));
+};
+
+const handleExtraPointsChange = (assignmentId: string, periodId: string, studentId: number, points: string) => {
+  setExtraPoints(prev => ({
+    ...prev,
+    [`${assignmentId}-${periodId}-${studentId}`]: points
+  }));
+};
+
+const calculateTotal = (grade: string = '0', extra: string = '0'): number => {
+  const baseGrade = Math.max(0, Math.min(100, parseInt(grade) || 0));
+  const extraGrade = Math.max(0, Math.min(100, parseInt(extra) || 0));
+  return Math.min(100, baseGrade + extraGrade);
+};
+
+const handleRetestToggle = (assignmentId: string, periodId: string, studentId: string) => {
+  const key = `${assignmentId}-${periodId}-${studentId}`;
+  setRetest(prev => ({
+    ...prev,
+    [key]: !prev[key]
+  }));
+};
+
+// Update tag handling functions
+const hasTag = (assignmentId: string, periodId: string, studentId: string, tagType: string) => {
+  return tags.some(tag => 
+    tag.assignment_id === assignmentId && 
+    tag.period === periodId && 
+    String(tag.student_id) === String(studentId) && 
+    tag.tag_type === tagType
+  );
+};
+
+const handleTagToggle = async (
+  assignmentId: string, 
+  periodId: string, 
+  studentId: number, 
+  tagType: 'absent' | 'late' | 'incomplete' | 'retest'
+) => {
+  // For retest, check if assignment type is Assessment
+  if (tagType === 'retest' && assignments[assignmentId]?.type !== 'Assessment') {
+    return;
+  }
+
+  const existingTag = tags.find(tag => 
+    tag.assignment_id === assignmentId && 
+    tag.period === periodId && 
+    tag.student_id === studentId && 
+    tag.tag_type === tagType
+  );
+
+  if (existingTag) {
+    // Remove tag
+    const { error } = await supabase
+      .from('assignment_tags')
+      .delete()
+      .match({ id: existingTag.id });
+
+    if (!error) {
+      setTags(prev => prev.filter(tag => tag.id !== existingTag.id));
     }
-  };
+  } else {
+    // Add tag
+    const { data, error } = await supabase
+      .from('assignment_tags')
+      .insert({
+        assignment_id: assignmentId,
+        student_id: studentId,
+        period: periodId,
+        tag_type: tagType
+      })
+      .select()
+      .single();
 
-  return (
-    <div className="p-6">
-      <div className="flex gap-6">
-        {/* Left side - Collapsible Calendar */}
-        <div className={cn("space-y-4", !isCalendarVisible && "w-auto")}>
-          <Button 
-            variant="outline" 
-            onClick={() => setIsCalendarVisible(prev => !prev)}
-            className="w-full"
-          >
-            {isCalendarVisible ? <ChevronLeft /> : <ChevronRight />}
-            {isCalendarVisible ? "Hide Calendar" : "Show Calendar"}
-          </Button>
-          
-          {isCalendarVisible && (
-            <Card className="w-96">
-              <CardHeader>
-                <div className="flex justify-between items-center">
-                  <CardTitle>Calendar</CardTitle>
-                  <Select
-                    defaultValue="month"
-                    onValueChange={(value) => setCalendarView(value as 'month' | 'week')}
-                  >
-                    <SelectTrigger className="w-28">
-                      <SelectValue placeholder="View" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="month">Month</SelectItem>
-                      <SelectItem value="week">Week</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {calendarView === 'month' ? (
-                  <Calendar
-                    mode="single"
-                    selected={selectedDate || undefined}
-                    onSelect={handleDateSelect}
-                    className="w-full"
-                    modifiers={{
-                      assignment: (date) => {
-                        return Object.values(assignments).some(
-                          assignment => assignment.date.toDateString() === date.toDateString()
-                        );
-                      }
-                    }}
-                    modifiersStyles={{
-                      assignment: {
-                        border: '2px solid var(--primary)',
-                      }
-                    }}
-                  />
-                ) : (
-                  <CustomWeekView
-                    date={selectedDate || new Date()}
-                    onDateSelect={handleDateSelect}
-                    assignments={assignments}
-                    onWeekChange={handleWeekChange}
-                  />
-                )}
-                <BirthdayList 
-                  students={Object.values(students).flat()}
-                  currentDate={selectedDate || new Date()}
-                  view={calendarView}
-                />
-                <TodoList 
-                  tags={tags}
-                  students={students}
-                  assignments={assignments}
-                  onRemoveTag={handleRemoveTag}
-                />
-              </CardContent>
-            </Card>
-          )}
-        </div>
+    if (!error && data) {
+      setTags(prev => [...prev, data]);
+    }
+  }
+};
 
-        {/* Right side */}
-        <div className="flex-grow space-y-4">
-          <Button
-            onClick={handleNewAssignment}
-            className="w-full"
-          >
-            Create New Assignment
-          </Button>
-          {selectedDate && (
+const sortStudents = (students: Student[], assignmentId: string, periodId: string) => {
+  if (studentSortOrder === 'none') return students;
+
+  return [...students].sort((a, b) => {
+    const gradeA = calculateTotal(
+      grades[assignmentId]?.[periodId]?.[a.id] || '0',
+      extraPoints[`${assignmentId}-${periodId}-${a.id}`] || '0'
+    );
+    const gradeB = calculateTotal(
+      grades[assignmentId]?.[periodId]?.[b.id] || '0',
+      extraPoints[`${assignmentId}-${periodId}-${b.id}`] || '0'
+    );
+    return studentSortOrder === 'highest' ? gradeB - gradeA : gradeA - gradeB;
+  });
+};
+
+// Add function to handle assignment reordering
+const handleDragEnd = (result: DropResult) => {
+  if (!result.destination) return;
+
+  const { source, destination } = result;
+  const assignmentId = result.draggableId;
+
+  if (groupBy === 'type' && source.droppableId !== destination.droppableId) {
+    // Change assignment type when dragging between columns
+    const newType = destination.droppableId as 'Daily' | 'Assessment';
+    handleAssignmentEdit(assignmentId, { type: newType });
+  }
+
+  const items = Array.from(assignmentOrder);
+  const [reorderedItem] = items.splice(source.index, 1);
+  items.splice(destination.index, 0, reorderedItem);
+  setAssignmentOrder(items);
+};
+
+// Add function to edit assignment
+const handleAssignmentEdit = async (assignmentId: string, updates: Partial<Assignment>) => {
+  try {
+    // Convert date to ISO string for Supabase
+    const supabaseUpdates = {
+      ...updates,
+      date: updates.date ? updates.date.toISOString().split('T')[0] : undefined
+    };
+
+    const { error } = await supabase
+      .from('assignments')
+      .update(supabaseUpdates)
+      .eq('id', assignmentId);
+
+    if (error) throw error;
+
+    setAssignments(prev => ({
+      ...prev,
+      [assignmentId]: {
+        ...prev[assignmentId],
+        ...updates
+      }
+    }));
+  } catch (error) {
+    console.error('Error updating assignment:', error);
+    alert('Failed to update assignment');
+  }
+};
+
+// Add function to sort and filter assignments
+const getSortedAndFilteredAssignments = () => {
+  let entries = assignmentOrder
+    .filter(id => assignments[id]) // Filter out any invalid IDs
+    .map(id => [id, assignments[id]] as [string, Assignment]);
+  
+  // Apply subject filter
+  if (subjectFilter !== 'all') {
+    entries = entries.filter(([_, assignment]) => assignment.subject === subjectFilter);
+  }
+
+  // Apply date sorting
+  if (dateFilter !== 'none') {
+    entries.sort(([, a], [, b]) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      return dateFilter === 'asc' ? dateA - dateB : dateB - dateA;
+    });
+  }
+
+  return entries;
+};
+
+// Update the assignment card rendering to make editing inline
+const getCardColor = (assignment: Assignment) => {
+  if (!showColors) return '';
+  
+  if (colorMode === 'subject') {
+    return SUBJECT_COLORS[assignment.subject];
+  }
+  
+  if (colorMode === 'type') {
+    return TYPE_COLORS[assignment.type];
+  }
+  
+  return '';
+};
+
+const renderAssignmentCard = (assignmentId: string, assignment: Assignment, provided?: any) => (
+  <Card 
+    className={getCardClassName(
+      assignment, 
+      expandedAssignments[assignmentId] || editingAssignment === assignmentId,
+      colorMode,
+      showColors
+    )}
+    {...(provided ? provided.draggableProps : {})}
+    {...(provided ? provided.dragHandleProps : {})}
+    ref={provided?.innerRef}
+  >
+    <CardHeader
+      className="flex flex-row items-center justify-between cursor-pointer"
+      onClick={() => toggleAssignment(assignmentId)}
+    >
+      {editingAssignment === assignmentId ? (
+        <div className="space-y-2 flex-1" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center gap-2">
+            <Input
+              value={assignment.name}
+              onChange={(e) => {
+                setAssignments(prev => ({
+                  ...prev,
+                  [assignmentId]: { ...prev[assignmentId], name: e.target.value }
+                }));
+              }}
+              className="flex-1"
+            />
             <Button 
-              onClick={handleNewAssignment}
-              className="w-full"
+              size="sm"
+              onClick={() => {
+                handleAssignmentEdit(assignmentId, assignments[assignmentId]);
+                setEditingAssignment(null);
+              }}
             >
-              Create New Assignment for {selectedDate.toLocaleDateString()}
+              Save
             </Button>
-          )}
-          {newAssignment && (
-            <Card>
-              <CardHeader>
-                <CardTitle>New Assignment for {selectedDate?.toLocaleDateString()}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Input 
-                  placeholder="Assignment Name"
-                  value={newAssignment?.name || ''}
-                  onChange={(e) => handleAssignmentNameChange(e.target.value)}
-                />
-                <div className="border rounded-md p-4">
-                  <div className="text-sm font-medium mb-2">Select Periods</div>
-                  {Object.keys(students).map(periodId => (
-                    <div key={periodId} className="flex items-center gap-2 mb-2">
-                      <Checkbox 
-                        checked={newAssignment?.periods.includes(periodId)}
-                        onCheckedChange={() => handlePeriodsSelect(periodId)}
-                      />
-                      <span>Period {periodId}</span>
-                    </div>
-                  ))}
-                </div>
-                <Select 
-                  value={selectedType}
-                  onValueChange={(value: 'Daily' | 'Assessment') => setSelectedType(value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Assignment Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Daily">Daily</SelectItem>
-                    <SelectItem value="Assessment">Assessment</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={newAssignment.subject}
-                  onValueChange={(value: 'Math 8' | 'Algebra I') => 
-                    setNewAssignment(prev => prev ? { ...prev, subject: value } : null)
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select subject" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Math 8">Math 8</SelectItem>
-                    <SelectItem value="Algebra I">Algebra I</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button onClick={saveAssignment} className="w-full">
-                  Create Assignment
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-          {/* Existing Assignments */}
-          <div className="flex gap-4 mb-4">
-            <Select
-              value={subjectFilter}
-              onValueChange={(value: 'all' | 'Math 8' | 'Algebra I') => setSubjectFilter(value)}
+            <Button 
+              size="sm" 
+              variant="outline"
+              onClick={() => setEditingAssignment(null)}
             >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter by subject" />
+              Cancel
+            </Button>
+          </div>
+          <div className="flex gap-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm">
+                  {format(assignment.date, 'PPP')}
+                  <CalendarIcon className="ml-2 h-4 w-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={assignment.date}
+                  onSelect={(date) => {
+                    if (date) {
+                      setAssignments(prev => ({
+                        ...prev,
+                        [assignmentId]: { ...prev[assignmentId], date }
+                      }));
+                    }
+                  }}
+                />
+              </PopoverContent>
+            </Popover>
+            <Select
+              value={assignment.subject}
+              onValueChange={(value: 'Math 8' | 'Algebra I') => {
+                setAssignments(prev => ({
+                  ...prev,
+                  [assignmentId]: { ...prev[assignmentId], subject: value }
+                }));
+              }}
+            >
+              <SelectTrigger className="w-[140px]">
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Subjects</SelectItem>
                 <SelectItem value="Math 8">Math 8</SelectItem>
                 <SelectItem value="Algebra I">Algebra I</SelectItem>
               </SelectContent>
             </Select>
             <Select
-              value={dateFilter}
-              onValueChange={(value: 'asc' | 'desc' | 'none') => setDateFilter(value)}
+              value={assignment.type}
+              onValueChange={(value: 'Daily' | 'Assessment') => {
+                setAssignments(prev => ({
+                  ...prev,
+                  [assignmentId]: { ...prev[assignmentId], type: value }
+                }));
+              }}
             >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Sort by date" />
+              <SelectTrigger className="w-[140px]">
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Manual Sort</SelectItem>
-                <SelectItem value="asc">Oldest First</SelectItem>
-                <SelectItem value="desc">Newest First</SelectItem>
+                <SelectItem value="Daily">Daily</SelectItem>
+                <SelectItem value="Assessment">Assessment</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <div className="flex justify-between items-center mb-4">
-            <div className="flex gap-4">
-              <ColorSettings 
-                showColors={showColors}
-                colorMode={colorMode}
-                onShowColorsChange={setShowColors}
-                onColorModeChange={setColorMode}
-              />
-              <Select
-                value={groupBy}
-                onValueChange={(value: 'none' | 'type') => setGroupBy(value)}
+        </div>
+      ) : (
+        <div onClick={() => setEditingAssignment(assignmentId)}>
+          <CardTitle>{assignment.name}</CardTitle>
+          <div className="text-sm text-muted-foreground">
+            {format(assignment.date, 'PPP')} - {assignment.subject}
+          </div>
+        </div>
+      )}
+      <div className="flex items-center gap-2 ml-4">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={(e) => {
+            e.stopPropagation();
+            deleteAssignment(assignmentId);
+          }}
+        >
+          <X className="h-4 w-4" />
+        </Button>
+        {expandedAssignments[assignmentId] ? (
+          <ChevronUp className="h-4 w-4" />
+        ) : (
+          <ChevronDown className="h-4 w-4" />
+        )}
+      </div>
+    </CardHeader>
+    {expandedAssignments[assignmentId] && (
+      <CardContent>
+        <Tabs defaultValue={assignment.periods[0]} onValueChange={setActiveTab}>
+          <TabsList className="w-full">
+            {assignment.periods.map(periodId => (
+              <TabsTrigger
+                key={periodId}
+                value={periodId}
+                className="flex-1"
               >
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Group by..." />
+                Period {periodId}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {assignment.periods.map(periodId => (
+            <TabsContent key={periodId} value={periodId}>
+              <div className="space-y-4">
+                <PeriodStudentSearch 
+                  students={Object.values(students).flat()}
+                  assignmentId={assignmentId}
+                  onSelect={(studentId, periodId) => {
+                    const tabTrigger = document.querySelector(`[value="${periodId}"]`) as HTMLButtonElement;
+                    if (tabTrigger) tabTrigger.click();
+                    
+                    setTimeout(() => {
+                      const gradeInput = document.querySelector(
+                        `input[id="grade-${assignmentId}-${periodId}-${studentId}"]`
+                      ) as HTMLInputElement;
+                      if (gradeInput) {
+                        gradeInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        gradeInput.focus();
+                      }
+                    }, 100);
+                  }}
+                  activeTab={activeTab}
+                  onTabChange={setActiveTab}
+                />
+                <div className="flex justify-between items-center">
+                  <Select
+                    value={studentSortOrder}
+                    onValueChange={(value: 'none' | 'highest' | 'lowest') => setStudentSortOrder(value)}
+                  >
+                    <SelectTrigger className="w-32">
+                      <SelectValue placeholder="Sort by..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No Sort</SelectItem>
+                      <SelectItem value="highest">Highest</SelectItem>
+                      <SelectItem value="lowest">Lowest</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  {sortStudents(students[periodId] || [], assignmentId, periodId).map(student => (
+                    <div key={student.id} className="grid grid-cols-[auto_1fr_70px_70px_70px] gap-2 items-center">
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleTagToggle(assignmentId, periodId, student.id, 'absent')}
+                          className={cn(
+                            "px-2 h-6 text-xs",
+                            hasTag(assignmentId, periodId, String(student.id), 'absent') && "bg-red-100"
+                          )}
+                        >
+                          Abs
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleTagToggle(assignmentId, periodId, student.id, 'late')}
+                          className={cn(
+                            "px-2 h-6 text-xs",
+                            hasTag(assignmentId, periodId, String(student.id), 'late') && "bg-yellow-100"
+                          )}
+                        >
+                          Late
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleTagToggle(assignmentId, periodId, student.id, 'incomplete')}
+                          className={cn(
+                            "px-2 h-6 text-xs",
+                            hasTag(assignmentId, periodId, String(student.id), 'incomplete') && "bg-orange-100"
+                          )}
+                        >
+                          Inc
+                        </Button>
+                        {assignment.type === 'Assessment' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleTagToggle(assignmentId, periodId, student.id, 'retest')}
+                            className={cn(
+                              "px-2 h-6 text-xs",
+                              hasTag(assignmentId, periodId, String(student.id), 'retest') && "bg-blue-100"
+                            )}
+                          >
+                            Retest
+                          </Button>
+                        )}
+                      </div>
+                      <div className="flex items-center bg-secondary rounded px-2 py-1">
+                        <span className="text-sm text-muted-foreground mr-2">
+                          {student.id}
+                        </span>
+                        <span className="text-sm">{student.name}</span>
+                      </div>
+                      <Input
+                        id={`grade-${assignmentId}-${periodId}-${student.id}`}
+                        type="number"
+                        min="0"
+                        max="100"
+                        placeholder="0"
+                        className="text-center h-8 text-sm"
+                        value={
+                          editingGrades[`${assignmentId}-${periodId}`] 
+                            ? unsavedGrades[assignmentId]?.[periodId]?.[student.id] || ''
+                            : grades[assignmentId]?.[periodId]?.[student.id] || ''
+                        }
+                        onChange={(e) => handleGradeChange(assignmentId, periodId, String(student.id), e.target.value)}
+                      />
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder="+0"
+                        className="text-center h-8 text-sm"
+                        value={extraPoints[`${assignmentId}-${periodId}-${student.id}`] || ''}
+                        onChange={(e) => handleExtraPointsChange(assignmentId, periodId, student.id, e.target.value)}
+                      />
+                      <div className="flex items-center justify-center bg-secondary rounded px-2 h-8">
+                        <span className="text-sm font-medium">
+                          {calculateTotal(
+                            editingGrades[`${assignmentId}-${periodId}`]
+                              ? unsavedGrades[assignmentId]?.[periodId]?.[student.id]
+                              : grades[assignmentId]?.[periodId]?.[student.id],
+                            extraPoints[`${assignmentId}-${periodId}-${student.id}`]
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="mt-4 flex justify-between items-center">
+                <ImportScoresDialog
+                  assignmentId={assignmentId}
+                  periodId={periodId}
+                  onImport={(grades) => handleImportGrades(assignmentId, periodId, grades)}
+                  unsavedGrades={unsavedGrades}
+                  setUnsavedGrades={setUnsavedGrades}
+                  setEditingGrades={setEditingGrades}
+                  assignments={assignments}
+                  students={students}
+                  grades={grades}
+                />
+                {assignment.google_classroom_id && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => syncGradesToClassroom(assignmentId, periodId)}
+                    disabled={syncingAssignments[assignmentId]}
+                    className="ml-2"
+                  >
+                    <RefreshCw className={cn(
+                      "h-4 w-4 mr-2",
+                      syncingAssignments[assignmentId] && "animate-spin"
+                    )} />
+                    {syncingAssignments[assignmentId] ? 'Syncing...' : 'Sync to Classroom'}
+                  </Button>
+                )}
+                <div className="text-xs text-muted-foreground">
+                  <pre className="bg-slate-50 p-2 rounded">
+                    {JSON.stringify({
+                      hasGoogleId: !!assignment.google_classroom_id,
+                      googleId: assignment.google_classroom_id,
+                      isLinked: !!assignment.google_classroom_id
+                    }, null, 2)}
+                  </pre>
+                </div>
+                <Button
+                  onClick={() => saveGrades(assignmentId)}
+                  className="flex items-center gap-2"
+                >
+                  <Save className="h-4 w-4" />
+                  Save All Grades
+                </Button>
+              </div>
+            </TabsContent>
+          ))}
+        </Tabs>
+      </CardContent>
+    )}
+  </Card>
+);
+
+// Add CSV escape utility function
+const escapeCSV = (value: string) => {
+  if (value.includes(',') || value.includes('"')) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+};
+
+// Add function to get grouped assignments
+const getGroupedAssignments = () => {
+  const entries = getSortedAndFilteredAssignments();
+  
+  if (groupBy === 'type') {
+    return {
+      Daily: entries.filter(([_, assignment]) => assignment.type === 'Daily'),
+      Assessment: entries.filter(([_, assignment]) => assignment.type === 'Assessment')
+    };
+  }
+
+  return { all: entries };
+};
+
+// Update renderAssignmentsSection to handle expanded cards in grouped view
+const renderAssignmentsSection = () => {
+  const grouped = getGroupedAssignments();
+
+  if (groupBy === 'type') {
+    return (
+      <div className="relative grid grid-cols-2 gap-4">
+        <DragDropContext onDragEnd={handleDragEnd}>
+          {/* Daily Assignments Column */}
+          <div className="space-y-4">
+            <h3 className="font-semibold">Daily Work</h3>
+            <Droppable droppableId="Daily">
+              {(provided) => (
+                <div 
+                  {...provided.droppableProps} 
+                  ref={provided.innerRef} 
+                  className="relative grid grid-cols-1 gap-4"
+                  // Add styles to handle expanded cards overlaying content
+                  style={{ 
+                    minHeight: '50px',
+                    position: 'relative'
+                  }}
+                >
+                  {(grouped.Daily || []).map(([id, assignment], index) => {
+                    const isExpanded = expandedAssignments[id] || editingAssignment === id;
+                    return (
+                      <Draggable 
+                        key={id} 
+                        draggableId={id} 
+                        index={index}
+                        isDragDisabled={isExpanded}
+                      >
+                        {(provided) => (
+                          <div
+                            style={isExpanded ? {
+                              position: 'absolute',
+                              zIndex: 10,
+                              left: '-0.5rem',
+                              right: '-0.5rem',
+                              width: 'calc(200% + 2rem)',
+                            } : undefined}
+                          >
+                            {renderAssignmentCard(id, assignment, provided)}
+                          </div>
+                        )}
+                      </Draggable>
+                    );
+                  })}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
+          </div>
+
+          {/* Assessment Column */}
+          <div className="space-y-4">
+            <h3 className="font-semibold">Assessments</h3>
+            <Droppable droppableId="Assessment">
+              {(provided) => (
+                <div 
+                  {...provided.droppableProps} 
+                  ref={provided.innerRef} 
+                  className="relative grid grid-cols-1 gap-4"
+                  style={{ 
+                    minHeight: '50px',
+                    position: 'relative'
+                  }}
+                >
+                  {(grouped.Assessment || []).map(([id, assignment], index) => {
+                    const isExpanded = expandedAssignments[id] || editingAssignment === id;
+                    return (
+                      <Draggable 
+                        key={id} 
+                        draggableId={id} 
+                        index={index}
+                        isDragDisabled={isExpanded}
+                      >
+                        {(provided) => (
+                          <div
+                            style={isExpanded ? {
+                              position: 'absolute',
+                              zIndex: 10,
+                              left: '-0.5rem',
+                              right: '-0.5rem',
+                              width: 'calc(200% + 2rem)',
+                            } : undefined}
+                          >
+                            {renderAssignmentCard(id, assignment, provided)}
+                          </div>
+                        )}
+                      </Draggable>
+                    );
+                  })}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
+          </div>
+        </DragDropContext>
+      </div>
+    );
+  }
+
+  // Default two-column view remains unchanged
+  return (
+    <DragDropContext onDragEnd={handleDragEnd}>
+      <Droppable droppableId="assignments">
+        {(provided) => (
+          <div 
+            {...provided.droppableProps} 
+            ref={provided.innerRef}
+            className="grid grid-cols-2 gap-4 auto-rows-min"
+          >
+            {(grouped.all || []).map(([id, assignment], index) => (
+              <Draggable key={id} draggableId={id} index={index}>
+                {(provided) => renderAssignmentCard(id, assignment, provided)}
+              </Draggable>
+            ))}
+            {provided.placeholder}
+          </div>
+        )}
+      </Droppable>
+    </DragDropContext>
+  );
+};
+
+const handleRemoveTag = async (tag: AssignmentTag): Promise<void> => {
+  try {
+    const { error } = await supabase
+      .from('assignment_tags')
+      .delete()
+      .match({ id: tag.id });
+
+    if (error) {
+      throw error;
+    }
+
+    // Update local state by removing the tag
+    setTags(prev => prev.filter(t => t.id !== tag.id));
+  } catch (error) {
+    console.error('Error removing tag:', error);
+    alert('Failed to remove tag');
+  }
+};
+
+const toggleAssignment = (assignmentId: string) => {
+  setExpandedAssignments(prev => ({
+    ...prev,
+    [assignmentId]: !prev[assignmentId]
+  }));
+};
+
+const syncGradesToClassroom = async (assignmentId: string, periodId: string) => {
+  const assignment = assignments[assignmentId];
+  
+  try {
+    setSyncingAssignments(prev => ({ ...prev, [assignmentId]: true }));
+
+    // Debug: Log full student data before sync
+    console.log('Debug student data before sync:', {
+      periodStudents: students[periodId]?.map(s => ({
+        id: s.id,
+        name: s.name,
+        localId: s.id,
+        googleId: s.google_id,
+        email: s.google_email,
+        period: s.class_period
+      })),
+      periodGrades: grades[assignmentId]?.[periodId],
+      assignmentLink: assignment.google_classroom_id,
+      totalStudents: students[periodId]?.length || 0,
+      totalGrades: Object.keys(grades[assignmentId]?.[periodId] || {}).length
+    });
+
+    // Get Google Classroom course and coursework IDs
+    const [courseId, courseWorkId] = assignment.google_classroom_id?.split('_') || [];
+    
+    if (!courseId || !courseWorkId) {
+      throw new Error('Assignment not properly linked to Google Classroom');
+    }
+
+    // Get period's students and their grades
+    const periodStudents = students[periodId] || [];
+    const periodGrades = grades[assignmentId]?.[periodId] || {};
+
+    // Debug log grades and IDs
+    console.log('Syncing grades:', {
+      periodId,
+      students: periodStudents.map(s => ({ 
+        id: s.id, 
+        name: s.name,
+        googleId: s.google_id || 'not mapped' 
+      })),
+      grades: Object.entries(periodGrades).map(([id, grade]) => ({
+        studentId: id,
+        grade,
+        studentName: periodStudents.find(s => s.id === Number(id))?.name,
+        hasGoogleId: Boolean(periodStudents.find(s => s.id === Number(id))?.google_id)
+      }))
+    });
+
+    // Prepare grades for sync
+    const gradesToSync = periodStudents
+      .filter(student => !!periodGrades[student.id]) // Only sync students with grades
+      .map(student => ({
+        studentId: student.id,
+        grade: calculateTotal(
+          periodGrades[student.id],
+          extraPoints[`${assignmentId}-${periodId}-${student.id}`] || '0'
+        )
+      }));
+
+    if (gradesToSync.length === 0) {
+      toast({
+        title: "No grades to sync",
+        description: "No grades found for this period"
+      });
+      return;
+    }
+
+    console.log('Syncing grades:', {
+      courseId,
+      courseWorkId,
+      gradesCount: gradesToSync.length,
+      firstFewGrades: gradesToSync.slice(0, 3)
+    });
+
+    // Send grades to Google Classroom
+    const response = await fetch(
+      `/api/classroom/${courseId}/assignments/${courseWorkId}/grades`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.accessToken}`
+        },
+        body: JSON.stringify({ grades: gradesToSync })
+      }
+    );
+
+    // Debug: Log response data
+    console.log('Sync response:', {
+      status: response.status,
+      ok: response.ok,
+      data: await response.clone().json()
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to sync grades');
+    }
+
+    const { updated } = await response.json();
+
+    toast({
+      title: "Grades Synced",
+      description: `Successfully synced ${updated} grades to Google Classroom`
+    });
+
+  } catch (error) {
+    console.error('Sync error:', error);
+    toast({
+      variant: "destructive",
+      title: "Failed to sync grades",
+      description: error instanceof Error ? error.message : 'Could not sync with Google Classroom'
+    });
+  } finally {
+    setSyncingAssignments(prev => ({ ...prev, [assignmentId]: false }));
+  }
+};
+
+return (
+  <div className="p-6">
+    <div className="flex gap-6">
+      {/* Left side - Collapsible Calendar */}
+      <div className={cn("space-y-4", !isCalendarVisible && "w-auto")}>
+        <Button 
+          variant="outline" 
+          onClick={() => setIsCalendarVisible(prev => !prev)}
+          className="w-full"
+        >
+          {isCalendarVisible ? <ChevronLeft /> : <ChevronRight />}
+          {isCalendarVisible ? "Hide Calendar" : "Show Calendar"}
+        </Button>
+        
+        {isCalendarVisible && (
+          <Card className="w-96">
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <CardTitle>Calendar</CardTitle>
+                <Select
+                  defaultValue="month"
+                  onValueChange={(value) => setCalendarView(value as 'month' | 'week')}
+                >
+                  <SelectTrigger className="w-28">
+                    <SelectValue placeholder="View" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="month">Month</SelectItem>
+                    <SelectItem value="week">Week</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {calendarView === 'month' ? (
+                <Calendar
+                  mode="single"
+                  selected={selectedDate || undefined}
+                  onSelect={handleDateSelect}
+                  className="w-full"
+                  modifiers={{
+                    assignment: (date) => {
+                      return Object.values(assignments).some(
+                        assignment => assignment.date.toDateString() === date.toDateString()
+                      );
+                    }
+                  }}
+                  modifiersStyles={{
+                    assignment: {
+                      border: '2px solid var(--primary)',
+                    }
+                  }}
+                />
+              ) : (
+                <CustomWeekView
+                  date={selectedDate || new Date()}
+                  onDateSelect={handleDateSelect}
+                  assignments={assignments}
+                  onWeekChange={handleWeekChange}
+                />
+              )}
+              <BirthdayList 
+                students={Object.values(students).flat()}
+                currentDate={selectedDate || new Date()}
+                view={calendarView}
+              />
+              <TodoList 
+                tags={tags}
+                students={students}
+                assignments={assignments}
+                onRemoveTag={handleRemoveTag}
+              />
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Right side */}
+      <div className="flex-grow space-y-4">
+        <Button
+          onClick={handleNewAssignment}
+          className="w-full"
+        >
+          Create New Assignment
+        </Button>
+        {selectedDate && (
+          <Button 
+            onClick={handleNewAssignment}
+            className="w-full"
+          >
+            Create New Assignment for {selectedDate.toLocaleDateString()}
+          </Button>
+        )}
+        {newAssignment && (
+          <Card>
+            <CardHeader>
+              <CardTitle>New Assignment for {selectedDate?.toLocaleDateString()}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Input 
+                placeholder="Assignment Name"
+                value={newAssignment?.name || ''}
+                onChange={(e) => handleAssignmentNameChange(e.target.value)}
+              />
+              <div className="border rounded-md p-4">
+                <div className="text-sm font-medium mb-2">Select Periods</div>
+                {Object.keys(students).map(periodId => (
+                  <div key={periodId} className="flex items-center gap-2 mb-2">
+                    <Checkbox 
+                      checked={newAssignment?.periods.includes(periodId)}
+                      onCheckedChange={() => handlePeriodsSelect(periodId)}
+                    />
+                    <span>Period {periodId}</span>
+                  </div>
+                ))}
+              </div>
+              <Select 
+                value={selectedType}
+                onValueChange={(value: 'Daily' | 'Assessment') => setSelectedType(value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Assignment Type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No Grouping</SelectItem>
-                  <SelectItem value="type">By Type</SelectItem>
+                  <SelectItem value="Daily">Daily</SelectItem>
+                  <SelectItem value="Assessment">Assessment</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <GradeExportDialog 
-              assignments={assignments}
-              students={students}
-              onExport={exportGrades} 
-            />
-          </div>
-          {renderAssignmentsSection()}
+              <Select
+                value={newAssignment.subject}
+                onValueChange={(value: 'Math 8' | 'Algebra I') => 
+                  setNewAssignment(prev => prev ? { ...prev, subject: value } : null)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select subject" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Math 8">Math 8</SelectItem>
+                  <SelectItem value="Algebra I">Algebra I</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button onClick={saveAssignment} className="w-full">
+                Create Assignment
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+        {/* Existing Assignments */}
+        <div className="flex gap-4 mb-4">
+          <Select
+            value={subjectFilter}
+            onValueChange={(value: 'all' | 'Math 8' | 'Algebra I') => setSubjectFilter(value)}
+          >
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Filter by subject" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Subjects</SelectItem>
+              <SelectItem value="Math 8">Math 8</SelectItem>
+              <SelectItem value="Algebra I">Algebra I</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select
+            value={dateFilter}
+            onValueChange={(value: 'asc' | 'desc' | 'none') => setDateFilter(value)}
+          >
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Sort by date" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Manual Sort</SelectItem>
+              <SelectItem value="asc">Oldest First</SelectItem>
+              <SelectItem value="desc">Newest First</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex gap-4">
+            <ColorSettings 
+              showColors={showColors}
+              colorMode={colorMode}
+              onShowColorsChange={setShowColors}
+              onColorModeChange={setColorMode}
+            />
+            <Select
+              value={groupBy}
+              onValueChange={(value: 'none' | 'type') => setGroupBy(value)}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Group by..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No Grouping</SelectItem>
+                <SelectItem value="type">By Type</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <GradeExportDialog 
+            assignments={assignments}
+            students={students}
+            onExport={exportGrades} 
+          />
+        </div>
+        {renderAssignmentsSection()}
       </div>
     </div>
-  );
+  </div>
+);
 };
 
 export default GradeBook;
