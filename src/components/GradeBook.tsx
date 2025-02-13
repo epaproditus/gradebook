@@ -24,6 +24,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { v4 as uuidv4 } from 'uuid';  // Add this import at the top
 
 // Initialize Supabase client (this is fine outside component)
 const supabase = createClient(
@@ -1021,66 +1022,65 @@ const handleGradeChange = async (assignmentId: string, periodId: string, student
     }
 
     try {
-      // Create a clean assignment ID (remove special characters)
-      const cleanName = newAssignment.name
-        .toLowerCase()
-        .replace(/[^a-z0-9-]/g, '-')
-        .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
-        .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
-
-      const assignmentId = `${format(newAssignment.date, 'yyyy-MM-dd')}-${cleanName}`;
-
-      // Create assignment data object matching the database schema
+      const assignmentId = uuidv4();
+      
+      // Log the Supabase URL and key (without the actual key value)
+      console.log('Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
+      console.log('Supabase key present:', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  
       const assignmentData = {
         id: assignmentId,
         name: newAssignment.name,
         date: format(newAssignment.date, 'yyyy-MM-dd'),
         type: selectedType,
         periods: newAssignment.periods,
-        subject: newAssignment.subject
+        subject: newAssignment.subject,
+        max_points: 100,
+        created_at: new Date().toISOString()  // Add created_at field
       };
-
-      // Log the data being sent (for debugging)
-      console.log('Saving assignment:', assignmentData);
-
+  
+      console.log('Attempting to save assignment:', assignmentData);
+  
       const { data, error } = await supabase
         .from('assignments')
         .insert([assignmentData])
         .select()
         .single();
-
+  
       if (error) {
-        console.error('Supabase error:', error);
-        throw new Error(error.message);
+        console.error('Detailed Supabase error:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        });
+        throw error;
       }
-
-      if (!data) {
-        throw new Error('No data returned from insert');
-      }
-
-      // Update local state with the new assignment
+  
+      console.log('Assignment saved successfully:', data);
+  
+      // Update local state
       setAssignments(prev => ({
         ...prev,
         [assignmentId]: {
-          ...newAssignment,
+          ...assignmentData,
           date: newAssignment.date
         }
       }));
-
-      // Add to assignment order
+  
       setAssignmentOrder(prev => [...prev, assignmentId]);
-
-      // Clear form
       setNewAssignment(null);
       setSelectedDate(null);
-
-      // Show success message
+  
       alert('Assignment created successfully!');
-
+  
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error occurred';
-      alert(`Failed to create assignment: ${message}`);
-      console.error('Error saving assignment:', error);
+      console.error('Full error object:', error);
+      if (error instanceof Error) {
+        alert(`Failed to create assignment: ${error.message}`);
+      } else {
+        alert('Failed to create assignment: Unexpected error occurred');
+      }
     }
   };
 
