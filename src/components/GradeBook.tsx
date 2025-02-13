@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { X, Save, ChevronDown, ChevronUp, Download, ChevronLeft, ChevronRight, PlusCircle } from 'lucide-react';
+import { X, Save, ChevronDown, ChevronUp, Download, ChevronLeft, ChevronRight, PlusCircle, RefreshCw } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
@@ -17,6 +17,7 @@ import { startOfWeek, addDays, isSameDay, format } from 'date-fns';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import { Calendar as CalendarIcon } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { toast } from "@/components/ui/use-toast";
 import CustomWeekView from './WeekView'; // Update import name to avoid confusion
 import { Assignment, Student, AssignmentTag, GradeData } from '@/types/gradebook';
 import {
@@ -25,6 +26,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { v4 as uuidv4 } from 'uuid';  // Add this import at the top
+import { useSession } from 'next-auth/react';
 
 // Initialize Supabase client (this is fine outside component)
 const supabase = createClient(
@@ -671,6 +673,8 @@ const GradeBook: FC = () => {
   const [editingAssignment, setEditingAssignment] = useState<string | null>(null);
   const [groupBy, setGroupBy] = useState<'none' | 'type'>('none');
   const [showImport, setShowImport] = useState(false);
+  const [syncingAssignments, setSyncingAssignments] = useState<Record<string, boolean>>({});
+  const { data: session } = useSession();
 
   // Fetch students from Supabase
   useEffect(() => {
@@ -1724,6 +1728,30 @@ const handleGradeChange = async (assignmentId: string, periodId: string, student
                     students={students}
                     grades={grades}
                   />
+                  {assignment.google_classroom_id && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => syncGradesToClassroom(assignmentId, periodId)}
+                      disabled={syncingAssignments[assignmentId]}
+                      className="ml-2"
+                    >
+                      <RefreshCw className={cn(
+                        "h-4 w-4 mr-2",
+                        syncingAssignments[assignmentId] && "animate-spin"
+                      )} />
+                      {syncingAssignments[assignmentId] ? 'Syncing...' : 'Sync to Classroom'}
+                    </Button>
+                  )}
+                  <div className="text-xs text-muted-foreground">
+                    <pre className="bg-slate-50 p-2 rounded">
+                      {JSON.stringify({
+                        hasGoogleId: !!assignment.google_classroom_id,
+                        googleId: assignment.google_classroom_id,
+                        isLinked: !!assignment.google_classroom_id
+                      }, null, 2)}
+                    </pre>
+                  </div>
                   <Button
                     onClick={() => saveGrades(assignmentId)}
                     className="flex items-center gap-2"
@@ -1914,6 +1942,74 @@ const handleGradeChange = async (assignmentId: string, periodId: string, student
     }));
   };
 
+  const syncGradesToClassroom = async (assignmentId: string, periodId: string) => {
+    const assignment = assignments[assignmentId];
+    
+    if (!assignment.google_classroom_id) {
+      toast({
+        variant: "destructive", 
+        title: "Cannot sync grades",
+        description: "This assignment is not linked to Google Classroom"
+      });
+      return;
+    }
+  
+    try {
+      setSyncingAssignments(prev => ({ ...prev, [assignmentId]: true }));
+  
+      const { data: studentMappings, error: mappingError } = await supabase
+        .from('student_mappings')
+        .select('student_id, google_id')
+        .eq('period', periodId);
+  
+      if (mappingError) throw new Error('Failed to get student mappings');
+  
+      const studentIdToGoogleId = Object.fromEntries(
+        studentMappings.map(m => [m.student_id.toString(), m.google_id])
+      );
+  
+      const periodGrades = grades[assignmentId]?.[periodId] || {};
+      const googleGrades: Record<string, string> = {};
+  
+      Object.entries(periodGrades).forEach(([studentId, grade]) => {
+        const googleId = studentIdToGoogleId[studentId];
+        if (googleId) {
+          googleGrades[googleId] = grade;
+        }
+      });
+  
+      if (Object.keys(googleGrades).length === 0) {
+        throw new Error('No mapped students found for sync');
+      }
+  
+      const response = await fetch(`/api/classroom/grades/${assignment.google_classroom_id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grades: googleGrades })
+      });
+  
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to sync grades');
+      }
+  
+      toast({
+        title: "Grades synced",
+        description: `Synced ${Object.keys(googleGrades).length} grades to Google Classroom`
+      });
+  
+    } catch (error) {
+      console.error('Error syncing grades:', error);
+      toast({
+        variant: "destructive",
+        title: "Failed to sync grades",
+        description: error instanceof Error ? error.message : 'Could not sync with Google Classroom'
+      });
+    } finally {
+      setSyncingAssignments(prev => ({ ...prev, [assignmentId]: false }));
+    }
+  };
+
   return (
     <div className="p-6">
       <div className="flex gap-6">
@@ -1933,7 +2029,7 @@ const handleGradeChange = async (assignmentId: string, periodId: string, student
               <CardHeader>
                 <div className="flex justify-between items-center">
                   <CardTitle>Calendar</CardTitle>
-                  <Select 
+                  <Select
                     defaultValue="month"
                     onValueChange={(value) => setCalendarView(value as 'month' | 'week')}
                   >
@@ -1975,7 +2071,7 @@ const handleGradeChange = async (assignmentId: string, periodId: string, student
                     onWeekChange={handleWeekChange}
                   />
                 )}
-                <BirthdayList
+                <BirthdayList 
                   students={Object.values(students).flat()}
                   currentDate={selectedDate || new Date()}
                   view={calendarView}
@@ -2000,7 +2096,7 @@ const handleGradeChange = async (assignmentId: string, periodId: string, student
             Create New Assignment
           </Button>
           {selectedDate && (
-            <Button
+            <Button 
               onClick={handleNewAssignment}
               className="w-full"
             >
@@ -2013,7 +2109,7 @@ const handleGradeChange = async (assignmentId: string, periodId: string, student
                 <CardTitle>New Assignment for {selectedDate?.toLocaleDateString()}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Input
+                <Input 
                   placeholder="Assignment Name"
                   value={newAssignment?.name || ''}
                   onChange={(e) => handleAssignmentNameChange(e.target.value)}
@@ -2077,7 +2173,6 @@ const handleGradeChange = async (assignmentId: string, periodId: string, student
                 <SelectItem value="Algebra I">Algebra I</SelectItem>
               </SelectContent>
             </Select>
-
             <Select
               value={dateFilter}
               onValueChange={(value: 'asc' | 'desc' | 'none') => setDateFilter(value)}
@@ -2114,7 +2209,7 @@ const handleGradeChange = async (assignmentId: string, periodId: string, student
               </Select>
             </div>
             <GradeExportDialog 
-              assignments={assignments} 
+              assignments={assignments}
               students={students}
               onExport={exportGrades} 
             />
@@ -2125,5 +2220,6 @@ const handleGradeChange = async (assignmentId: string, periodId: string, student
     </div>
   );
 };
+
 export default GradeBook;
 

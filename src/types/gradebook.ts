@@ -4,6 +4,8 @@ export interface Assignment {
   periods: string[];
   type: 'Daily' | 'Assessment';
   subject: 'Math 8' | 'Algebra I';
+  google_classroom_id?: string;
+  google_course_id?: string;
 }
 
 export interface Student {

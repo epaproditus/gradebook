@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabaseConfig';
+import { getServerSession } from 'next-auth';
+import { NextRequest } from 'next/server';
 
 export async function POST(
   request: Request,
@@ -48,5 +50,72 @@ export async function POST(
   } catch (error) {
     console.error('Grade sync error:', error);
     return NextResponse.json({ error: "Failed to sync grade" }, { status: 500 });
+  }
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { courseId: string; assignmentId: string } }
+) {
+  try {
+    console.log('Received sync request for:', params);
+
+    const session = await getServerSession();
+    if (!session?.accessToken) {
+      console.log('No access token found');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { grades } = await request.json();
+    console.log('Received grades to sync:', {
+      studentCount: Object.keys(grades).length,
+      courseId: params.courseId,
+      assignmentId: params.assignmentId
+    });
+
+    // Map grades to Google Classroom format
+    const submissions = Object.entries(grades).map(([userId, grade]) => ({
+      userId,
+      draftGrade: parseInt(String(grade)),
+      assignedGrade: parseInt(String(grade))
+    }));
+
+    console.log('Submitting to Google Classroom:', { submissionCount: submissions.length });
+
+    const response = await fetch(
+      `https://classroom.googleapis.com/v1/courses/${params.courseId}/courseWork/${params.assignmentId}/studentSubmissions:modifyGrades`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ submissions }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Google API Error:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorText
+      });
+      throw new Error(`Google Classroom API error: ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log('Sync successful:', result);
+
+    return NextResponse.json({ 
+      message: 'Grades synced successfully',
+      result 
+    });
+  } catch (error) {
+    console.error('Error syncing grades:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to sync grades' }, 
+      { status: 500 }
+    );
   }
 }
