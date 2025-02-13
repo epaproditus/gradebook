@@ -247,3 +247,14 @@ A Next.js application that manages teacher gradebooks with Google Classroom inte
 - `/supabase/config.toml` - Supabase configuration
 - `/supabase/queries/` - Stored procedures and complex queries
 
+## Version Control Notes
+- Use `git stash` to temporarily store local changes
+- Configure rebase strategy for pulls: `git config pull.rebase true`
+- Handle divergent branches by preserving local work before syncing
+- Maintain backup files for critical components
+- Workflow for pushing local changes:
+  1. Commit local changes first
+  2. Pull with rebase to preserve commit history
+  3. Resolve any conflicts
+  4. Push to remote branch
+
