@@ -1,38 +1,71 @@
-import { NextResponse, NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
+import { google } from 'googleapis';
 import { supabase } from '@/lib/supabaseConfig';
-import { getServerSession } from 'next-auth';
-import { getToken } from 'next-auth/jwt';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
 
-export async function POST(
-  request: Request,
-  context: { params: Promise<{ courseId: string; assignmentId: string }> }
-) {
-  const { courseId, assignmentId } = await context.params;
-  const authHeader = request.headers.get("authorization");
-  
-  if (!authHeader) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+interface GradeSubmission {
+  studentId: string;
+  grade: number;
+  period: string;
+}
 
+export async function POST(request: Request, context: { params: { courseId: string; assignmentId: string } }) {
   try {
+    const { courseId, assignmentId } = context.params;
+    const authHeader = request.headers.get("authorization");
+    
+    if (!authHeader) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     const { gradeId, grade } = await request.json();
 
-    // Get the grade from our database
-    const { data: gradeData } = await supabase
+    // First, get the student's Google ID from mappings
+    const { data: gradeData, error: gradeError } = await supabase
       .from('grades')
-      .select('*, students(google_id)')
+      .select(`
+        *,
+        student_mappings!inner (
+          google_id
+        )
+      `)
       .eq('id', gradeId)
       .single();
 
-    if (!gradeData?.students?.google_id) {
-      throw new Error('Student not mapped to Google Classroom');
+    if (gradeError || !gradeData?.student_mappings?.google_id) {
+      return NextResponse.json({ 
+        error: 'No valid mapping found',
+        details: gradeError || 'Missing Google ID'
+      }, { status: 404 });
     }
 
-    // Update grade in Google Classroom
-    const res = await fetch(
-      `https://classroom.googleapis.com/v1/courses/${courseId}/courseWork/${assignmentId}/studentSubmissions/lookup?userId=${gradeData.students.google_id}`,
+    // First, get the submission ID using the student's Google ID
+    const submissionRes = await fetch(
+      `https://classroom.googleapis.com/v1/courses/${courseId}/courseWork/${assignmentId}/studentSubmissions?userId=${gradeData.student_mappings.google_id}`,
       {
-        method: 'POST',
+        headers: {
+          Authorization: authHeader,
+          'Content-Type': 'application/json',
+        }
+      }
+    );
+
+    const submissionData = await submissionRes.json();
+    
+    if (!submissionData.studentSubmissions?.[0]?.id) {
+      console.error('No submission found:', submissionData);
+      return NextResponse.json({ 
+        error: 'No submission found for student',
+        courseId,
+        assignmentId,
+        googleId: gradeData.student_mappings.google_id
+      }, { status: 404 });
+    }
+
+    // Now PATCH the submission with the grade
+    const res = await fetch(
+      `https://classroom.googleapis.com/v1/courses/${courseId}/courseWork/${assignmentId}/studentSubmissions/${submissionData.studentSubmissions[0].id}`,
+      {
+        method: 'PATCH',
         headers: {
           Authorization: authHeader,
           'Content-Type': 'application/json',
@@ -44,153 +77,124 @@ export async function POST(
       }
     );
 
+    const data = await res.json();
+
     if (!res.ok) {
-      throw new Error('Failed to sync grade to Google Classroom');
+      console.error('Google API Error:', data);
+      throw new Error(data.error?.message || 'Failed to sync grade');
     }
 
-    return NextResponse.json({ success: true });
+    // Update local grade status
+    await supabase
+      .from('grades')
+      .update({ 
+        synced_to_google: true,
+        last_sync: new Date().toISOString()
+      })
+      .eq('id', gradeId);
+
+    return NextResponse.json({ 
+      success: true,
+      grade,
+      submissionId: data.id
+    });
+
   } catch (error) {
     console.error('Grade sync error:', error);
-    return NextResponse.json({ error: "Failed to sync grade" }, { status: 500 });
+    return NextResponse.json({ 
+      error: "Failed to sync grade",
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 }
 
-export async function PUT(
-  request: Request,
-  context: { params: Promise<{ courseId: string; assignmentId: string }> }
-) {
+export async function PUT(request: Request, context: { params: Promise<{ courseId: string; assignmentId: string }> }) {
   try {
-    // Handle all async operations first
-    const [token, { courseId, assignmentId }, { grades }] = await Promise.all([
-      getToken({ req: request as any }),
-      context.params,
-      request.json()
-    ]);
-
-    if (!token?.accessToken) {
-      return Response.json({ error: 'Unauthorized - No token' }, { status: 401 });
+    const session = await getServerSession(authOptions);
+    const params = await context.params;
+    
+    if (!session?.accessToken) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    console.log('Processing grades:', {
-      courseId,
-      assignmentId,
-      sampleGrades: Object.entries(grades).slice(0, 3)
-    });
+    const { grades } = await request.json() as { grades: { studentId: number, grade: number, period: string }[] };
 
-    // Get student mappings with direct Supabase client
-    const { data: studentMappings, error: mappingError } = await supabase
-      .from('students')
-      .select('id, google_id, name')
-      .in('id', Object.keys(grades));
+    // Get the Google IDs directly from student_mappings
+    const { data: mappings, error: mappingError } = await supabase
+      .from('student_mappings')
+      .select('student_id, google_id')
+      .eq('period', grades[0].period)
+      .in('student_id', grades.map(g => g.studentId));
 
-    if (mappingError || !studentMappings?.length) {
-      console.error('Student mapping error:', {
-        error: mappingError,
-        studentIds: Object.keys(grades),
-        foundMappings: studentMappings?.length || 0
-      });
-      return Response.json({ 
-        error: 'Failed to find Google Classroom mappings for students',
-        details: {
-          lookingFor: Object.keys(grades),
-          found: studentMappings?.map(s => ({ id: s.id, name: s.name }))
-        }
-      }, { status: 400 });
+    if (mappingError) {
+      console.error('Failed to fetch mappings:', mappingError);
+      return NextResponse.json({ error: 'Failed to fetch student mappings' }, { status: 500 });
     }
 
-    // Create Google ID mapping
-    const studentIdToGoogleId = studentMappings.reduce((acc, student) => {
-      if (student.google_id) {
-        acc[student.id] = student.google_id;
-      }
-      return acc;
-    }, {} as Record<string, string>);
-
-    // Get submissions from Google Classroom
-    const listResponse = await fetch(
-      `https://classroom.googleapis.com/v1/courses/${courseId}/courseWork/${assignmentId}/studentSubmissions`,
-      {
-        headers: {
-          'Authorization': `Bearer ${token.accessToken}`,
-          'Content-Type': 'application/json',
-        }
-      }
+    // Create a lookup map for quick access
+    const googleIdMap = new Map(
+      mappings?.map(m => [m.student_id, m.google_id]) || []
     );
 
-    if (!listResponse.ok) {
-      throw new Error(`Failed to fetch submissions: ${await listResponse.text()}`);
-    }
+    // Map grades to Google IDs
+    const gradesToSync = grades
+      .filter(grade => googleIdMap.has(grade.studentId))
+      .map(grade => ({
+        studentId: googleIdMap.get(grade.studentId)!, // Use the Google ID from mappings
+        grade: grade.grade
+      }));
 
-    const { studentSubmissions } = await listResponse.json();
-
-    // Process each grade
-    const updatePromises = Object.entries(grades).map(async ([studentId, grade]) => {
-      const googleId = studentIdToGoogleId[studentId];
-      if (!googleId) {
-        console.warn(`No Google ID found for student ${studentId}`);
-        return null;
-      }
-
-      const submission = studentSubmissions?.find(
-        (sub: any) => sub.userId === googleId
-      );
-
-      if (!submission) {
-        console.warn(`No submission found for student ${studentId} (Google ID: ${googleId})`);
-        return null;
-      }
-
-      console.log('Updating grade:', {
-        studentId,
-        googleId,
-        submissionId: submission.id,
-        grade,
-        studentName: studentMappings.find(s => s.id === studentId)?.name
-      });
-
-      // Update grade in Google Classroom
-      const response = await fetch(
-        `https://classroom.googleapis.com/v1/courses/${courseId}/courseWork/${assignmentId}/studentSubmissions/${submission.id}`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${token.accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            draftGrade: parseFloat(String(grade)),
-            assignedGrade: parseFloat(String(grade)),
-            updateMask: 'assignedGrade,draftGrade'
-          })
-        }
-      );
-
-      if (!response.ok) {
-        const error = await response.json();
-        console.error('Grade update failed:', error);
-        throw new Error(`Failed to update grade for student ${studentId}`);
-      }
-
-      return response.json();
+    console.log('Syncing grades with mappings:', {
+      totalGrades: grades.length,
+      foundMappings: mappings?.length || 0,
+      gradesToSync: gradesToSync.length
     });
 
-    const results = (await Promise.all(updatePromises)).filter(Boolean);
+    // Initialize Classroom API and sync grades
+    const classroom = google.classroom({ 
+      version: 'v1',
+      headers: { Authorization: `Bearer ${session.accessToken}` }
+    });
 
-    return Response.json({ 
-      message: 'Grades synced successfully',
-      updated: results.length,
-      total: Object.keys(grades).length,
-      mappingStats: {
-        studentsWithGoogleIds: Object.keys(studentIdToGoogleId).length,
-        totalStudents: studentMappings.length
-      }
+    // Submit grades with error tracking
+    const results = await Promise.allSettled(
+      gradesToSync.map(async (grade) => {
+        try {
+          return await classroom.courses.courseWork.studentSubmissions.patch({
+            courseId: params.courseId,
+            courseWorkId: params.assignmentId,
+            id: `-`,
+            updateMask: 'assignedGrade',
+            requestBody: {
+              assignedGrade: grade.grade,
+              draftGrade: grade.grade
+            }
+          });
+        } catch (error) {
+          console.error('Grade submission error:', error);
+          return null;
+        }
+      })
+    );
+
+    const successful = results.filter(r => r.status === 'fulfilled' && r.value).length;
+    const failed = grades.length - successful;
+
+    return NextResponse.json({
+      success: true,
+      gradesSubmitted: successful,
+      gradesFailed: failed,
+      totalGrades: grades.length
     });
 
   } catch (error) {
-    console.error('Error syncing grades:', error);
-    return Response.json(
-      { error: error instanceof Error ? error.message : 'Failed to sync grades' },
-      { status: error instanceof Error && error.message.includes('Unauthorized') ? 401 : 500 }
+    console.error('Grade sync error:', error);
+    return NextResponse.json(
+      { 
+        error: 'Failed to sync grades',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
+      { status: 500 }
     );
   }
 }

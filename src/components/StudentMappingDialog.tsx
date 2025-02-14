@@ -1,96 +1,145 @@
 import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { toast } from '@/components/ui/use-toast';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/lib/supabaseConfig';
 
-interface StudentMapping {
-  googleId: string;
-  googleName: string;
-  googleEmail: string;
-  gradebookStudentId?: string;
+interface StudentMappingProps {
+  courseId: string;
+  periodId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
-export function StudentMappingDialog({ 
-  open, 
-  courseId, 
-  onClose, 
-  onSave 
-}: { 
-  open: boolean; 
-  courseId: string; 
-  onClose: () => void;
-  onSave: (mappings: StudentMapping[]) => void;
-}) {
-  const [mappings, setMappings] = useState<StudentMapping[]>([]);
-  const [gradebookStudents, setGradebookStudents] = useState<any[]>([]);
+export function StudentMappingDialog({ courseId, periodId, open, onOpenChange }: StudentMappingProps) {
+  const [mappings, setMappings] = useState<any[]>([]);
+  const [googleStudents, setGoogleStudents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const loadData = async () => {
-      // Load gradebook students
-      const { data: students } = await supabase
-        .from('students')
-        .select('*')
-        .order('name');
-      
-      setGradebookStudents(students || []);
-    };
-
     if (open) {
-      loadData();
+      fetchCurrentMappings();
     }
   }, [open]);
 
+  const fetchCurrentMappings = async () => {
+    setLoading(true);
+    try {
+      // First fetch local students
+      const { data: localStudents, error: localError } = await supabase
+        .from('students')
+        .select('id, name')
+        .eq('course_id', courseId)
+        .eq('period', periodId); // Changed from period_id to period to match schema
+
+      if (localError) throw new Error(localError.message);
+
+      // Then fetch Google students
+      const response = await fetch(`/api/classroom/${courseId}/students`);
+      const { students: googleStudents } = await response.json();
+
+      // Get existing mappings
+      const { data: existingMappings, error: mappingError } = await supabase
+        .from('student_mappings')
+        .select('*')
+        .eq('course_id', courseId)
+        .eq('period', periodId); // Changed from period_id to period
+
+      if (mappingError) throw new Error(mappingError.message);
+
+      // Create mapping objects
+      const mappings = localStudents?.map(student => ({
+        localStudent: student,
+        googleId: existingMappings?.find(m => m.student_id === student.id)?.google_id || null
+      })) || [];
+
+      setMappings(mappings);
+      setGoogleStudents(googleStudents || []);
+
+    } catch (error) {
+      console.error('Mapping fetch error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch student mappings",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateMapping = async (localStudentId: number, googleId: string) => {
+    try {
+      const { error: updateError } = await supabase
+        .from('student_mappings')
+        .upsert({
+          student_id: localStudentId,
+          google_id: googleId,
+          course_id: courseId,
+          period: periodId, // Changed from period_id to period
+          last_synced: new Date().toISOString()
+        }, {
+          onConflict: 'student_id,course_id'
+        });
+
+      if (updateError) throw updateError;
+      
+      toast({
+        title: "Success",
+        description: "Student mapping updated"
+      });
+      
+      fetchCurrentMappings();
+    } catch (error) {
+      console.error('Update error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update mapping",
+        variant: "destructive"
+      });
+    }
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Map Students</DialogTitle>
+          <DialogTitle>Student Mappings</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-          <table className="w-full">
-            <thead>
-              <tr>
-                <th>Google Classroom Student</th>
-                <th>Gradebook Student</th>
-              </tr>
-            </thead>
-            <tbody>
+        <ScrollArea className="h-[500px] pr-4">
+          {loading ? (
+            <div>Loading...</div>
+          ) : (
+            <div className="space-y-4">
               {mappings.map((mapping) => (
-                <tr key={mapping.googleId}>
-                  <td>
-                    {mapping.googleName}
-                    <br />
-                    <span className="text-sm text-gray-500">{mapping.googleEmail}</span>
-                  </td>
-                  <td>
-                    <Select
-                      value={mapping.gradebookStudentId || ''}
-                      onValueChange={(value) => {
-                        setMappings(mappings.map(m => 
-                          m.googleId === mapping.googleId 
-                            ? { ...m, gradebookStudentId: value }
-                            : m
-                        ));
-                      }}
-                    >
-                      <option value="">Select student...</option>
-                      {gradebookStudents.map(student => (
-                        <option key={student.id} value={student.id}>
-                          {student.name}
-                        </option>
+                <div key={mapping.localStudent.id} className="flex items-center justify-between p-2 border rounded">
+                  <div>
+                    <p className="font-medium">{mapping.localStudent.name}</p>
+                    <p className="text-sm text-gray-500">Local ID: {mapping.localStudent.id}</p>
+                  </div>
+                  <Select
+                    value={mapping.googleId || ''}
+                    onValueChange={(value) => handleUpdateMapping(mapping.localStudent.id, value)}
+                  >
+                    <SelectTrigger className="w-[250px]">
+                      <SelectValue placeholder="Select Google student..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Not mapped</SelectItem>
+                      {googleStudents.map((student) => (
+                        <SelectItem key={student.id} value={student.id}>
+                          {student.name.fullName} ({student.emailAddress})
+                        </SelectItem>
                       ))}
-                    </Select>
-                  </td>
-                </tr>
+                    </SelectContent>
+                  </Select>
+                </div>
               ))}
-            </tbody>
-          </table>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={onClose}>Cancel</Button>
-            <Button onClick={() => onSave(mappings)}>Save Mappings</Button>
-          </div>
-        </div>
+            </div>
+          )}
+        </ScrollArea>
       </DialogContent>
     </Dialog>
   );

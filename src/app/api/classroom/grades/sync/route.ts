@@ -1,43 +1,49 @@
 import { getServerSession } from 'next-auth';
 import { NextResponse } from 'next/server';
-import { syncGradeToClassroom } from '@/lib/classroom/gradeSync';
-import { StudentSubmissionPatchRequest } from '@/lib/classroom/types';
+import { google } from 'googleapis';
 
 export async function POST(request: Request) {
-  const session = await getServerSession();
-  
-  if (!session?.user) {
-    return NextResponse.json(
-      { error: 'Unauthorized' },
-      { status: 401 }
-    );
-  }
-
   try {
-    const body: StudentSubmissionPatchRequest = await request.json();
-
-    // Validate required fields
-    if (!body.courseId || !body.courseWorkId || !body.id) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      );
+    const session = await getServerSession();
+    if (!session?.accessToken) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Need either draftGrade or assignedGrade
-    if (body.draftGrade === undefined && body.assignedGrade === undefined) {
-      return NextResponse.json(
-        { error: 'Either draftGrade or assignedGrade must be provided' },
-        { status: 400 }
-      );
-    }
+    const { submissions } = await request.json();
+    
+    // Setup Google Classroom client
+    const classroom = google.classroom({ version: 'v1', headers: {
+      Authorization: `Bearer ${session.accessToken}`
+    }});
 
-    const result = await syncGradeToClassroom(session, body);
+    // Process submissions in parallel
+    const results = await Promise.all(
+      submissions.map(async (sub: any) => {
+        try {
+          await classroom.courses.courseWork.studentSubmissions.patch({
+            courseId: sub.courseId,
+            courseWorkId: sub.courseWorkId,
+            id: sub.userId,
+            updateMask: 'assignedGrade,draftGrade',
+            requestBody: {
+              assignedGrade: sub.assignedGrade,
+              draftGrade: sub.assignedGrade
+            }
+          });
+          return { success: true, userId: sub.userId };
+        } catch (err) {
+          console.error('Failed to update submission:', err);
+          return { success: false, userId: sub.userId, error: err };
+        }
+      })
+    );
 
-    return NextResponse.json(result);
-  } catch (error: any) {
+    return NextResponse.json({ results });
+
+  } catch (error) {
+    console.error('Grade sync error:', error);
     return NextResponse.json(
-      { error: error.message },
+      { error: 'Failed to sync grades' },
       { status: 500 }
     );
   }

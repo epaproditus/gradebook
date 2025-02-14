@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { useSession } from 'next-auth/react';
 import LoadingSpinner from './ui/loading-spinner';
 import { supabase } from '@/lib/supabaseConfig';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from '@/components/ui/use-toast';
 
 interface RosterStudent {
   id: string;
@@ -45,6 +45,30 @@ interface StudentMatch {
   manuallyMatched?: boolean;
 }
 
+interface ExistingMapping {
+  google_id: string;
+  student_id: string;
+  period: string;
+}
+
+interface StudentMappingWithDetails {
+  id: string;
+  google_id: string;
+  period: string;
+  students: RosterStudent;
+}
+
+interface StudentMappingResult {
+  id: string;
+  google_id: string;
+  google_email: string;
+  students: {
+    id: string;
+    name: string;
+    class_period: string;
+  };
+}
+
 function normalizeString(str: string): string {
   return str
     .toLowerCase()
@@ -75,12 +99,12 @@ function getNameMatchScore(googleName: { givenName: string; familyName: string }
   }
 }
 
+// Update the name extraction function
 function extractNameParts(fullName: string): [string, string] {
-  const parts = fullName.split(',').map(s => s.trim().toLowerCase());
+  const parts = fullName.split(',').map((n: string) => n.trim().toLowerCase());
   if (parts.length === 2) {
-    return [parts[0], parts[1]]; // lastName, firstName
+    return [parts[0], parts[1]];
   }
-  // Fallback: treat the whole thing as lastName if no comma
   return [fullName.toLowerCase(), ''];
 }
 
@@ -93,6 +117,160 @@ interface DialogProps {
 
 const SUBJECTS = ['Math 8', 'Algebra I'] as const;
 type Subject = typeof SUBJECTS[number];
+
+interface GoogleStudentMatch {
+  googleId: string;
+  googleName: string;
+  googleEmail: string | undefined; // Make email optional to match StudentMatch
+}
+
+interface LocalStudent {
+  id: string;
+  name: string;
+}
+
+interface Grade {
+  student_id: string;
+  score: number;
+  period: string;
+}
+
+// 1. First, update the interface to match the database response
+interface StudentMappingResponse {
+  id: string;
+  google_id: string;
+  google_email: string;
+  period: string;
+  students: {
+    id: string;
+    name: string;
+    class_period: string;
+    email?: string;
+  }[];
+}
+
+// First, add a debug logging utility
+function debugLog(message: string, data: any) {
+  console.log(`[CourseSetup Debug] ${message}:`, data);
+}
+
+// 1. Add type for student mapping result near other interfaces
+interface StudentDBMapping {
+  id: string;
+  google_id: string;
+  google_email: string | null;
+  students: {
+    id: string;
+    name: string;
+    class_period: string;
+  };
+}
+
+// 1. Add this interface at the top with other interfaces
+interface StudentMapping {
+  id: string;
+  google_id: string;
+  google_email: string | null;
+  students: {
+    id: string;
+    name: string;
+    class_period: string;
+  };
+}
+
+// 1. First consolidate interfaces
+interface StudentMappingBase {
+  id: string;
+  google_id: string;
+  google_email: string | null;
+  students: {
+    id: string;
+    name: string;
+    class_period: string;
+  };
+}
+
+// Add this near the top with other utility functions
+function matchStudentNames(
+  googleName: { givenName: string; familyName: string },
+  rosterName: string
+): boolean {
+  // Split roster name (format: "LastName, FirstName")
+  const [rosterLast = '', rosterFirst = ''] = rosterName.split(',').map(n => n.trim().toLowerCase());
+  const googleFirst = googleName.givenName.toLowerCase();
+  const googleLast = googleName.familyName.toLowerCase();
+
+  // Debug log the comparison
+  console.log('Comparing names:', {
+    google: { first: googleFirst, last: googleLast },
+    roster: { first: rosterFirst, last: rosterLast }
+  });
+
+  return googleFirst.includes(rosterFirst) || rosterFirst.includes(googleFirst) &&
+         googleLast.includes(rosterLast) || rosterLast.includes(googleLast);
+}
+
+const ERROR_MESSAGES = {
+  NO_STUDENTS: 'No students found in this period',
+  FETCH_ERROR: 'Failed to load students',
+  MAPPING_ERROR: 'Failed to create student mappings',
+  SETUP_ERROR: 'Failed to complete setup'
+} as const;
+
+function getLastName(fullName: string): string {
+  // For roster names (LastName, FirstName format)
+  if (fullName.includes(',')) {
+    return fullName.split(',')[0].trim().toLowerCase();
+  }
+  // For Google names (FirstName LastName format)
+  return fullName.split(' ').slice(-1)[0].trim().toLowerCase();
+}
+
+function sortByLastName<T extends { name: string }>(students: T[]): T[] {
+  return [...students].sort((a, b) => getLastName(a.name).localeCompare(getLastName(b.name)));
+}
+
+// Update the name matching utilities
+function getFirstLastName(fullName: string): string {
+  // For roster names (LastName LastName, FirstName format)
+  if (fullName.includes(',')) {
+    const [lastNames] = fullName.split(',');
+    // Get just the first last name
+    return lastNames.split(' ')[0].toLowerCase().trim();
+  }
+  // For Google names (FirstName LastName LastName format)
+  const nameParts = fullName.split(' ');
+  // Get the first last name (first word after given name)
+  return nameParts[1]?.toLowerCase().trim() || '';
+}
+
+// Add this near other utility functions at the top
+function getCompoundLastName(fullName: string): string {
+  // For roster names in "LastName LastName, FirstName" format
+  if (fullName.includes(',')) {
+    const [lastNames] = fullName.split(',');
+    return lastNames.split(' ')[0].toLowerCase().trim();
+  }
+  // For Google names in "FirstName LastName LastName" format
+  const parts = fullName.split(' ');
+  if (parts.length > 2) {
+    // Get the first of the last names
+    return parts[1].toLowerCase().trim();
+  }
+  // Default to last word as last name
+  return parts[parts.length - 1].toLowerCase().trim();
+}
+
+// Add this utility function near the top with other utilities
+function removeDuplicateMappings(mappings: any[]) {
+  const seen = new Set();
+  return mappings.filter(mapping => {
+    const key = `${mapping.student_id}-${mapping.period}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 export function CourseSetupDialog({ 
   courseId, 
@@ -114,6 +292,16 @@ export function CourseSetupDialog({
   const [selectedSubject, setSelectedSubject] = useState<Subject>('Math 8');
   const [localStudents, setLocalStudents] = useState<any[]>([]);
   const [mappings, setMappings] = useState<Record<string, string>>({});
+  const [courseDetails, setCourseDetails] = useState<any>(null);
+  const [currentMappings, setCurrentMappings] = useState<{
+    google: string;
+    local: string;
+    googleName: string;
+    localName: string;
+  }[]>([]);
+  const [loadingMappings, setLoadingMappings] = useState(false);
+  const [sortedGoogleStudents, setSortedGoogleStudents] = useState<StudentMatch[]>([]);
+  const [sortedRosterStudents, setSortedRosterStudents] = useState<RosterStudent[]>([]);
 
   // Add helper function for period display
   const formatPeriodDisplay = (period: string) => {
@@ -179,15 +367,80 @@ export function CourseSetupDialog({
     }
   }, [courseId, open]);
 
+  const loadStudents = async () => {
+    if (!period || !session?.accessToken) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // 1. Get Google Classroom students first
+      const response = await fetch(`/api/classroom/${courseId}/students`, {
+        headers: {
+          'Authorization': `Bearer ${session.accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch Google Classroom students');
+      }
+
+      const googleData = await response.json();
+      
+      if (!googleData.students?.length) {
+        setError(ERROR_MESSAGES.NO_STUDENTS);
+        return;
+      }
+
+      // 2. Get gradebook students
+      const { data: gradebookStudents, error: rosterError } = await supabase
+        .from('students')
+        .select('*')
+        .eq('class_period', period);
+
+      if (rosterError) throw rosterError;
+
+      // Debug log the data
+      console.log('Data loaded:', {
+        google: googleData.students.length,
+        gradebook: gradebookStudents?.length,
+        period
+      });
+
+      // 3. Create initial matched students array
+      const matchedStudents = googleData.students.map((googleStudent: GoogleClassroomStudent): StudentMatch => ({
+        googleId: googleStudent.userId,
+        googleEmail: googleStudent.profile?.emailAddress,
+        googleName: googleStudent.profile?.name.fullName,
+        matchedStudent: undefined,
+        manuallyMatched: false
+      }));
+
+      setRosterStudents(gradebookStudents || []);
+      setStudents(matchedStudents);
+      
+    } catch (error) {
+      console.error('Load error:', error);
+      setError(error instanceof Error ? error.message : ERROR_MESSAGES.FETCH_ERROR);
+      
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to load students. Please try again."
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     async function loadStudents() {
       if (!period) return;
       
       setLoading(true);
       try {
-        console.log('Loading students for period:', period);
-
-        // First check if period is already mapped
+        // 1. Check if period is already mapped
         const { data: existingMapping } = await supabase
           .from('course_mappings')
           .select('*')
@@ -195,82 +448,92 @@ export function CourseSetupDialog({
           .eq('period', period)
           .single();
 
-        if (existingMapping) {
-          // Load existing mappings
-          const { data: mappedStudents } = await supabase
-            .from('student_mappings')
-            .select(`
-              *,
-              students (*)
-            `)
-            .eq('period', period);
-
-          // Set existing mappings
-          if (mappedStudents?.length) {
-            setStudents(mappedStudents.map(m => ({
-              googleId: m.google_id,
-              googleEmail: m.google_email,
-              googleName: m.students.name,
-              matchedStudent: m.students,
-              manuallyMatched: true
-            })));
-          }
+        if (existingMapping?.setup_completed) {
+          toast({
+            title: "Already Mapped",
+            description: `This course is already mapped to period ${period}. You can update the existing mapping.`
+          });
+          setSetupStatus('existing');
+          return;
         }
 
-        // Fetch fresh Google Classroom data
-        const res = await fetch(`/api/classroom/${courseId}/students`, {
+        // 2. Fetch roster students first
+        const { data: gradebookStudents } = await supabase
+          .from('students')
+          .select('*')
+          .eq('class_period', period);
+
+        // 3. Fetch existing student mappings
+        const { data: existingMappings } = await supabase
+          .from('student_mappings')
+          .select('*')
+          .eq('period', period) as { data: ExistingMapping[] | null };
+
+        // 4. Fetch Google Classroom students
+        const response = await fetch(`/api/classroom/${courseId}/students`, {
           headers: {
             'Authorization': `Bearer ${session?.accessToken}`,
             'Content-Type': 'application/json'
-          }
+          },
+          credentials: 'include'
         });
 
-        const data = await res.json();
+        const googleData = await response.json();
         
-        if (!res.ok) throw new Error(data.error || 'Failed to fetch students');
+        // Store course details
+        setCourseDetails(googleData.course);
 
-        // Get gradebook students for this period
-        const { data: gradebookStudents, error: dbError } = await supabase
-          .from('students')
-          .select('*')
-          .eq('class_period', period)
-          .order('name');
+        if (!response.ok) {
+          if (response.status === 401) {
+            toast({
+              variant: "destructive",
+              title: "Session Expired",
+              description: "Your session has expired. Please login again."
+            });
+            return;
+          }
+          throw new Error(googleData.error || 'Failed to fetch students');
+        }
 
-        if (dbError) throw dbError;
+        if (!googleData.students?.length) {
+          console.warn('No students returned from API');
+          return;
+        }
 
-        // Auto-match students based on name similarity
-        const matchedStudents = data.students.map((googleStudent: any) => {
-          let bestMatch = null;
-          let bestScore = 0;
-
-          gradebookStudents.forEach(gs => {
-            const score = getNameMatchScore(
-              googleStudent.googleName,
-              gs.name
-            );
-            if (score > bestScore) {
-              bestScore = score;
-              if (score >= 0.8) {
-                bestMatch = gs;
-              }
-            }
-          });
+        // 5. Create matched students array using existing mappings
+        const matchedStudents = googleData.students.map((googleStudent: GoogleClassroomStudent) => {
+          // Find existing mapping for this Google student
+          const existingMapping = existingMappings?.find((m: ExistingMapping) => 
+            m.google_id === googleStudent.userId
+          );
+          
+          // Find matched student from gradebook if mapping exists
+          const matchedStudent = existingMapping 
+            ? gradebookStudents?.find((gs: RosterStudent) => 
+                gs.id === existingMapping.student_id
+              )
+            : null;
 
           return {
-            googleId: googleStudent.googleId,
-            googleEmail: googleStudent.googleEmail || '',
-            googleName: googleStudent.googleName.fullName,
-            matchedStudent: bestMatch,
-            manuallyMatched: false
+            googleId: googleStudent.userId,
+            googleEmail: googleStudent.profile?.emailAddress,
+            googleName: googleStudent.profile?.name.fullName,
+            matchedStudent: matchedStudent || null,
+            manuallyMatched: !!existingMapping
           };
         });
 
-        console.log('Matched students:', matchedStudents);
-        setRosterStudents(gradebookStudents);
+        console.log('Matched students with existing mappings:', matchedStudents);
+        setRosterStudents(gradebookStudents || []);
         setStudents(matchedStudents);
 
       } catch (error) {
         console.error('Load error:', error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: error instanceof Error ? error.message : 'Failed to load students'
+        });
         setError(error instanceof Error ? error.message : 'Unknown error');
       } finally {
         setLoading(false);
@@ -308,109 +571,408 @@ export function CourseSetupDialog({
     const loadExistingSetup = async () => {
       if (!period) return;
 
-      // Load existing mapping
-      const { data: mapping } = await supabase
+      try {
+        // Load existing course mapping
+        const { data: mapping } = await supabase
+          .from('course_mappings')
+          .select('*')
+          .eq('google_course_id', courseId)
+          .eq('period', period)
+          .single();
+
+        // Load student mappings with student details and proper type assertion
+        const { data: studentMappings } = await supabase
+          .from('student_mappings')
+          .select(`
+            *,
+            students (
+              id,
+              name,
+              class_period
+            )
+          `)
+          .eq('period', period) as { data: StudentMappingWithDetails[] | null };
+
+        console.log('Existing mapping:', mapping);
+        console.log('Student mappings:', studentMappings);
+
+        // Update subject if it exists
+        if (mapping?.subject) {
+          setSelectedSubject(mapping.subject as Subject);
+        }
+
+        // Safe check for studentMappings
+        if (studentMappings && studentMappings.length > 0) {
+          setStudents(prevStudents => 
+            prevStudents.map(student => {
+              const existingMapping = studentMappings.find(
+                m => m.google_id === student.googleId
+              );
+              
+              if (existingMapping) {
+                return {
+                  ...student,
+                  matchedStudent: existingMapping.students,
+                  manuallyMatched: true
+                };
+              }
+              return student;
+            })
+          );
+        }
+      } catch (error) {
+        console.error('Error loading existing setup:', error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to load existing mappings"
+        });
+      }
+    };
+
+    if (open) {
+      loadExistingSetup();
+    }
+  }, [period, courseId, open]);
+
+  // 1. Add debug logging in loadExistingSetup
+  useEffect(() => {
+    const loadExistingSetup = async () => {
+      if (!period) return;
+  
+      try {
+        // Load student mappings with more detailed query
+        const { data: studentMappings } = await supabase
+          .from('student_mappings')
+          .select(`
+            id,
+            google_id,
+            google_email,
+            period,
+            students!inner (
+              id,
+              name,
+              class_period,
+              email
+            )
+          `)
+          .eq('period', period) as { data: StudentMappingResponse[] | null };
+
+        console.log('Loaded student mappings:', {
+          count: studentMappings?.length,
+          mappings: studentMappings,
+        });
+
+        if (studentMappings && studentMappings.length > 0) {
+          setCurrentMappings(
+            studentMappings.map(mapping => ({
+              google: mapping.google_id,
+              local: mapping.students[0]?.id || '', // Access first student in the array
+              googleName: students.find(s => s.googleId === mapping.google_id)?.googleName || '',
+              localName: mapping.students[0]?.name || '' // Access first student in the array
+            }))
+          );
+        }
+  
+        // Add debug table to UI
+        const debugInfo = document.createElement('pre');
+        debugInfo.textContent = JSON.stringify(studentMappings, null, 2);
+        document.body.appendChild(debugInfo);
+  
+        // ...rest of existing code...
+      } catch (error) {
+        console.error('Error loading mappings:', error);
+      }
+    };
+  
+    if (open) {
+      loadExistingSetup();
+    }
+  }, [period, courseId, open, students]);
+
+  // Add a dedicated effect just for loading mappings
+  useEffect(() => {
+    async function loadMappings() {
+      if (!period) return;
+
+      debugLog('Loading mappings for period', period);
+
+      try {
+        // First, load the student mappings
+        const { data: mappings } = await supabase
+          .from('student_mappings')
+          .select(`
+            id,
+            google_id,
+            google_email,
+            students:students!inner (
+              id,
+              name,
+              class_period
+            )
+          `)
+          .eq('period', period);
+
+        debugLog('Fetched mappings', mappings);
+
+        if (mappings && mappings.length > 0) {
+          // Format the mappings for display
+          const formattedMappings = mappings.map(mapping => ({
+            google: mapping.google_id,
+            local: mapping.students[0]?.id,
+            googleName: mapping.google_email?.split('@')[0] || 'Unknown',
+            localName: mapping.students[0]?.name
+          }));
+
+          debugLog('Formatted mappings', formattedMappings);
+          setCurrentMappings(formattedMappings);
+        }
+
+      } catch (error) {
+        console.error('Error loading mappings:', error);
+      }
+    }
+
+    loadMappings();
+  }, [period]);
+
+  // Define loadMappings function
+  const loadMappings = async () => {
+    if (!period) return;
+
+    debugLog('Loading mappings for period', period);
+
+    try {
+      const { data: mappings } = await supabase
+        .from('student_mappings')
+        .select(`
+          id,
+          google_id,
+          google_email,
+          students!inner (
+            id,
+            name,
+            class_period
+          )
+        `)
+        .eq('period', period);
+
+      debugLog('Fetched mappings', mappings);
+
+      if (mappings && mappings.length > 0) {
+        const formattedMappings = mappings.map(mapping => ({
+          google: mapping.google_id,
+          local: mapping.students[0]?.id,
+          googleName: mapping.google_email?.split('@')[0] || 'Unknown',
+          localName: mapping.students[0]?.name
+        }));
+
+        debugLog('Formatted mappings', formattedMappings);
+        setCurrentMappings(formattedMappings);
+      }
+    } catch (error) {
+      console.error('Error loading mappings:', error);
+    }
+  };
+
+  // Modify the existing setup state check
+  useEffect(() => {
+    const checkSetupStatus = async () => {
+      if (!period) return;
+
+      const { data: setup } = await supabase
         .from('course_mappings')
         .select('*')
         .eq('google_course_id', courseId)
         .eq('period', period)
         .single();
 
-      console.log('Existing mapping:', mapping);
+      debugLog('Setup status', setup);
 
-      // Load student mappings
-      const { data: studentMappings } = await supabase
-        .from('student_mappings')
-        .select(`
-          *,
-          students (*)
-        `)
-        .eq('period', period);
-
-      console.log('Existing student mappings:', studentMappings);
-
-      // Update subject if it exists
-      if (mapping?.subject) {
-        setSelectedSubject(mapping.subject as Subject);
+      if (setup?.setup_completed) {
+        setSetupStatus('existing');
+        // Force a reload of mappings when we know it's an existing setup
+        loadMappings();
+      } else {
+        setSetupStatus('new');
       }
+      setLoading(false);
     };
 
-    loadExistingSetup();
-  }, [period, courseId]);
+    checkSetupStatus();
+  }, [courseId, period]);
 
+  // Add this effect to handle auto-matching
+  useEffect(() => {
+    if (!students.length || !rosterStudents.length) return;
+
+    // Sort both lists by last name
+    const sortedGoogle = [...students].sort((a, b) => 
+      getLastName(a.googleName).localeCompare(getLastName(b.googleName))
+    );
+
+    const sortedRoster = sortByLastName(rosterStudents);
+
+    // Store sorted lists
+    setSortedGoogleStudents(sortedGoogle);
+    setSortedRosterStudents(sortedRoster);
+
+    // Create matches based on sorted lists
+    const newStudents = students.map(student => {
+      // Skip if already matched
+      if (student.matchedStudent) return student;
+
+      const googleLastName = getLastName(student.googleName);
+      const potentialMatch = sortedRoster.find(roster => 
+        getLastName(roster.name) === googleLastName
+      );
+
+      if (potentialMatch) {
+        return {
+          ...student,
+          matchedStudent: potentialMatch,
+          manuallyMatched: false
+        };
+      }
+      return student;
+    });
+
+    setStudents(newStudents);
+
+  }, [students.length, rosterStudents.length]); // Only depend on lengths to prevent loops
+
+  // Replace the auto-matching effect with this updated version
+  useEffect(() => {
+    if (!students.length || !rosterStudents.length) return;
+  
+    // Sort both lists by first last name
+    const sortedGoogle = [...students].sort((a, b) => 
+      getCompoundLastName(a.googleName).localeCompare(getCompoundLastName(b.googleName))
+    );
+  
+    const sortedRoster = [...rosterStudents].sort((a, b) => 
+      getCompoundLastName(a.name).localeCompare(getCompoundLastName(b.name))
+    );
+  
+    // Store sorted lists
+    setSortedGoogleStudents(sortedGoogle);
+    setSortedRosterStudents(sortedRoster);
+  
+    // Attempt matches based on first last name
+    const newStudents = students.map(student => {
+      if (student.matchedStudent) return student;
+  
+      const googleLastName = getCompoundLastName(student.googleName);
+      const potentialMatch = rosterStudents.find(roster => 
+        getCompoundLastName(roster.name) === googleLastName
+      );
+  
+      if (potentialMatch) {
+        return {
+          ...student,
+          matchedStudent: potentialMatch,
+          manuallyMatched: false
+        };
+      }
+      return student;
+    });
+  
+    setStudents(newStudents);
+  }, [students.length, rosterStudents.length]);
+
+  // Update the handleSave function
   const handleSave = async () => {
     try {
-      console.log('Starting save process...');
+      setLoading(true);
       
-      // 1. Update course mapping
-      const { data: existingMapping } = await supabase
-        .from('course_mappings')
-        .select('*')
-        .eq('google_course_id', courseId)
-        .eq('period', period)
-        .maybeSingle();
-  
-      console.log('Existing mapping:', existingMapping);
-  
-      // Create or update course mapping
-      const { error: mappingError } = await supabase
-        .from('course_mappings')
-        .upsert({
-          ...(existingMapping || {}),
-          google_course_id: courseId,
-          period: period,
-          subject: selectedSubject,
-          setup_completed: true,
-          setup_completed_at: new Date().toISOString()
-        }, {
-          onConflict: 'google_course_id,period'
-        });
-  
-      if (mappingError) throw mappingError;
-  
-      // 2. Clear existing student mappings for this period first
-      const { error: deleteError } = await supabase
+      // Debug current state
+      console.log('Save operation started:', {
+        courseId,
+        period,
+        studentsToMap: students.filter(s => s.matchedStudent).length
+      });
+
+      // 1. First clear any existing mappings for this period
+      const { error: clearError } = await supabase
         .from('student_mappings')
         .delete()
         .eq('period', period);
-  
-      if (deleteError) throw deleteError;
-  
-      // 3. Insert new student mappings
-      const matchedStudents = students.filter(s => s.matchedStudent);
-      if (matchedStudents.length > 0) {
-        const mappingUpdates = matchedStudents.map(student => ({
+
+      if (clearError) {
+        console.error('Failed to clear existing mappings:', clearError);
+        throw clearError;
+      }
+
+      // 2. Create course mapping
+      const { error: courseError } = await supabase
+        .from('course_mappings')
+        .upsert(
+          {
+            google_course_id: courseId,
+            period: period,
+            subject: selectedSubject,
+            setup_completed: true,
+            setup_completed_at: new Date().toISOString()
+          },
+          { onConflict: 'google_course_id,period' }
+        );
+
+      if (courseError) throw courseError;
+
+      // 3. Create student mappings
+      const studentMappings = students
+        .filter(s => s.matchedStudent && s.googleId)
+        .map(student => ({
+          student_id: student.matchedStudent!.id,
           google_id: student.googleId,
           google_email: student.googleEmail,
-          student_id: student.matchedStudent!.id,
-          period: period
+          period: period,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         }));
-  
-        console.log('Inserting new mappings:', mappingUpdates);
-  
-        // Use upsert with the correct unique constraint
-        const { error: mappingsError } = await supabase
-          .from('student_mappings')
-          .upsert(mappingUpdates, {
-            onConflict: 'student_id,period'  // This is the key change
-          });
-  
-        if (mappingsError) throw mappingsError;
+
+      // Remove any duplicate mappings
+      const uniqueMappings = removeDuplicateMappings(studentMappings);
+
+      if (uniqueMappings.length === 0) {
+        toast({
+          title: "Warning",
+          description: "No student mappings to create",
+          variant: "default"
+        });
+        onClose();
+        return;
       }
-  
+
+      // Insert mappings
+      const { error: mappingError } = await supabase
+        .from('student_mappings')
+        .insert(uniqueMappings);
+
+      if (mappingError) throw mappingError;
+
+      // Verify the save
+      const { data: verifyData } = await supabase
+        .from('student_mappings')
+        .select('*')
+        .eq('period', period);
+
       toast({
         title: "Success",
-        description: `Mapped ${matchedStudents.length} students for period ${period}`
+        description: `Created ${verifyData?.length || 0} student mappings for period ${period}`
       });
-  
+
       onClose();
+
     } catch (error) {
       console.error('Save error:', error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: error instanceof Error ? error.message : 'Failed to save mappings'
+        description: error instanceof Error ? error.message : "Failed to save mappings"
       });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -468,15 +1030,15 @@ export function CourseSetupDialog({
   const autoMapStudents = () => {
     const newMappings: Record<string, string> = {};
     
-    students.forEach(googleStudent => {
+    students.forEach((student: StudentMatch) => { // Change type to StudentMatch
       // Try to find matching student by name
-      const matchingStudent = localStudents.find(local => {
-        const googleName = googleStudent.googleName;
+      const matchingStudent = localStudents.find((local: LocalStudent) => {
+        const googleName = student.googleName;
         return local.name.toLowerCase() === googleName.toLowerCase();
       });
 
       if (matchingStudent) {
-        newMappings[matchingStudent.id] = googleStudent.googleId;
+        newMappings[matchingStudent.id] = student.googleId;
       }
     });
 
@@ -503,21 +1065,51 @@ export function CourseSetupDialog({
     onClose();
   };
 
+  // Add this component for unmapped students warning
+  const UnmappedStudentsWarning = ({ students }: { students: StudentMatch[] }) => {
+    const unmapped = students.filter(s => !s.matchedStudent);
+    if (unmapped.length === 0) return null;
+  
+    return (
+      <div className="bg-yellow-50 p-4 rounded-md mb-4">
+        <h3 className="font-medium text-yellow-800">Unmapped Students ({unmapped.length})</h3>
+        <p className="text-sm text-yellow-700 mb-2">
+          These students will not be mapped. This is normal if the class is split across periods.
+        </p>
+        <div className="max-h-32 overflow-y-auto">
+          {unmapped.map(student => (
+            <div key={student.googleId} className="text-sm py-1 border-b border-yellow-100">
+              {student.googleName} ({student.googleEmail})
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   // Main setup view
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
         <DialogHeader className="flex-shrink-0">
-          <DialogTitle>Setup {courseName}</DialogTitle>
+          <DialogTitle>
+            Setup {courseName}
+            {courseDetails && (
+              <div className="text-sm text-gray-500 mt-1">
+                Google Classroom: {courseDetails.name}
+              </div>
+            )}
+          </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6 flex-1 overflow-y-auto pr-2">
+          {/* Period Selection Section */}
           <div className="sticky top-0 bg-white z-10 pb-4 border-b">
             <Label>Select Period</Label>
             {!period && (
               <p className="text-sm text-gray-500 mb-2">
                 Please select a class period to continue
-              </p>
+              </p> // Make sure this is present
             )}
             {loadingPeriods ? (
               <div className="flex items-center space-x-2">
@@ -565,6 +1157,37 @@ export function CourseSetupDialog({
 
           {period && <SubjectSelector />}
 
+          {/* Auto-matching Debug Info */}
+          {period && (
+            <div className="bg-yellow-50 p-4 rounded-md mb-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <h4 className="font-medium mb-2">Google Classroom (Sorted)</h4>
+                  <div className="text-sm space-y-1">
+                    {sortedGoogleStudents.map(s => (
+                      <div key={s.googleId} className="flex justify-between">
+                        <span>{getLastName(s.googleName)}</span>
+                        <span className="text-gray-500">{s.googleName}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <h4 className="font-medium mb-2">Roster Students (Sorted)</h4>
+                  <div className="text-sm space-y-1">
+                    {sortedRosterStudents.map(s => (
+                      <div key={s.id} className="flex justify-between">
+                        <span>{getLastName(s.name)}</span>
+                        <span className="text-gray-500">{s.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Student Matching Table */}
           {showLoading ? (
             <div className="flex justify-center p-4">
               <LoadingSpinner />
@@ -638,31 +1261,78 @@ export function CourseSetupDialog({
               </table>
             </div>
           )}
+
+          {/* Mapping Status */}
+          <div className="bg-gray-50 p-4 rounded-md mb-4">
+            <h3 className="font-medium mb-2">Mapping Status</h3>
+            <div className="space-y-2 text-sm">
+              <p>Total Google Students: {students.length}</p>
+              <p>Total Gradebook Students: {rosterStudents.length}</p>
+              <p>Matched Students: {students.filter(s => s.matchedStudent).length}</p>
+              <p>Unmatched Students: {students.filter(s => !s.matchedStudent).length}</p>
+            </div>
+          </div>
+
+          {/* Current Matches */}
+          <div className="mb-4">
+            <h4 className="font-medium mb-2">Current Matches:</h4>
+            {students
+              .filter(s => s.matchedStudent)
+              .map(student => (
+                <div key={student.googleId} className="text-sm py-1 border-b">
+                  <span className="text-blue-600">{student.googleName}</span>
+                  {' → '}
+                  <span className="text-green-600">{student.matchedStudent?.name}</span>
+                </div>
+              ))
+            }
+          </div>
+
+          {/* Loading/Existing Mappings */}
+          {loadingMappings ? (
+            <div className="p-4 text-center">
+              <LoadingSpinner className="w-4 h-4 mr-2" />
+              <span>Loading mappings...</span>
+            </div>
+          ) : currentMappings.length > 0 ? (
+            <div className="bg-blue-50 p-4 rounded-md">
+              <h3 className="font-medium mb-2">Existing Mappings</h3>
+              <div className="max-h-40 overflow-y-auto">
+                {currentMappings.map((mapping, index) => (
+                  <div key={index} className="text-sm py-1 border-b border-blue-100">
+                    <div className="flex justify-between">
+                      <span className="text-blue-600">{mapping.googleName}</span>
+                      <span className="text-gray-400">→</span>
+                      <span className="text-green-600">{mapping.localName}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <pre className="text-xs bg-white p-2 mt-2 rounded">
+                {JSON.stringify({
+                  mappingsCount: currentMappings.length,
+                  matchedStudents: students.filter(s => s.matchedStudent).length
+                }, null, 2)}
+              </pre>
+            </div>
+          ) : null}
+
+          {/* Add the warning component before the save button */}
+          {period && <UnmappedStudentsWarning students={students} />}
         </div>
 
+        {/* Footer Buttons */}
         <div className="flex justify-end gap-2 pt-4 border-t mt-4 flex-shrink-0">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button 
             onClick={handleSave}
-            disabled={students.some(s => !s.matchedStudent)}
+            disabled={students.filter(s => s.matchedStudent).length === 0} // Only disable if NO students are mapped
           >
-            Complete Setup
+            Complete Setup ({students.filter(s => s.matchedStudent).length} of {students.length} mapped)
           </Button>
         </div>
       </DialogContent>
     </Dialog>
   );
-}
-function toast({ title, description, variant = "default" }: { 
-  title: string; 
-  description: string; 
-  variant?: "default" | "destructive" 
-}) {
-  const { toast: showToast } = useToast();
-  showToast({
-    title,
-    description,
-    variant
-  });
 }
 

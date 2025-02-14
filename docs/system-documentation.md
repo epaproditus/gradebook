@@ -111,6 +111,26 @@ A Next.js application that manages teacher gradebooks with Google Classroom inte
    - Preserves email mappings
    - Period-specific assignments
 
+### Student Mapping System
+- **Auto-mapping Strategy**
+  - Fetches student profiles from Google Classroom
+  - Uses fuzzy name matching with 80% similarity threshold
+  - Handles name variations and special characters
+  - Updates database with correct Google IDs
+  - Manual override capability for edge cases
+
+- **Mapping Refresh**
+  - On-demand refresh button
+  - Batch updates all student mappings
+  - Preserves existing correct mappings
+  - Reports success/failure counts
+
+## Course Mapping Conflict Handling
+- When setting up a course already mapped to a given period:
+  - The system checks for existing records in the `course_mappings` table.
+  - If already mapped, skips creation or updates existing mapping to avoid database conflicts.
+  - Returns a helpful message to the user if the course is already mapped.
+
 ## User Interface Components
 
 ### Navigation

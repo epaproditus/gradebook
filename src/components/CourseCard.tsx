@@ -9,6 +9,7 @@ import { AssignmentSelectDialog } from './AssignmentSelectDialog';
 import type { GoogleAssignment } from './AssignmentSelectDialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/components/ui/use-toast';
+import { TestMappingDialog } from './TestMappingDialog';
 
 interface CourseCardProps {
   course: Course;
@@ -27,6 +28,9 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
   const [isSettingUp, setIsSettingUp] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<string>('');
   const [selectedSubject, setSelectedSubject] = useState<'Math 8' | 'Algebra I'>('Math 8');
+  const [existingMappings, setExistingMappings] = useState<any[]>([]);
+  const [showTestMapping, setShowTestMapping] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Detect if course is likely Algebra based on name
   useEffect(() => {
@@ -41,8 +45,8 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
     async function checkSetupStatus() {
       const { data } = await supabase
         .from('course_mappings')
-        .select('period')
-        .eq('google_course_id', course.id)
+        .select('period') // using 'period' instead of 'period_id'
+        .eq('google_course_id', course.id) // using correct column name
         .eq('setup_completed', true);
 
       setSetupStatus({
@@ -53,6 +57,24 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
 
     checkSetupStatus();
   }, [course.id]);
+
+  useEffect(() => {
+    async function fetchMappings() {
+      const { data } = await supabase
+        .from('student_mappings')
+        .select(`
+          *,
+          students (name)
+        `)
+        .eq('period', setupStatus.periods[0]);
+
+      setExistingMappings(data || []);
+    }
+
+    if (setupStatus.completed && setupStatus.periods.length > 0) {
+      fetchMappings();
+    }
+  }, [setupStatus]);
 
   const handleImportAssignment = async (assignment: GoogleAssignment) => {
     if (!session?.accessToken || !setupStatus.completed) {
@@ -127,44 +149,172 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
     }
   };
 
-  const handleSetupSubmit = async () => {
-    setIsSettingUp(true);
+  const handleSetupClose = () => {
+    setShowSetup(false);
+    onSetupClick(course);
+  };
+
+  const verifyMappings = async () => {
     try {
-      const response = await fetch('/api/classroom/setup-course', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          courseId: course.id,
-          period: selectedPeriod,
-          subject: selectedSubject, // Include subject in setup
-          name: course.name
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to setup course');
-      }
-
-      const updatedCourse = await response.json();
-      onSetupClick(updatedCourse);
+      const res = await fetch(`/api/debug/mappings?period=${setupStatus.periods[0]}`);
+      const data = await res.json();
+      console.log('Mapping verification:', data);
       
+      toast({
+        title: "Mapping Status",
+        description: `Found ${data.count} mappings for period ${data.period}`
+      });
+    } catch (error) {
+      console.error('Verification failed:', error);
+    }
+  };
+
+  const checkStatus = async () => {
+    try {
+      const res = await fetch(
+        `/api/debug/course-status?courseId=${course.id}&period=${setupStatus.periods[0]}`
+      );
+      const data = await res.json();
+      console.log('Course status:', data);
+      
+      toast({
+        title: "Status Check",
+        description: `Found ${data.diagnostics.mappingCount} mappings for ${data.diagnostics.studentCount} students`
+      });
+    } catch (error) {
+      console.error('Status check failed:', error);
+    }
+  };
+
+  const handleSetupClick = async () => {
+    setIsLoading(true);
+    try {
+      setShowSetup(true);
     } catch (error) {
       console.error('Setup error:', error);
       toast({
         variant: "destructive",
-        title: "Setup failed",
-        description: error instanceof Error ? error.message : "Failed to setup course"
+        title: "Error",
+        description: "Failed to open setup dialog"
       });
     } finally {
-      setIsSettingUp(false);
+      setIsLoading(false);
     }
   };
 
-  const handleSetupClose = () => {
-    setShowSetup(false);
-    onSetupClick(course);
+  const clearSetup = async (period: string) => {
+    if (!period || !course.id) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Missing period or course ID"
+      });
+      return;
+    }
+
+    try {
+      // Sanitize period string
+      const sanitizedPeriod = encodeURIComponent(period.trim());
+      
+      const response = await fetch(
+        `/api/debug/clear-setup?courseId=${course.id}&period=${sanitizedPeriod}`,
+        { 
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to clear setup');
+      }
+
+      toast({
+        title: "Setup Cleared",
+        description: `Successfully cleared setup for period ${period}`
+      });
+
+      // Refresh setup status
+      const { data: mappings } = await supabase
+        .from('course_mappings')
+        .select('period')
+        .eq('google_course_id', course.id);
+        
+      setSetupStatus({
+        completed: (mappings?.length || 0) > 0,
+        periods: mappings?.map(d => d.period) || []
+      });
+
+    } catch (error) {
+      console.error('Clear setup error:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to clear setup"
+      });
+    }
+  };
+
+  const checkPeriodMappings = async (period: string) => {
+    try {
+      const res = await fetch(`/api/debug/check-mappings?period=${period}`);
+      const data = await res.json();
+      
+      console.log('Period mapping check:', data);
+      
+      toast({
+        title: "Mapping Check",
+        description: `Found ${data.diagnostics.studentMappings.count} student mappings and ${data.diagnostics.courseMappings.count} course mappings`
+      });
+
+      // If we find inconsistencies, offer to fix them
+      if (data.diagnostics.courseMappings.count === 0 && data.diagnostics.studentMappings.count > 0) {
+        if (confirm('Found orphaned student mappings. Clear them?')) {
+          await clearSetup(period);
+        }
+      }
+    } catch (error) {
+      console.error('Check failed:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to check mappings"
+      });
+    }
+  };
+
+  const syncGoogleIds = async (period: string) => {
+    try {
+      const response = await fetch(
+        `/api/debug/sync-google-ids?period=${encodeURIComponent(period)}`,
+        { 
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to sync Google IDs');
+      }
+
+      toast({
+        title: "Sync Complete",
+        description: `Updated ${data.updated} students with Google IDs for period ${period}`
+      });
+
+    } catch (error) {
+      console.error('Sync error:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to sync Google IDs"
+      });
+    }
   };
 
   return (
@@ -196,12 +346,80 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
           )}
           <Button 
             variant={setupStatus.completed ? "outline" : "default"}
-            onClick={() => setShowSetup(true)}
+            onClick={handleSetupClick}
+            disabled={isLoading}
           >
+            {isLoading ? (
+              <LoadingSpinner className="w-4 h-4 mr-2" />
+            ) : null}
             {setupStatus.completed ? 'Edit Setup' : 'Setup Course'}
           </Button>
         </div>
       </div>
+
+      {setupStatus.completed && existingMappings.length > 0 && (
+        <div className="mt-4 text-sm text-gray-600">
+          <p>Mapped Students: {existingMappings.length}</p>
+          <button 
+            onClick={() => setShowSetup(true)}
+            className="text-blue-500 hover:underline"
+          >
+            View Mappings
+          </button>
+        </div>
+      )}
+
+      {setupStatus.completed && (
+        <div className="mt-2 space-x-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={verifyMappings}
+          >
+            Verify Mappings
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={checkStatus}
+          >
+            Check Status
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setShowTestMapping(true)}
+            className="mt-2 text-xs"
+          >
+            Test Mappings View
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => checkPeriodMappings(setupStatus.periods[0])}
+          >
+            Debug Mappings
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => syncGoogleIds(setupStatus.periods[0])}
+          >
+            Sync Google IDs
+          </Button>
+          <div className="flex flex-wrap gap-2 mt-2">
+            {Array.from(new Set(setupStatus.periods)).map(period => (
+              <Button
+                key={period}
+                variant="destructive"
+                size="sm"
+                onClick={() => clearSetup(period)}
+              >
+                Clear {period} Setup
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {showSetup && (
         <CourseSetupDialog
@@ -219,55 +437,15 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
         onSelect={handleImportAssignment}
       />
 
-      <div className="mt-4 space-y-4">
-        <div className="flex items-center gap-4">
-          <Select
-            value={selectedPeriod}
-            onValueChange={setSelectedPeriod}
-          >
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Select period" />
-            </SelectTrigger>
-            <SelectContent>
-              {['1', '2', '3', '4', '5', '6', '7', '8'].map(period => (
-                <SelectItem key={period} value={period}>
-                  Period {period}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={selectedSubject}
-            onValueChange={(value: 'Math 8' | 'Algebra I') => setSelectedSubject(value)}
-          >
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Select subject" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Math 8">Math 8</SelectItem>
-              <SelectItem value="Algebra I">Algebra I</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {selectedPeriod && (
-          <Button 
-            onClick={handleSetupSubmit}
-            disabled={isSettingUp}
-            className="w-full"
-          >
-            {isSettingUp ? (
-              <>
-                <LoadingSpinner className="mr-2 h-4 w-4" />
-                Setting up...
-              </>
-            ) : (
-              'Complete Setup'
-            )}
-          </Button>
-        )}
-      </div>
+      {showTestMapping && (
+        <TestMappingDialog
+          courseId={course.id}
+          courseName={course.name}
+          period={setupStatus.periods[0]}
+          open={showTestMapping}
+          onClose={() => setShowTestMapping(false)}
+        />
+      )}
     </div>
   );
 }
