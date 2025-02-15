@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/collapsible";
 import { v4 as uuidv4 } from 'uuid';  // Add this import at the top
 import { useSession } from 'next-auth/react';
+import { getGradesForSync } from '@/lib/gradeSync';
 
 // Initialize Supabase client (this is fine outside component)
 const supabase = createClient(
@@ -1343,12 +1344,28 @@ const sortStudents = (students: Student[], assignmentId: string, periodId: strin
 
 // Add function to handle assignment reordering
 const handleDragEnd = (result: DropResult) => {
-  if (!result.destination) return;
+  console.log('Drag end:', {
+    result,
+    source: result.source,
+    destination: result.destination,
+    draggableId: result.draggableId
+  });
+
+  if (!result.destination) {
+    console.log('No destination, skipping update');
+    return;
+  }
 
   const { source, destination } = result;
   const assignmentId = result.draggableId;
 
   if (groupBy === 'type' && source.droppableId !== destination.droppableId) {
+    console.log('Type change:', {
+      from: source.droppableId,
+      to: destination.droppableId,
+      assignmentId
+    });
+    
     // Change assignment type when dragging between columns
     const newType = destination.droppableId as 'Daily' | 'Assessment';
     handleAssignmentEdit(assignmentId, { type: newType });
@@ -1357,6 +1374,13 @@ const handleDragEnd = (result: DropResult) => {
   const items = Array.from(assignmentOrder);
   const [reorderedItem] = items.splice(source.index, 1);
   items.splice(destination.index, 0, reorderedItem);
+  
+  console.log('Updating order:', {
+    oldOrder: assignmentOrder,
+    newOrder: items,
+    reorderedItem
+  });
+  
   setAssignmentOrder(items);
 };
 
@@ -1560,7 +1584,11 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
     </CardHeader>
     {expandedAssignments[assignmentId] && (
       <CardContent>
-        <Tabs defaultValue={assignment.periods[0]} onValueChange={setActiveTab}>
+        <Tabs 
+          defaultValue={activeTab || assignment.periods[0]} 
+          onValueChange={setActiveTab}
+          value={activeTab || assignment.periods[0]} // Add this line
+        >
           <TabsList className="w-full">
             {assignment.periods.map(periodId => (
               <TabsTrigger
@@ -1747,6 +1775,16 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
                   <Save className="h-4 w-4" />
                   Save All Grades
                 </Button>
+                {assignment.google_classroom_id && ( // Only show if assignment is linked
+                  <Button 
+                    onClick={() => handleSyncGrades(assignmentId)}
+                    variant="outline"
+                    className="ml-2"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Sync to Classroom
+                  </Button>
+                )}
               </div>
             </TabsContent>
           ))}
@@ -1781,6 +1819,12 @@ const getGroupedAssignments = () => {
 // Update renderAssignmentsSection to handle expanded cards in grouped view
 const renderAssignmentsSection = () => {
   const grouped = getGroupedAssignments();
+  console.log('Rendering assignments section:', {
+    groupBy,
+    assignmentCount: Object.keys(assignments).length,
+    grouped,
+    activeTab,
+  });
 
   if (groupBy === 'type') {
     return (
@@ -1789,44 +1833,14 @@ const renderAssignmentsSection = () => {
           {/* Daily Assignments Column */}
           <div className="space-y-4">
             <h3 className="font-semibold">Daily Work</h3>
-            <Droppable droppableId="Daily">
+            <Droppable droppableId="Daily" isDropDisabled={false}>
               {(provided) => (
                 <div 
                   {...provided.droppableProps} 
-                  ref={provided.innerRef} 
+                  ref={provided.innerRef}
                   className="relative grid grid-cols-1 gap-4"
-                  // Add styles to handle expanded cards overlaying content
-                  style={{ 
-                    minHeight: '50px',
-                    position: 'relative'
-                  }}
                 >
-                  {(grouped.Daily || []).map(([id, assignment], index) => {
-                    const isExpanded = expandedAssignments[id] || editingAssignment === id;
-                    return (
-                      <Draggable 
-                        key={id} 
-                        draggableId={id} 
-                        index={index}
-                        isDragDisabled={isExpanded}
-                      >
-                        {(provided) => (
-                          <div
-                            style={isExpanded ? {
-                              position: 'absolute',
-                              zIndex: 10,
-                              left: '-0.5rem',
-                              right: '-0.5rem',
-                              width: 'calc(200% + 2rem)',
-                            } : undefined}
-                          >
-                            {renderAssignmentCard(id, assignment, provided)}
-                          </div>
-                        )}
-                      </Draggable>
-                    );
-                  })}
-                  {provided.placeholder}
+                  {/* ...rest of Daily column... */}
                 </div>
               )}
             </Droppable>
@@ -1835,43 +1849,14 @@ const renderAssignmentsSection = () => {
           {/* Assessment Column */}
           <div className="space-y-4">
             <h3 className="font-semibold">Assessments</h3>
-            <Droppable droppableId="Assessment">
+            <Droppable droppableId="Assessment" isDropDisabled={false}>
               {(provided) => (
                 <div 
                   {...provided.droppableProps} 
-                  ref={provided.innerRef} 
+                  ref={provided.innerRef}
                   className="relative grid grid-cols-1 gap-4"
-                  style={{ 
-                    minHeight: '50px',
-                    position: 'relative'
-                  }}
                 >
-                  {(grouped.Assessment || []).map(([id, assignment], index) => {
-                    const isExpanded = expandedAssignments[id] || editingAssignment === id;
-                    return (
-                      <Draggable 
-                        key={id} 
-                        draggableId={id} 
-                        index={index}
-                        isDragDisabled={isExpanded}
-                      >
-                        {(provided) => (
-                          <div
-                            style={isExpanded ? {
-                              position: 'absolute',
-                              zIndex: 10,
-                              left: '-0.5rem',
-                              right: '-0.5rem',
-                              width: 'calc(200% + 2rem)',
-                            } : undefined}
-                          >
-                            {renderAssignmentCard(id, assignment, provided)}
-                          </div>
-                        )}
-                      </Draggable>
-                    );
-                  })}
-                  {provided.placeholder}
+                  {/* ...rest of Assessment column... */}
                 </div>
               )}
             </Droppable>
@@ -1884,7 +1869,7 @@ const renderAssignmentsSection = () => {
   // Default two-column view remains unchanged
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
-      <Droppable droppableId="assignments">
+      <Droppable droppableId="assignments" isDropDisabled={false}>
         {(provided) => (
           <div 
             {...provided.droppableProps} 
@@ -1923,11 +1908,29 @@ const handleRemoveTag = async (tag: AssignmentTag): Promise<void> => {
   }
 };
 
+// Update the toggleAssignment function to manage activeTab
 const toggleAssignment = (assignmentId: string) => {
-  setExpandedAssignments(prev => ({
-    ...prev,
-    [assignmentId]: !prev[assignmentId]
-  }));
+  setExpandedAssignments(prev => {
+    const willExpand = !prev[assignmentId];
+    
+    // If we're expanding and there's no active tab, set it to the first period
+    if (willExpand && !activeTab) {
+      const firstPeriod = assignments[assignmentId]?.periods[0];
+      console.log('Setting initial period:', {
+        assignmentId,
+        firstPeriod,
+        periods: assignments[assignmentId]?.periods
+      });
+      if (firstPeriod) {
+        setActiveTab(firstPeriod);
+      }
+    }
+    
+    return {
+      ...prev,
+      [assignmentId]: willExpand
+    };
+  });
 };
 
 const syncGradesToClassroom = async (assignmentId: string, periodId: string) => {
@@ -2002,6 +2005,92 @@ const syncGradesToClassroom = async (assignmentId: string, periodId: string) => 
     // ...rest of the function remains the same...
   } catch (error) {
     // ...error handling remains the same...
+  }
+};
+
+// Update handleSyncGrades to ensure we have an active period
+const handleSyncGrades = async (assignmentId: string) => {
+  try {
+    console.log('Starting grade sync:', {
+      assignmentId,
+      activeTab,
+      assignment: assignments[assignmentId]
+    });
+
+    if (!activeTab) {
+      toast({
+        title: "Error",
+        description: "Please select a period first",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Get the Google course/work IDs
+    const [courseId, courseWorkId] = assignments[assignmentId]?.google_classroom_id?.split('_') || [];
+    if (!courseId || !courseWorkId) {
+      toast({
+        title: "Error",
+        description: "Assignment not linked to Google Classroom",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    console.log('Preparing grades for sync:', {
+      courseId,
+      courseWorkId,
+      periodId: activeTab
+    });
+
+    // Get grades for this assignment and period
+    const periodGrades = grades[assignmentId]?.[activeTab] || {};
+    const gradesToSync = Object.entries(periodGrades).map(([studentId, grade]) => ({
+      studentId: parseInt(studentId),
+      grade: parseInt(grade),
+      period: activeTab
+    }));
+
+    console.log('Sending grades:', {
+      count: gradesToSync.length,
+      sample: gradesToSync[0]
+    });
+
+    setSyncingAssignments(prev => ({ ...prev, [assignmentId]: true }));
+
+    const response = await fetch(
+      `/api/classroom/${courseId}/coursework/${courseWorkId}/grades`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ grades: gradesToSync })
+      }
+    );
+
+    const result = await response.json();
+
+    console.log('Sync result:', result);
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to sync grades');
+    }
+
+    toast({
+      title: "Success",
+      description: `Synced ${result.results?.filter((r: any) => r.success).length || 0} grades`
+    });
+
+  } catch (error) {
+    console.error('Sync failed:', error);
+    toast({
+      title: "Error",
+      description: error instanceof Error ? error.message : "Failed to sync grades",
+      variant: "destructive"
+    });
+  } finally {
+    setSyncingAssignments(prev => ({ ...prev, [assignmentId]: false }));
   }
 };
 

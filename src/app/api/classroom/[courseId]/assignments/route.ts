@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 export async function GET(
-  request: Request, 
+  request: Request,
   { params }: { params: { courseId: string } }
 ) {
   const { courseId } = await params;
@@ -16,8 +16,8 @@ export async function GET(
   try {
     const res = await fetch(
       `https://classroom.googleapis.com/v1/courses/${courseId}/courseWork?pageSize=${pageSize}&orderBy=updateTime desc`,
-      { 
-        headers: { 
+      {
+        headers: {
           Authorization: authHeader,
           Accept: 'application/json',
         }
@@ -46,3 +46,11 @@ export async function POST(
   // This will update grades both in your DB and Google Classroom
   // Implementation depends on your database structure
 }
+  const { courseId } = params;
+  const authHeader = request.headers.get("authorization");
+  const body = await request.json();
+
+  if (!authHeader) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
