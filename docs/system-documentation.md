@@ -60,22 +60,55 @@ A Next.js application that manages teacher gradebooks with Google Classroom inte
 
 ### Google Classroom Grade Sync
 - **API Endpoint**: `/api/classroom/grades/sync`
-  - Handles grade synchronization with Google Classroom
+  - Successfully tested and verified grade syncing functionality
   - Supports both draft and assigned grades
-  - Validates request parameters
-  - Requires authentication
-  - Uses Google Classroom API v1
+  - Requires valid Google OAuth2 access token
+  - Handles both individual and batch grade updates
 
 - **Grade Sync Flow**:
-  1. Validate request parameters
-  2. Check user authentication
-  3. Call Google Classroom API
-  4. Update local database
-  5. Return sync status
+  1. Authenticate with Google OAuth2
+  2. Initialize Google Classroom API client
+  3. Fetch coursework and submissions
+  4. Update grades using patch endpoint
+  5. Return sync status and results
 
-- **Required Permissions**:
-  - `https://www.googleapis.com/auth/classroom.coursework.students`
-  - `https://www.googleapis.com/auth/classroom.coursework.me`
+- **Grade Update Options**:
+  - `draftGrade`: Saves grade as draft (teacher can review)
+  - `assignedGrade`: Posts final grade to students
+  - Can update both simultaneously or individually
+
+- **Test Script**: `/src/scripts/test-grade-sync.ts`
+  - Provides local testing capability
+  - Uses direct OAuth2 authentication
+  - Configurable through environment variables
+  - Helps verify API connectivity and permissions
+
+- **Required Environment Variables**:
+  ```
+  GOOGLE_CLIENT_ID=your_client_id
+  GOOGLE_CLIENT_SECRET=your_client_secret
+  GOOGLE_ACCESS_TOKEN=valid_access_token
+  ```
+
+- **Example Usage**:
+  ```typescript
+  // Update grade for single submission
+  await classroom.courses.courseWork.studentSubmissions.patch({
+    courseId: courseId,
+    courseWorkId: assignmentId,
+    id: submissionId,
+    updateMask: 'assignedGrade',
+    requestBody: {
+      assignedGrade: 95
+    }
+  });
+  ```
+
+- **Verified Working With**:
+  - Course ID format: numeric (e.g., '708732866408')
+  - Grade values: numeric (0-100)
+  - Both draft and assigned grade updates
+  - Batch processing multiple submissions
 
 ## Database Structure
 

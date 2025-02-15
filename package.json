@@ -2,11 +2,13 @@
   "name": "gradebook",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:grade-sync": "NODE_OPTIONS='--loader ts-node/esm' ts-node --experimentalSpecifierResolution=node src/scripts/test-grade-sync.ts"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.6",
@@ -55,6 +57,8 @@
     "supabase": "^2.12.0",
     "tailwindcss": "^3.4.1",
     "tsconfig": "^7.0.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "ts-node": "^10.9.2",
+    "dotenv": "^16.3.1"
   }
 }
