@@ -1642,12 +1642,21 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
                   </Select>
                 </div>
                 <div className="space-y-2">
+                  {/* Add headers row */}
+                  <div className="grid grid-cols-[200px_1fr_70px_70px_70px] gap-1 items-center p-2 font-medium text-sm border-b">
+                    <div className="text-center">Tags</div>
+                    <div className="px-2">Student ID & Name</div>
+                    <div className="text-center">Initial Grade</div>
+                    <div className="text-center">Extra Points</div>
+                    <div className="text-center">Total Grade</div>
+                  </div>
+
                   {sortStudents(students[periodId] || [], assignmentId, periodId).map(student => (
                     <div 
                       key={student.id} 
                       className={cn(
-                        "grid grid-cols-[auto_1fr_70px_70px_70px] gap-2 items-center p-2 rounded transition-colors",
-                        activeRow === `${assignmentId}-${periodId}-${student.id}` && "bg-blue-100/50 shadow-sm" // Highlight active row
+                        "grid grid-cols-[200px_1fr_70px_70px_70px] gap-1 items-center p-2 rounded transition-colors",
+                        activeRow === `${assignmentId}-${periodId}-${student.id}` && "bg-blue-100/50 shadow-sm"
                       )}
                     >
                       <div className="flex items-center gap-1">
