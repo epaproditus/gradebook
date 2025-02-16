@@ -6,91 +6,125 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ courseId: string; assignmentId: string }> }
 ) {
-  const { courseId, assignmentId } = await context.params;
-  const authHeader = request.headers.get("authorization");
-
-  if (!authHeader) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  let requestBody;
   try {
-    requestBody = await request.json();
-  } catch (error) {
-    return NextResponse.json({ error: "Invalid JSON input" }, { status: 400 });
-  }
+    const { courseId, assignmentId } = await context.params;
+    const authHeader = request.headers.get("authorization");
+    const { periods } = await request.json();
 
-  const { forceUpdate, period } = requestBody;
+    console.log('Request received with periods:', periods);
 
-  try {
-    // Check if assignment exists first
-    const { data: existingAssignment } = await supabase
-      .from('assignments')
-      .select('id')
-      .eq('id', assignmentId)
-      .single();
-
-    if (existingAssignment && !forceUpdate) {
+    if (!authHeader || !periods?.length) {
       return NextResponse.json({ 
-        error: "Assignment already exists",
-        existing: existingAssignment
-      }, { status: 400 });
+        error: periods?.length ? "Unauthorized" : "No periods specified",
+        success: false 
+      }, { status: 401 });
     }
 
-    // Validate period exists in course mappings
-    const { data: courseMapping } = await supabase
-      .from('course_mappings')
-      .select('setup_completed')
-      .eq('google_course_id', courseId)
-      .eq('period', period)
-      .single();
-
-    if (!courseMapping?.setup_completed) {
-      return NextResponse.json({ 
-        error: "Course period not set up. Please complete course setup first." 
-      }, { status: 400 });
-    }
-
-    // Get assignment details from Google
-    const res = await fetch(
+    // Get the source assignment details
+    const targetAssignment = await fetch(
       `https://classroom.googleapis.com/v1/courses/${courseId}/courseWork/${assignmentId}`,
       { headers: { Authorization: authHeader } }
-    );
+    ).then(res => res.json());
 
-    if (!res.ok) {
-      const errorData = await res.json();
-      throw new Error(errorData.error?.message || 'Failed to fetch assignment');
+    if (!targetAssignment?.title) {
+      return NextResponse.json({
+        error: "Failed to fetch assignment",
+        success: false
+      }, { status: 404 });
     }
 
-    const assignment = await res.json();
+    console.log('Found target assignment:', {
+      title: targetAssignment.title,
+      maxPoints: targetAssignment.maxPoints
+    });
 
-    // Insert or update the assignment
+    // Get all mapped courses (both source and potential targets)
+    const { data: courseMappings } = await supabase
+      .from('course_mappings')
+      .select('google_course_id, period')
+      .eq('setup_completed', true)
+      .not('google_course_id', 'is', null);
+
+    if (!courseMappings?.length) {
+      return NextResponse.json({
+        error: "No mapped courses found",
+        success: false
+      }, { status: 404 });
+    }
+
+    // Start with just the selected periods
+    const matchingPeriods = new Set(periods);
+    console.log('Initial periods:', Array.from(matchingPeriods));
+
+    // Check each mapped course for the assignment
+    for (const mapping of courseMappings) {
+      // Skip the source course
+      if (mapping.google_course_id === courseId) {
+        console.log(`Skipping source course ${courseId}`);
+        continue;
+      }
+
+      try {
+        // Check if this course has the same assignment
+        const assignmentRes = await fetch(
+          `https://classroom.googleapis.com/v1/courses/${mapping.google_course_id}/courseWork`,
+          { headers: { Authorization: authHeader } }
+        );
+
+        if (!assignmentRes.ok) continue;
+
+        const { courseWork } = await assignmentRes.json();
+        
+        // Look for matching assignment by title and points
+        const hasMatch = courseWork?.some(work => 
+          work.title === targetAssignment.title &&
+          work.maxPoints === targetAssignment.maxPoints
+        );
+
+        if (hasMatch) {
+          console.log(`Found match in course ${mapping.google_course_id}, adding period ${mapping.period}`);
+          matchingPeriods.add(mapping.period);
+        }
+      } catch (err) {
+        console.warn(`Failed to check course ${mapping.google_course_id}:`, err);
+      }
+    }
+
+    console.log('Final matching periods before save:', Array.from(matchingPeriods));
+
+    // Create/update the assignment with verified periods
     const { data: savedAssignment, error } = await supabase
       .from('assignments')
       .upsert({
-        id: existingAssignment?.id || uuidv4(),
-        name: assignment.title,
+        name: targetAssignment.title,
+        date: new Date(targetAssignment.creationTime || Date.now()).toISOString().split('T')[0],
         type: 'Daily',
-        periods: [period],
-        date: new Date().toISOString().split('T')[0],
+        periods: Array.from(matchingPeriods),
         subject: 'Math 8',
-        max_points: assignment.maxPoints || 100,
-        google_classroom_link: assignment.alternateLink || null
+        max_points: targetAssignment.maxPoints || 100,
+        google_classroom_link: targetAssignment.alternateLink || null
       })
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Failed to save assignment:', error);
+      throw error;
+    }
+
+    console.log('Successfully saved assignment:', savedAssignment);
 
     return NextResponse.json({ 
       success: true,
-      assignment: savedAssignment
+      assignment: savedAssignment,
+      periodsFound: Array.from(matchingPeriods)
     });
 
   } catch (error) {
     console.error('Import error:', error);
     return NextResponse.json({ 
       error: error instanceof Error ? error.message : "Import failed",
+      success: false,
       details: error
     }, { status: 500 });
   }
