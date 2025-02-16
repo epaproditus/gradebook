@@ -1643,23 +1643,65 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
                 </div>
                 <div className="space-y-2">
                   {/* Add headers row */}
-                  <div className="grid grid-cols-[200px_1fr_70px_70px_70px] gap-1 items-center p-2 font-medium text-sm border-b">
-                    <div className="text-center">Tags</div>
+                  <div className="grid grid-cols-[1fr_70px_70px_70px_200px] gap-1 items-center p-2 font-medium text-sm border-b">
                     <div className="px-2">Student ID & Name</div>
                     <div className="text-center">Initial Grade</div>
                     <div className="text-center">Extra Points</div>
                     <div className="text-center">Total Grade</div>
+                    <div className="text-center">Tags</div>
                   </div>
 
                   {sortStudents(students[periodId] || [], assignmentId, periodId).map(student => (
                     <div 
                       key={student.id} 
                       className={cn(
-                        "grid grid-cols-[200px_1fr_70px_70px_70px] gap-1 items-center p-2 rounded transition-colors",
+                        "grid grid-cols-[1fr_70px_70px_70px_200px] gap-1 items-center p-2 rounded transition-colors",
                         activeRow === `${assignmentId}-${periodId}-${student.id}` && "bg-blue-100/50 shadow-sm"
                       )}
                     >
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center bg-secondary rounded px-2 py-1">
+                        <span className="text-sm text-muted-foreground mr-2">
+                          {student.id}
+                        </span>
+                        <span className="text-sm">{student.name}</span>
+                      </div>
+                      <Input
+                        id={`grade-${assignmentId}-${periodId}-${student.id}`}
+                        type="number"
+                        min="0"
+                        max="100"
+                        placeholder="0"
+                        className="text-center h-8 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        value={
+                          editingGrades[`${assignmentId}-${periodId}`] 
+                            ? unsavedGrades[assignmentId]?.[periodId]?.[student.id] || ''
+                            : grades[assignmentId]?.[periodId]?.[student.id] || ''
+                        }
+                        onChange={(e) => handleGradeChange(assignmentId, periodId, String(student.id), e.target.value)}
+                        onFocus={() => setActiveRow(`${assignmentId}-${periodId}-${student.id}`)}
+                        onBlur={() => setActiveRow(null)}
+                      />
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder="+0"
+                        className="text-center h-8 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        value={extraPoints[`${assignmentId}-${periodId}-${student.id}`] || ''}
+                        onChange={(e) => handleExtraPointsChange(assignmentId, periodId, student.id, e.target.value)}
+                        onFocus={() => setActiveRow(`${assignmentId}-${periodId}-${student.id}`)}
+                        onBlur={() => setActiveRow(null)}
+                      />
+                      <div className="flex items-center justify-center bg-secondary rounded px-2 h-8">
+                        <span className="text-sm font-medium">
+                          {calculateTotal(
+                            editingGrades[`${assignmentId}-${periodId}`]
+                              ? unsavedGrades[assignmentId]?.[periodId]?.[student.id]
+                              : grades[assignmentId]?.[periodId]?.[student.id],
+                            extraPoints[`${assignmentId}-${periodId}-${student.id}`]
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 justify-center">
                         <Button
                           variant="outline"
                           size="sm"
@@ -1706,48 +1748,6 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
                             Retest
                           </Button>
                         )}
-                      </div>
-                      <div className="flex items-center bg-secondary rounded px-2 py-1">
-                        <span className="text-sm text-muted-foreground mr-2">
-                          {student.id}
-                        </span>
-                        <span className="text-sm">{student.name}</span>
-                      </div>
-                      <Input
-                        id={`grade-${assignmentId}-${periodId}-${student.id}`}
-                        type="number"
-                        min="0"
-                        max="100"
-                        placeholder="0"
-                        className="text-center h-8 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                        value={
-                          editingGrades[`${assignmentId}-${periodId}`] 
-                            ? unsavedGrades[assignmentId]?.[periodId]?.[student.id] || ''
-                            : grades[assignmentId]?.[periodId]?.[student.id] || ''
-                        }
-                        onChange={(e) => handleGradeChange(assignmentId, periodId, String(student.id), e.target.value)}
-                        onFocus={() => setActiveRow(`${assignmentId}-${periodId}-${student.id}`)}
-                        onBlur={() => setActiveRow(null)}
-                      />
-                      <Input
-                        type="number"
-                        min="0"
-                        placeholder="+0"
-                        className="text-center h-8 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                        value={extraPoints[`${assignmentId}-${periodId}-${student.id}`] || ''}
-                        onChange={(e) => handleExtraPointsChange(assignmentId, periodId, student.id, e.target.value)}
-                        onFocus={() => setActiveRow(`${assignmentId}-${periodId}-${student.id}`)}
-                        onBlur={() => setActiveRow(null)}
-                      />
-                      <div className="flex items-center justify-center bg-secondary rounded px-2 h-8">
-                        <span className="text-sm font-medium">
-                          {calculateTotal(
-                            editingGrades[`${assignmentId}-${periodId}`]
-                              ? unsavedGrades[assignmentId]?.[periodId]?.[student.id]
-                              : grades[assignmentId]?.[periodId]?.[student.id],
-                            extraPoints[`${assignmentId}-${periodId}-${student.id}`]
-                          )}
-                        </span>
                       </div>
                     </div>
                   ))}
