@@ -34,17 +34,15 @@ const WeekView: FC<WeekViewProps> = ({ date, onDateSelect, assignments, onWeekCh
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <Button variant="ghost" onClick={navigateToPreviousWeek}>
-          <ChevronLeft className="h-4 w-4 mr-2" />
-          Previous Week
+      <div className="flex justify-between items-center mb-4">
+        <Button variant="ghost" onClick={navigateToPreviousWeek} size="icon">
+          <ChevronLeft className="h-4 w-4" />
         </Button>
-        <span className="font-medium">
-          {format(weekStart, 'MMM d')} - {format(addDays(weekStart, 6), 'MMM d, yyyy')}
-        </span>
-        <Button variant="ghost" onClick={navigateToNextWeek}>
-          Next Week
-          <ChevronRight className="h-4 w-4 ml-2" />
+        <div className="font-medium">
+          {format(weekStart, 'MMMM d')} - {format(addDays(weekStart, 6), 'MMMM d, yyyy')}
+        </div>
+        <Button variant="ghost" onClick={navigateToNextWeek} size="icon">
+          <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
       <div className="border rounded-lg overflow-hidden">

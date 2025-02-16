@@ -170,7 +170,12 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
     try {
       const periods = [selectedPeriods.primary, selectedPeriods.secondary].filter(Boolean);
       
-      console.log('Attempting import with token:', session.accessToken.slice(0, 10) + '...');
+      console.log('Importing assignment with:', {
+        periods,
+        subject: selectedSubject,
+        courseId: course.id,
+        assignmentId: assignment.id
+      });
 
       const importRes = await fetch(
         `/api/classroom/${course.id}/assignments/${assignment.id}/import`,
@@ -182,8 +187,7 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
           },
           body: JSON.stringify({ 
             periods,
-            subject: selectedSubject,
-            accessToken: session.accessToken // Add token to body as well
+            subject: selectedSubject // Make sure we send the subject
           })
         }
       );
@@ -200,26 +204,17 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
         throw new Error(result.error || 'Import failed');
       }
 
-      // More explicit toast call
       toast({
-        title: "Assignment Imported!",
-        description: `Successfully imported ${assignment.title} for ${result.periodsFound.length} period(s)`,
-        variant: "default",
-        className: "bg-green-50 border-green-500",
-        duration: 5000,
-        style: {
-          border: '1px solid #22c55e',
-          color: '#15803d',
-        },
+        title: "Success",
+        description: `Assignment imported for ${periods.length} period(s)`
       });
-
       setShowAssignments(false);
     } catch (error) {
+      console.error('Import error:', error);
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : 'Failed to import assignment',
-        variant: "destructive",
-        duration: 5000,
+        variant: "destructive"
       });
     } finally {
       setLoading(false);

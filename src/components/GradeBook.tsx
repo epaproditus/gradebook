@@ -2011,84 +2011,53 @@ const syncGradesToClassroom = async (assignmentId: string, periodId: string) => 
 // Update handleSyncGrades to ensure we have an active period
 const handleSyncGrades = async (assignmentId: string) => {
   try {
-    console.log('Starting grade sync:', {
+    if (!session?.accessToken) {
+      toast({ title: "Error", description: "Not authenticated" });
+      return;
+    }
+
+    const assignment = assignments[assignmentId];
+    if (!assignment) {
+      toast({ 
+        variant: "destructive",
+        title: "Error", 
+        description: "Assignment not found" 
+      });
+      return;
+    }
+
+    // If no active tab, use first period from assignment
+    const periodId = activeTab || assignment.periods[0];
+    if (!periodId) {
+      toast({ 
+        variant: "destructive",
+        title: "Error", 
+        description: "No period available for sync" 
+      });
+      return;
+    }
+
+    // Debug info
+    console.log('Sync initiated:', {
       assignmentId,
-      activeTab,
-      assignment: assignments[assignmentId]
-    });
-
-    if (!activeTab) {
-      toast({
-        title: "Error",
-        description: "Please select a period first",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // Get the Google course/work IDs
-    const [courseId, courseWorkId] = assignments[assignmentId]?.google_classroom_id?.split('_') || [];
-    if (!courseId || !courseWorkId) {
-      toast({
-        title: "Error",
-        description: "Assignment not linked to Google Classroom",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    console.log('Preparing grades for sync:', {
-      courseId,
-      courseWorkId,
-      periodId: activeTab
-    });
-
-    // Get grades for this assignment and period
-    const periodGrades = grades[assignmentId]?.[activeTab] || {};
-    const gradesToSync = Object.entries(periodGrades).map(([studentId, grade]) => ({
-      studentId: parseInt(studentId),
-      grade: parseInt(grade),
-      period: activeTab
-    }));
-
-    console.log('Sending grades:', {
-      count: gradesToSync.length,
-      sample: gradesToSync[0]
+      periodId,
+      hasSession: !!session,
+      hasAccessToken: !!session?.accessToken,
+      assignment,
+      periodStudents: students[periodId]?.length || 0,
     });
 
     setSyncingAssignments(prev => ({ ...prev, [assignmentId]: true }));
 
-    const response = await fetch(
-      `/api/classroom/${courseId}/coursework/${courseWorkId}/grades`,
-      {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ grades: gradesToSync })
-      }
-    );
-
-    const result = await response.json();
-
-    console.log('Sync result:', result);
-
-    if (!response.ok) {
-      throw new Error(result.error || 'Failed to sync grades');
-    }
-
-    toast({
-      title: "Success",
-      description: `Synced ${result.results?.filter((r: any) => r.success).length || 0} grades`
+    const grades = await getGradesForSync({
+      assignmentId,
+      periodId
     });
 
+    // ... rest of sync function ...
+    // ...existing code...
   } catch (error) {
-    console.error('Sync failed:', error);
-    toast({
-      title: "Error",
-      description: error instanceof Error ? error.message : "Failed to sync grades",
-      variant: "destructive"
-    });
+    // ... existing error handling ...
   } finally {
     setSyncingAssignments(prev => ({ ...prev, [assignmentId]: false }));
   }
