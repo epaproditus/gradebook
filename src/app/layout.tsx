@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "@/components/Providers";
 import { NextAuthProvider } from '@/providers/auth';
 import { Navigation } from '@/components/Navigation';
+import { Toaster } from "@/components/ui/toaster";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,20 +33,10 @@ export default function RootLayout({
       >
         <Providers>
           <NextAuthProvider>
-            <div className="min-h-screen flex flex-col">
-              <header className="border-b">
-                <div className="container mx-auto">
-                  <Navigation />
-                </div>
-              </header>
-              <main className="flex-1">
-                <div className="container mx-auto">
-                  {children}
-                </div>
-              </main>
-            </div>
+            {children}
           </NextAuthProvider>
         </Providers>
+        <Toaster />
       </body>
     </html>
   );

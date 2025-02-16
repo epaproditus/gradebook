@@ -31,6 +31,11 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
   // Add state to track if periods are mapped
   const [mappedPeriods, setMappedPeriods] = useState<Set<string>>(new Set());
 
+  // Add state for selected subject
+  const [selectedSubject, setSelectedSubject] = useState<'Math 8' | 'Algebra I'>(
+    course.name.toLowerCase().includes('alg') ? 'Algebra I' : 'Math 8'
+  );
+
   // Modified to check existing mappings
   useEffect(() => {
     async function loadPeriodsAndMappings() {
@@ -165,6 +170,8 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
     try {
       const periods = [selectedPeriods.primary, selectedPeriods.secondary].filter(Boolean);
       
+      console.log('Attempting import with token:', session.accessToken.slice(0, 10) + '...');
+
       const importRes = await fetch(
         `/api/classroom/${course.id}/assignments/${assignment.id}/import`,
         {
@@ -173,7 +180,11 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session.accessToken}`
           },
-          body: JSON.stringify({ periods })
+          body: JSON.stringify({ 
+            periods,
+            subject: selectedSubject,
+            accessToken: session.accessToken // Add token to body as well
+          })
         }
       );
 
@@ -189,17 +200,26 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
         throw new Error(result.error || 'Import failed');
       }
 
+      // More explicit toast call
       toast({
-        title: "Success",
-        description: `Assignment imported for ${periods.length} period(s)`
+        title: "Assignment Imported!",
+        description: `Successfully imported ${assignment.title} for ${result.periodsFound.length} period(s)`,
+        variant: "default",
+        className: "bg-green-50 border-green-500",
+        duration: 5000,
+        style: {
+          border: '1px solid #22c55e',
+          color: '#15803d',
+        },
       });
+
       setShowAssignments(false);
     } catch (error) {
-      console.error('Import error:', error);
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : 'Failed to import assignment',
-        variant: "destructive"
+        variant: "destructive",
+        duration: 5000,
       });
     } finally {
       setLoading(false);
@@ -211,68 +231,82 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
       <div className="flex flex-col gap-4">
         {/* Course Header */}
         <div className="border-b pb-3">
-          <h3 className="font-medium text-lg text-gray-800">{course.name}</h3>
-          {course.section && (
-            <p className="text-sm text-gray-500">{course.section}</p>
-          )}
-        </div>
-
-        {/* Simplified Card Actions */}
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <Select 
-              value={selectedPeriods.primary || 'none'}
-              onValueChange={(value) => handlePeriodChange(value, 'primary')}
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="font-medium text-lg text-gray-800">{course.name}</h3>
+              {course.section && (
+                <p className="text-sm text-gray-500">{course.section}</p>
+              )}
+            </div>
+            <Select
+              value={selectedSubject}
+              onValueChange={(value: 'Math 8' | 'Algebra I') => setSelectedSubject(value)}
             >
-              <SelectTrigger className={`w-32 h-8 text-sm ${
-                selectedPeriods.primary && !mappedPeriods.has(selectedPeriods.primary) 
-                  ? 'border-yellow-500' 
-                  : ''
-              }`}>
-                <SelectValue placeholder="Primary Period" />
+              <SelectTrigger className="w-24 h-7 text-xs">
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Clear Selection</SelectItem>
-                {availablePeriods.map(period => (
-                  <SelectItem 
-                    key={period} 
-                    value={period}
-                    disabled={period === selectedPeriods.secondary}
-                  >
-                    {period} {mappedPeriods.has(period) ? '✓' : ''}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select 
-              value={selectedPeriods.secondary || 'none'}
-              onValueChange={(value) => handlePeriodChange(value, 'secondary')}
-            >
-              <SelectTrigger className="w-32 h-8 text-sm">
-                <SelectValue placeholder="Secondary Period" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Select...</SelectItem>
-                {availablePeriods.map(period => (
-                  <SelectItem 
-                    key={period} 
-                    value={period}
-                    disabled={period === selectedPeriods.primary}
-                  >
-                    {period}
-                  </SelectItem>
-                ))}
+                <SelectItem value="Math 8">Math 8</SelectItem>
+                <SelectItem value="Algebra I">Algebra I</SelectItem>
               </SelectContent>
             </Select>
           </div>
+        </div>
+
+        {/* Card Actions */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="space-x-2 text-sm text-gray-600">
+              <Select 
+                value={selectedPeriods.primary || 'none'}
+                onValueChange={(value) => handlePeriodChange(value, 'primary')}
+              >
+                <SelectTrigger className="w-24 h-7 text-xs">
+                  <SelectValue placeholder="Period 1" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Clear</SelectItem>
+                  {availablePeriods.map(period => (
+                    <SelectItem 
+                      key={period} 
+                      value={period}
+                      disabled={period === selectedPeriods.secondary}
+                    >
+                      {period}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select 
+                value={selectedPeriods.secondary || 'none'}
+                onValueChange={(value) => handlePeriodChange(value, 'secondary')}
+              >
+                <SelectTrigger className="w-24 h-7 text-xs">
+                  <SelectValue placeholder="Period 2" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Clear</SelectItem>
+                  {availablePeriods.map(period => (
+                    <SelectItem 
+                      key={period} 
+                      value={period}
+                      disabled={period === selectedPeriods.primary}
+                    >
+                      {period}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
 
           <Button
-            variant="outline"
-            size="sm"
+            variant="default" // Changed from outline to make it more prominent
+            size="default" // Changed from sm to default
             onClick={() => setShowAssignments(true)}
             disabled={loading || (!selectedPeriods.primary && !selectedPeriods.secondary)}
-            className="self-end"
+            className="w-full" // Make button full width
           >
             {loading ? <LoadingSpinner className="w-4 h-4 mr-2" /> : null}
             Import Assignment
