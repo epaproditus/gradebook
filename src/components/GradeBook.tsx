@@ -676,6 +676,7 @@ const GradeBook: FC = () => {
   const [showImport, setShowImport] = useState(false);
   const [syncingAssignments, setSyncingAssignments] = useState<Record<string, boolean>>({});
   const { data: session } = useSession();
+  const [activeRow, setActiveRow] = useState<string | null>(null);
 
   // Fetch students from Supabase
   useEffect(() => {
@@ -1642,7 +1643,13 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
                 </div>
                 <div className="space-y-2">
                   {sortStudents(students[periodId] || [], assignmentId, periodId).map(student => (
-                    <div key={student.id} className="grid grid-cols-[auto_1fr_70px_70px_70px] gap-2 items-center">
+                    <div 
+                      key={student.id} 
+                      className={cn(
+                        "grid grid-cols-[auto_1fr_70px_70px_70px] gap-2 items-center p-2 rounded transition-colors",
+                        activeRow === `${assignmentId}-${periodId}-${student.id}` && "bg-blue-100/50 shadow-sm" // Highlight active row
+                      )}
+                    >
                       <div className="flex items-center gap-1">
                         <Button
                           variant="outline"
@@ -1703,21 +1710,25 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
                         min="0"
                         max="100"
                         placeholder="0"
-                        className="text-center h-8 text-sm"
+                        className="text-center h-8 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         value={
                           editingGrades[`${assignmentId}-${periodId}`] 
                             ? unsavedGrades[assignmentId]?.[periodId]?.[student.id] || ''
                             : grades[assignmentId]?.[periodId]?.[student.id] || ''
                         }
                         onChange={(e) => handleGradeChange(assignmentId, periodId, String(student.id), e.target.value)}
+                        onFocus={() => setActiveRow(`${assignmentId}-${periodId}-${student.id}`)}
+                        onBlur={() => setActiveRow(null)}
                       />
                       <Input
                         type="number"
                         min="0"
                         placeholder="+0"
-                        className="text-center h-8 text-sm"
+                        className="text-center h-8 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         value={extraPoints[`${assignmentId}-${periodId}-${student.id}`] || ''}
                         onChange={(e) => handleExtraPointsChange(assignmentId, periodId, student.id, e.target.value)}
+                        onFocus={() => setActiveRow(`${assignmentId}-${periodId}-${student.id}`)}
+                        onBlur={() => setActiveRow(null)}
                       />
                       <div className="flex items-center justify-center bg-secondary rounded px-2 h-8">
                         <span className="text-sm font-medium">
