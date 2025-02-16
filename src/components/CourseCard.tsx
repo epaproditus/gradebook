@@ -248,15 +248,15 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
           </div>
         </div>
 
-        {/* Card Actions */}
+        {/* Card Actions - Updated Layout */}
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="space-x-2 text-sm text-gray-600">
+          <div className="flex items-center justify-between">
+            <div className="flex gap-2">
               <Select 
                 value={selectedPeriods.primary || 'none'}
                 onValueChange={(value) => handlePeriodChange(value, 'primary')}
               >
-                <SelectTrigger className="w-24 h-7 text-xs">
+                <SelectTrigger className="w-28">
                   <SelectValue placeholder="Period 1" />
                 </SelectTrigger>
                 <SelectContent>
@@ -277,7 +277,7 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
                 value={selectedPeriods.secondary || 'none'}
                 onValueChange={(value) => handlePeriodChange(value, 'secondary')}
               >
-                <SelectTrigger className="w-24 h-7 text-xs">
+                <SelectTrigger className="w-28">
                   <SelectValue placeholder="Period 2" />
                 </SelectTrigger>
                 <SelectContent>
@@ -294,18 +294,17 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
                 </SelectContent>
               </Select>
             </div>
-          </div>
 
-          <Button
-            variant="default" // Changed from outline to make it more prominent
-            size="default" // Changed from sm to default
-            onClick={() => setShowAssignments(true)}
-            disabled={loading || (!selectedPeriods.primary && !selectedPeriods.secondary)}
-            className="w-full" // Make button full width
-          >
-            {loading ? <LoadingSpinner className="w-4 h-4 mr-2" /> : null}
-            Import Assignment
-          </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => setShowAssignments(true)}
+              disabled={loading || (!selectedPeriods.primary && !selectedPeriods.secondary)}
+            >
+              {loading ? <LoadingSpinner className="w-4 h-4 mr-2" /> : null}
+              Import Assignment
+            </Button>
+          </div>
         </div>
       </div>
 
