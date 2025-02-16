@@ -2163,7 +2163,7 @@ return (
                 onChange={(e) => handleAssignmentNameChange(e.target.value)}
               />
               
-              {/* Group the dropdowns in one row */}
+              {/* Dropdowns row */}
               <div className="flex gap-2">
                 <Select 
                   value={selectedType}
@@ -2193,6 +2193,48 @@ return (
                   </SelectContent>
                 </Select>
 
+                <div className="w-[140px] relative">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button 
+                        variant="outline" 
+                        className="w-full justify-between text-sm font-normal h-9"
+                        role="combobox"
+                      >
+                        {newAssignment.periods.length 
+                          ? `${newAssignment.periods.length} selected` 
+                          : "Select periods"}
+                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[200px] p-0" side="bottom">
+                      <div className="space-y-1 p-2">
+                        {Object.keys(students).map(periodId => (
+                          <div
+                            key={periodId}
+                            className="flex items-center space-x-2 rounded hover:bg-accent hover:text-accent-foreground cursor-pointer p-2 text-sm"
+                            onClick={() => {
+                              const isSelected = newAssignment.periods.includes(periodId);
+                              setNewAssignment(prev => prev ? {
+                                ...prev,
+                                periods: isSelected 
+                                  ? prev.periods.filter(p => p !== periodId)
+                                  : [...prev.periods, periodId]
+                              } : null);
+                            }}
+                          >
+                            <Checkbox 
+                              checked={newAssignment.periods.includes(periodId)}
+                              className="pointer-events-none h-4 w-4"
+                            />
+                            <span>Period {periodId}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button variant="outline" className="w-[140px] justify-start text-left font-normal">
@@ -2215,19 +2257,6 @@ return (
                 </Popover>
               </div>
 
-              {/* Rest of the form remains the same */}
-              <div className="border rounded-md p-4">
-                <div className="text-sm font-medium mb-2">Select Periods</div>
-                {Object.keys(students).map(periodId => (
-                  <div key={periodId} className="flex items-center gap-2 mb-2">
-                    <Checkbox 
-                      checked={newAssignment?.periods.includes(periodId)}
-                      onCheckedChange={() => handlePeriodsSelect(periodId)}
-                    />
-                    <span>Period {periodId}</span>
-                  </div>
-                ))}
-              </div>
               <Button onClick={saveAssignment} className="w-full">
                 Create Assignment
               </Button>

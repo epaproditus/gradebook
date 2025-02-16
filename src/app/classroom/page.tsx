@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+  import { useState, useEffect } from 'react';
 import { useSession, signIn } from 'next-auth/react';
 import { CourseCard } from '@/components/CourseCard';
 import LoadingSpinner from '@/components/ui/loading-spinner';
