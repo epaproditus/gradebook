@@ -824,10 +824,12 @@ const GradeBook: FC = () => {
 
   // Add a new button for creating assignments
   const handleNewAssignment = () => {
-    if (!selectedDate) return;
+    // If clicked without a date, select today's date
+    const dateToUse = selectedDate || new Date();
+    setSelectedDate(dateToUse);
     
     setNewAssignment({
-      date: selectedDate,
+      date: dateToUse,
       name: '',
       periods: [],
       type: selectedType,
@@ -2148,18 +2150,11 @@ return (
         >
           Create New Assignment
         </Button>
-        {selectedDate && (
-          <Button 
-            onClick={handleNewAssignment}
-            className="w-full"
-          >
-            Create New Assignment for {selectedDate.toLocaleDateString()}
-          </Button>
-        )}
+
         {newAssignment && (
           <Card>
             <CardHeader>
-              <CardTitle>New Assignment for {selectedDate?.toLocaleDateString()}</CardTitle>
+              <CardTitle>New Assignment</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <Input 
@@ -2167,6 +2162,60 @@ return (
                 value={newAssignment?.name || ''}
                 onChange={(e) => handleAssignmentNameChange(e.target.value)}
               />
+              
+              {/* Group the dropdowns in one row */}
+              <div className="flex gap-2">
+                <Select 
+                  value={selectedType}
+                  onValueChange={(value: 'Daily' | 'Assessment') => setSelectedType(value)}
+                >
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue placeholder="Type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Daily">Daily</SelectItem>
+                    <SelectItem value="Assessment">Assessment</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select
+                  value={newAssignment.subject}
+                  onValueChange={(value: 'Math 8' | 'Algebra I') => 
+                    setNewAssignment(prev => prev ? { ...prev, subject: value } : null)
+                  }
+                >
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue placeholder="Subject" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Math 8">Math 8</SelectItem>
+                    <SelectItem value="Algebra I">Algebra I</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-[140px] justify-start text-left font-normal">
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {format(newAssignment.date, 'PP')}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={newAssignment.date}
+                      onSelect={(date) => {
+                        if (date) {
+                          setNewAssignment(prev => prev ? { ...prev, date } : null);
+                        }
+                      }}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* Rest of the form remains the same */}
               <div className="border rounded-md p-4">
                 <div className="text-sm font-medium mb-2">Select Periods</div>
                 {Object.keys(students).map(periodId => (
@@ -2179,32 +2228,6 @@ return (
                   </div>
                 ))}
               </div>
-              <Select 
-                value={selectedType}
-                onValueChange={(value: 'Daily' | 'Assessment') => setSelectedType(value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Assignment Type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Daily">Daily</SelectItem>
-                  <SelectItem value="Assessment">Assessment</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={newAssignment.subject}
-                onValueChange={(value: 'Math 8' | 'Algebra I') => 
-                  setNewAssignment(prev => prev ? { ...prev, subject: value } : null)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select subject" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Math 8">Math 8</SelectItem>
-                  <SelectItem value="Algebra I">Algebra I</SelectItem>
-                </SelectContent>
-              </Select>
               <Button onClick={saveAssignment} className="w-full">
                 Create Assignment
               </Button>
