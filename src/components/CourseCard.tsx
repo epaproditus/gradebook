@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CourseSetupDialog } from './CourseSetupDialog';
 import { Button } from './ui/button';
 import { useSession } from 'next-auth/react';
@@ -31,6 +31,10 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
   const [existingMappings, setExistingMappings] = useState<any[]>([]);
   const [showTestMapping, setShowTestMapping] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [availablePeriods, setAvailablePeriods] = useState<string[]>([]);
+
+  // Add persistent storage key for selected period
+  const storageKey = React.useMemo(() => `selected-period-${course.id}`, [course.id]);
 
   // Detect if course is likely Algebra based on name
   useEffect(() => {
@@ -76,42 +80,75 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
     }
   }, [setupStatus]);
 
+  useEffect(() => {
+    async function loadPeriods() {
+      const { data } = await supabase
+        .from('students')
+        .select('period')
+        .not('period', 'is', null)
+        .order('period');
+
+      // Get unique periods preserving order (1st, 1st (SPED), etc.)
+      const uniquePeriods = Array.from(new Set(data?.map(p => p.period)));
+      setAvailablePeriods(uniquePeriods);
+      
+      // Load previously selected period from localStorage
+      const savedPeriod = localStorage.getItem(storageKey);
+      if (savedPeriod && uniquePeriods.includes(savedPeriod)) {
+        setSelectedPeriod(savedPeriod);
+      }
+    }
+
+    loadPeriods();
+  }, [storageKey]);
+
+  // Save selection when it changes
+  const handlePeriodChange = (value: string) => {
+    setSelectedPeriod(value);
+    localStorage.setItem(storageKey, value);
+  };
+
   const handleImportAssignment = async (assignment: GoogleAssignment) => {
-    if (!session?.accessToken || !setupStatus.completed) {
-      alert('Course not set up. Please complete course setup first.');
+    if (!session?.accessToken) {
+      toast({
+        title: "Error",
+        description: "Not authenticated",
+        variant: "destructive"
+      });
       return;
     }
     
     setLoading(true);
     try {
+      console.log('Importing assignment:', assignment);
+
       const importRes = await fetch(`/api/classroom/${course.id}/assignments/${assignment.id}/import`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.accessToken}`
         },
-        body: JSON.stringify({ 
-          period: setupStatus.periods[0],
-          forceUpdate: assignment.forceUpdate === true
-        })
+        body: JSON.stringify({ period: selectedPeriod }) // Add selected period
       });
 
       const importData = await importRes.json();
       
       if (!importRes.ok) {
-        if (importData.error === "Assignment already exists") {
-          setShowAssignments(false);
-           // Instead of calling handleAssignmentClick, show the AssignmentSelectDialog again
-          return;
-        }
         throw new Error(importData.error || 'Import failed');
       }
 
-      alert('Assignment imported successfully!');
+      toast({
+        title: "Success",
+        description: "Assignment imported successfully!"
+      });
       setShowAssignments(false);
     } catch (error) {
       console.error('Import error:', error);
-      alert(error instanceof Error ? error.message : 'Failed to import assignment');
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : 'Failed to import assignment',
+        variant: "destructive"
+      });
     } finally {
       setLoading(false);
     }
@@ -318,117 +355,46 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
   };
 
   return (
-    <div className="border rounded-lg p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="font-medium">{course.name}</h3>
+    <div className="border rounded-lg p-4 bg-white shadow-sm hover:shadow-md transition-shadow">
+      <div className="flex flex-col gap-4">
+        {/* Course Header */}
+        <div className="border-b pb-3">
+          <h3 className="font-medium text-lg text-gray-800">{course.name}</h3>
           {course.section && (
             <p className="text-sm text-gray-500">{course.section}</p>
           )}
-          {setupStatus.completed ? (
-            <span className="text-sm text-green-600">
-              ✓ Setup complete for periods: {setupStatus.periods.join(', ')}
-            </span>
-          ) : (
-            <span className="text-sm text-orange-600">Needs Setup</span>
-          )}
         </div>
-        <div className="flex gap-2">
-          {setupStatus.completed && (
-            <Button
-              variant="outline"
-              onClick={() => setShowAssignments(true)}
-              disabled={loading}
-            >
-              {loading ? <LoadingSpinner className="w-4 h-4 mr-2" /> : null}
-              Import Assignment
-            </Button>
-          )}
-          <Button 
-            variant={setupStatus.completed ? "outline" : "default"}
-            onClick={handleSetupClick}
-            disabled={isLoading}
+
+        {/* Card Actions */}
+        <div className="flex items-center justify-between">
+          <Select 
+            value={selectedPeriod}
+            onValueChange={handlePeriodChange}
           >
-            {isLoading ? (
-              <LoadingSpinner className="w-4 h-4 mr-2" />
-            ) : null}
-            {setupStatus.completed ? 'Edit Setup' : 'Setup Course'}
+            <SelectTrigger className="w-28 h-8 text-sm">
+              <SelectValue placeholder="Select..." />
+            </SelectTrigger>
+            <SelectContent>
+              {availablePeriods.map(period => (
+                <SelectItem key={period} value={period}>
+                  {period}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowAssignments(true)}
+            disabled={loading || !selectedPeriod}
+            className="ml-2"
+          >
+            {loading ? <LoadingSpinner className="w-4 h-4 mr-2" /> : null}
+            Import Assignment
           </Button>
         </div>
       </div>
-
-      {setupStatus.completed && existingMappings.length > 0 && (
-        <div className="mt-4 text-sm text-gray-600">
-          <p>Mapped Students: {existingMappings.length}</p>
-          <button 
-            onClick={() => setShowSetup(true)}
-            className="text-blue-500 hover:underline"
-          >
-            View Mappings
-          </button>
-        </div>
-      )}
-
-      {setupStatus.completed && (
-        <div className="mt-2 space-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={verifyMappings}
-          >
-            Verify Mappings
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={checkStatus}
-          >
-            Check Status
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => setShowTestMapping(true)}
-            className="mt-2 text-xs"
-          >
-            Test Mappings View
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => checkPeriodMappings(setupStatus.periods[0])}
-          >
-            Debug Mappings
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => syncGoogleIds(setupStatus.periods[0])}
-          >
-            Sync Google IDs
-          </Button>
-          <div className="flex flex-wrap gap-2 mt-2">
-            {Array.from(new Set(setupStatus.periods)).map(period => (
-              <Button
-                key={period}
-                variant="destructive"
-                size="sm"
-                onClick={() => clearSetup(period)}
-              >
-                Clear {period} Setup
-              </Button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {showSetup && (
-        <CourseSetupDialog
-          courseId={course.id}
-          courseName={course.name}
-          open={showSetup}
-          onClose={handleSetupClose}
-        />
-      )}
 
       <AssignmentSelectDialog
         courseId={course.id}
@@ -436,16 +402,6 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
         onClose={() => setShowAssignments(false)}
         onSelect={handleImportAssignment}
       />
-
-      {showTestMapping && (
-        <TestMappingDialog
-          courseId={course.id}
-          courseName={course.name}
-          period={setupStatus.periods[0]}
-          open={showTestMapping}
-          onClose={() => setShowTestMapping(false)}
-        />
-      )}
     </div>
   );
 }

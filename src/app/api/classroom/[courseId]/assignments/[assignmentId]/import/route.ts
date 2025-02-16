@@ -7,19 +7,27 @@ export async function POST(
   context: { params: Promise<{ courseId: string; assignmentId: string }> }
 ) {
   const { courseId, assignmentId } = await context.params;
-  const { forceUpdate, period } = await request.json();
   const authHeader = request.headers.get("authorization");
 
   if (!authHeader) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  let requestBody;
+  try {
+    requestBody = await request.json();
+  } catch (error) {
+    return NextResponse.json({ error: "Invalid JSON input" }, { status: 400 });
+  }
+
+  const { forceUpdate, period } = requestBody;
+
   try {
     // Check if assignment exists first
     const { data: existingAssignment } = await supabase
       .from('assignments')
       .select('id')
-      .eq('google_classroom_id', assignmentId)
+      .eq('id', assignmentId)
       .single();
 
     if (existingAssignment && !forceUpdate) {
@@ -61,13 +69,13 @@ export async function POST(
       .from('assignments')
       .upsert({
         id: existingAssignment?.id || uuidv4(),
-        google_classroom_id: assignmentId,
         name: assignment.title,
         type: 'Daily',
         periods: [period],
         date: new Date().toISOString().split('T')[0],
         subject: 'Math 8',
-        max_points: assignment.maxPoints || 100
+        max_points: assignment.maxPoints || 100,
+        google_classroom_link: assignment.alternateLink || null
       })
       .select()
       .single();

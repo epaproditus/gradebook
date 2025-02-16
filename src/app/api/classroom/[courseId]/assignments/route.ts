@@ -2,18 +2,18 @@ import { NextResponse } from 'next/server';
 
 export async function GET(
   request: Request,
-  { params }: { params: { courseId: string } }
+  context: { params: Promise<{ courseId: string }> }
 ) {
-  const { courseId } = await params;
-  const authHeader = request.headers.get("authorization");
-  const { searchParams } = new URL(request.url);
-  const pageSize = searchParams.get('pageSize') || '5';
-
-  if (!authHeader) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   try {
+    const { courseId } = await context.params;
+    const authHeader = request.headers.get("authorization");
+    const { searchParams } = new URL(request.url);
+    const pageSize = searchParams.get('pageSize') || '5';
+
+    if (!authHeader) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const res = await fetch(
       `https://classroom.googleapis.com/v1/courses/${courseId}/courseWork?pageSize=${pageSize}&orderBy=updateTime desc`,
       {
@@ -40,17 +40,18 @@ export async function GET(
 
 export async function POST(
   request: Request,
-  { params }: { params: { courseId: string } }
+  context: { params: Promise<{ courseId: string }> }
 ) {
-  // Handle grade syncing here
-  // This will update grades both in your DB and Google Classroom
-  // Implementation depends on your database structure
-}
-  const { courseId } = params;
+  const { courseId } = await context.params;
   const authHeader = request.headers.get("authorization");
   const body = await request.json();
 
   if (!authHeader) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  // Handle grade syncing here
+  // This will update grades both in your DB and Google Classroom
+  // Implementation depends on your database structure
+}
 
