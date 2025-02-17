@@ -6,6 +6,11 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ImportScoresDialog } from './ImportScoresDialog';
+import { GradeExportDialog } from './GradeExportDialog';
+import { STATUS_COLORS, TYPE_COLORS } from '@/lib/constants';
+import { toast } from "@/components/ui/use-toast";
+import { ColorSettings } from './ColorSettings'; // New import
 
 interface RosterViewProps {
   students: Record<string, Student[]>;
@@ -15,6 +20,12 @@ interface RosterViewProps {
   getGradeValue: (assignmentId: string, periodId: string, studentId: string) => string;
   calculateTotal: (grade: string, extra: string) => number;
   activeTab: string;
+  unsavedGrades: GradeData;
+  setUnsavedGrades: React.Dispatch<React.SetStateAction<GradeData>>;
+  setEditingGrades: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  handleImportGrades: (assignmentId: string, periodId: string, grades: Record<string, string>) => void;
+  exportGrades: (assignmentIds: string[], periodIds: string[], merge: boolean) => void;
+  saveGrades: (assignmentId: string, periodId: string) => Promise<void>; // Add this
 }
 
 const RosterView: FC<RosterViewProps> = ({
@@ -25,8 +36,17 @@ const RosterView: FC<RosterViewProps> = ({
   getGradeValue,
   calculateTotal,
   activeTab,
+  unsavedGrades,
+  setUnsavedGrades,
+  setEditingGrades,
+  handleImportGrades,
+  exportGrades,
+  saveGrades, // Add this
 }) => {
   const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(new Set());
+  // Add color state
+  const [showColors, setShowColors] = useState(false);
+  const [colorMode, setColorMode] = useState<'none' | 'subject' | 'type' | 'status'>('none');
 
   // Update average calculation to handle missing assessment types
   const calculateWeightedAverage = (grades: number[], types: ('Daily' | 'Assessment')[]) => {
@@ -104,14 +124,39 @@ const RosterView: FC<RosterViewProps> = ({
   // Add save function for the roster view
   const handleSaveAll = async () => {
     try {
-      const promises = sortedAssignments.map(assignment => 
+      // Get all assignments that have unsaved changes
+      const assignmentsToSave = sortedAssignments
+        .filter(assignment => 
+          editingGrades[`${assignment.id}-${activeTab}`] ||
+          Object.keys(unsavedGrades[assignment.id] || {}).includes(activeTab)
+        );
+
+      if (assignmentsToSave.length === 0) {
+        toast({
+          title: "No Changes",
+          description: "No unsaved changes to save"
+        });
+        return;
+      }
+
+      // Save each assignment's grades
+      const promises = assignmentsToSave.map(assignment => 
         saveGrades(assignment.id, activeTab)
       );
       
       await Promise.all(promises);
+      
+      // Clear editing states
+      assignmentsToSave.forEach(assignment => {
+        setEditingGrades(prev => ({
+          ...prev,
+          [`${assignment.id}-${activeTab}`]: false
+        }));
+      });
+
       toast({
         title: "Success",
-        description: "All grades saved successfully"
+        description: `Saved grades for ${assignmentsToSave.length} assignments`
       });
     } catch (error) {
       toast({
@@ -122,11 +167,50 @@ const RosterView: FC<RosterViewProps> = ({
     }
   };
 
+  // Add column color helper
+  const getColumnHeaderClass = (assignment: Assignment, isCollapsed: boolean) => {
+    return cn(
+      "relative transition-all duration-200 cursor-pointer group hover:bg-accent",
+      isCollapsed ? "w-12 min-w-[3rem]" : "w-32 min-w-[8rem]",
+      showColors && colorMode === 'type' && TYPE_COLORS[assignment.type],
+      showColors && colorMode === 'status' && STATUS_COLORS[assignment.status || 'not_started'].bg
+    );
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button onClick={handleSaveAll} className="mb-4">
-          Save All Grades
+      <div className="flex justify-between items-center">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <ImportScoresDialog
+              assignmentId={sortedAssignments[0]?.id}
+              periodId={activeTab}
+              onImport={handleImportGrades}
+              unsavedGrades={unsavedGrades}
+              setUnsavedGrades={setUnsavedGrades}
+              setEditingGrades={setEditingGrades}
+              assignments={assignments}
+              students={students}
+              grades={grades}
+            />
+            <GradeExportDialog
+              assignments={assignments}
+              students={students}
+              onExport={exportGrades}
+            />
+          </div>
+          <ColorSettings
+            showColors={showColors}
+            colorMode={colorMode}
+            onShowColorsChange={setShowColors}
+            onColorModeChange={setColorMode}
+          />
+        </div>
+        <Button 
+          onClick={handleSaveAll}
+          variant="default"
+        >
+          Save All Changes
         </Button>
       </div>
       <div className="overflow-x-auto border rounded-md">
@@ -140,12 +224,7 @@ const RosterView: FC<RosterViewProps> = ({
                 <TableHead 
                   key={assignment.id} 
                   onClick={() => toggleColumn(assignment.id)}
-                  className={cn(
-                    "relative transition-all duration-200 cursor-pointer group",
-                    "hover:bg-accent",
-                    collapsedColumns.has(assignment.id) ? "w-12 min-w-[3rem]" : "w-32 min-w-[8rem]",
-                    `z-${40 - index}`
-                  )}
+                  className={getColumnHeaderClass(assignment, collapsedColumns.has(assignment.id))}
                   style={{ zIndex: 40 - index }}
                 >
                   <div 
@@ -155,11 +234,11 @@ const RosterView: FC<RosterViewProps> = ({
                       collapsedColumns.has(assignment.id) ? "opacity-0" : "opacity-100"
                     )}
                   >
-                    <div className="line-clamp-2 text-center text-sm font-medium mb-1 w-full">
+                    <div className="line-clamp-2 text-center text-sm font-medium w-full">
                       {assignment.name}
                     </div>
                     <div className="text-xs text-muted-foreground whitespace-nowrap">
-                      {format(assignment.date, 'MM/dd')}
+                      {format(assignment.date, 'MM/dd')} - {assignment.type}
                     </div>
                     <ChevronUp className="h-3 w-3 mt-1 text-muted-foreground" />
                   </div>
@@ -172,11 +251,13 @@ const RosterView: FC<RosterViewProps> = ({
                       !collapsedColumns.has(assignment.id) ? "opacity-0" : "opacity-100"
                     )}
                   >
-                    <div className="flex flex-col items-center rotate-90">
-                      <ChevronDown className="h-3 w-3 mb-1" />
-                      <span className="text-xs whitespace-nowrap">
-                        {formatAssignmentDate(assignment.date, true)}
-                      </span>
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="flex flex-col items-center rotate-90">
+                        <ChevronDown className="h-3 w-3 mb-1" />
+                        <span className="text-xs whitespace-nowrap">
+                          {formatAssignmentDate(assignment.date, true)}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </TableHead>

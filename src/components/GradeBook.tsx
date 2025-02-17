@@ -32,6 +32,7 @@ import debounce from 'lodash/debounce';
 import { loadConfig, saveConfig, defaultConfig } from '@/lib/storage';
 import RosterView from './RosterView';
 import { LayoutGrid, Table } from 'lucide-react';
+import { STATUS_COLORS, TYPE_COLORS, SUBJECT_COLORS } from '@/lib/constants';
 
 // Initialize Supabase client (this is fine outside component)
 const supabase = createClient(
@@ -478,37 +479,6 @@ const PeriodStudentSearch: FC<{
     </div>
   );
 };
-
-// Add subject color constants
-const SUBJECT_COLORS = {
-  'Math 8': 'bg-purple-100 hover:bg-purple-200',
-  'Algebra I': 'bg-green-100 hover:bg-green-200'
-} as const;
-
-// Add type color constants
-const TYPE_COLORS = {
-  'Daily': 'bg-yellow-50 hover:bg-yellow-100',
-  'Assessment': 'bg-red-50 hover:bg-red-100'
-} as const;
-
-// Combined status colors for both backgrounds and text
-const STATUS_COLORS = {
-  'not_started': {
-    bg: 'bg-gray-50 hover:bg-gray-100 border-gray-200',
-    text: 'text-gray-400',
-    dot: 'bg-gray-400'
-  },
-  'in_progress': {
-    bg: 'bg-yellow-50 hover:bg-yellow-100 border-yellow-200',
-    text: 'text-yellow-600',
-    dot: 'bg-yellow-400'
-  },
-  'completed': {
-    bg: 'bg-green-50 hover:bg-green-100 border-green-200',
-    text: 'text-green-600',
-    dot: 'bg-green-400'
-  }
-} as const;
 
 // Add ColorSettings component at the top level
 const ColorSettings: FC<{
@@ -2660,6 +2630,7 @@ return (
                   getGradeValue={getGradeValue}
                   calculateTotal={calculateTotal}
                   activeTab={activeTab}
+                  saveGrades={saveGrades} // Add this prop
                 />
               </TabsContent>
             </Tabs>
