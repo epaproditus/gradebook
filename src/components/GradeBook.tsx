@@ -519,7 +519,13 @@ const ColorSettings: FC<{
       <div className="flex items-center gap-2">
         <Checkbox
           checked={showColors}
-          onCheckedChange={(checked) => onShowColorsChange(!!checked)}
+          onCheckedChange={(checked) => {
+            onShowColorsChange(!!checked);
+            if (checked) {
+              // Auto-select status mode when enabling colors
+              onColorModeChange('status');
+            }
+          }}
         />
         <span className="text-sm">Show Colors</span>
       </div>
@@ -532,9 +538,9 @@ const ColorSettings: FC<{
             <SelectValue placeholder="Color by..." />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="status">Color by Status</SelectItem>
             <SelectItem value="subject">Color by Subject</SelectItem>
             <SelectItem value="type">Color by Type</SelectItem>
-            <SelectItem value="status">Color by Status</SelectItem>
           </SelectContent>
         </Select>
       )}
@@ -668,7 +674,7 @@ type AssignmentStatus = 'in_progress' | 'completed' | 'not_started';
 const GradeBook: FC = () => {
   // Change the initial value of showColors to false
   const [showColors, setShowColors] = useState(false);
-  const [colorMode, setColorMode] = useState<'none' | 'subject' | 'type' | 'status'>('none');
+  const [colorMode, setColorMode] = useState<'none' | 'subject' | 'type' | 'status'>('status');
   
   // Move useState here
   const [calendarView, setCalendarView] = useState<'month' | 'week'>('week');
@@ -1670,10 +1676,16 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
           </div>
         </div>
       ) : (
-        <div onClick={() => setEditingAssignment(assignmentId)}>
-          <CardTitle>{assignment.name}</CardTitle>
-          <div className="text-sm text-muted-foreground">
-            {format(assignment.date, 'PPP')} - {assignment.subject}
+        <div className="flex items-center gap-4" onClick={() => setEditingAssignment(assignmentId)}>
+          <div className={cn(
+            "h-2 w-2 rounded-full",
+            STATUS_COLORS[assignment.status || 'not_started'].dot
+          )} />
+          <div>
+            <CardTitle>{assignment.name}</CardTitle>
+            <div className="text-sm text-muted-foreground">
+              {format(assignment.date, 'PPP')} - {assignment.subject}
+            </div>
           </div>
         </div>
       )}
