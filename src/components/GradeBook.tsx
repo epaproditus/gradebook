@@ -2358,15 +2358,15 @@ return (
         </Button>
         
         {isCalendarVisible && (
-          <Card className="w-96">
-            <CardHeader>
+          <Card className="w-72"> {/* Reduced from w-96 to w-72 */}
+            <CardHeader className="p-2"> {/* Reduced padding */}
               <div className="flex justify-between items-center">
-                <CardTitle>Calendar</CardTitle>
+                <CardTitle className="text-sm">Calendar</CardTitle> {/* Smaller title */}
                 <Select
                   defaultValue="month"
                   onValueChange={(value) => setCalendarView(value as 'month' | 'week')}
                 >
-                  <SelectTrigger className="w-28">
+                  <SelectTrigger className="h-8 w-24"> {/* Smaller trigger */}
                     <SelectValue placeholder="View" />
                   </SelectTrigger>
                   <SelectContent>
@@ -2376,7 +2376,7 @@ return (
                 </Select>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-2"> {/* Reduced padding */}
               {calendarView === 'month' ? (
                 <Calendar
                   mode="single"
@@ -2392,8 +2392,13 @@ return (
                   }}
                   modifiersStyles={{
                     assignment: {
-                      border: '2px solid var(--primary)',
+                      border: '1px solid var(--primary)', // Thinner border
                     }
+                  }}
+                  classNames={{
+                    day_today: "bg-accent/50 font-semibold text-accent-foreground", // More subtle today highlight
+                    day: "h-8 w-8 text-sm p-0", // Smaller day cells
+                    head_cell: "text-xs font-normal text-muted-foreground", // Smaller header text
                   }}
                 />
               ) : (
