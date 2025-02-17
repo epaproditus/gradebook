@@ -30,6 +30,8 @@ import { useSession } from 'next-auth/react';
 import { getGradesForSync } from '@/lib/gradeSync';
 import debounce from 'lodash/debounce';
 import { loadConfig, saveConfig, defaultConfig } from '@/lib/storage';
+import RosterView from './RosterView';
+import { LayoutGrid, Table } from 'lucide-react';
 
 // Initialize Supabase client (this is fine outside component)
 const supabase = createClient(
@@ -732,6 +734,7 @@ const GradeBook: FC = () => {
   const { data: session } = useSession();
   const [activeRow, setActiveRow] = useState<string | null>(null);
   const [localGrades, setLocalGrades] = useState<Record<string, string>>({});
+  const [viewMode, setViewMode] = useState<'assignment' | 'roster'>('assignment');
 
   // Fetch students from Supabase
   useEffect(() => {
@@ -2419,182 +2422,212 @@ return (
 
       {/* Right side */}
       <div className="flex-grow space-y-4">
-        <Button
-          onClick={handleNewAssignment}
-          className="w-full"
-        >
-          Create New Assignment
-        </Button>
-
-        {newAssignment && (
-          <Card>
-            <CardHeader>
-              <CardTitle>New Assignment</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Input 
-                placeholder="Assignment Name"
-                value={newAssignment?.name || ''}
-                onChange={(e) => handleAssignmentNameChange(e.target.value)}
-              />
-              
-              {/* Dropdowns row */}
-              <div className="flex gap-2">
-                <Select 
-                  value={selectedType}
-                  onValueChange={(value: 'Daily' | 'Assessment') => setSelectedType(value)}
-                >
-                  <SelectTrigger className="w-[140px]">
-                    <SelectValue placeholder="Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Daily">Daily</SelectItem>
-                    <SelectItem value="Assessment">Assessment</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Select
-                  value={newAssignment.subject}
-                  onValueChange={(value: 'Math 8' | 'Algebra I') => 
-                    setNewAssignment(prev => prev ? { ...prev, subject: value } : null)
-                  }
-                >
-                  <SelectTrigger className="w-[140px]">
-                    <SelectValue placeholder="Subject" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Math 8">Math 8</SelectItem>
-                    <SelectItem value="Algebra I">Algebra I</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <div className="w-[140px] relative">
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button 
-                        variant="outline" 
-                        className="w-full justify-between text-sm font-normal h-9"
-                        role="combobox"
-                      >
-                        {newAssignment.periods.length 
-                          ? `${newAssignment.periods.length} selected` 
-                          : "Select periods"}
-                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[200px] p-0" side="bottom">
-                      <div className="space-y-1 p-2">
-                        {Object.keys(students).map(periodId => (
-                          <div
-                            key={periodId}
-                            className="flex items-center space-x-2 rounded hover:bg-accent hover:text-accent-foreground cursor-pointer p-2 text-sm"
-                            onClick={() => {
-                              const isSelected = newAssignment.periods.includes(periodId);
-                              setNewAssignment(prev => prev ? {
-                                ...prev,
-                                periods: isSelected 
-                                  ? prev.periods.filter(p => p !== periodId)
-                                  : [...prev.periods, periodId]
-                              } : null);
-                            }}
-                          >
-                            <Checkbox 
-                              checked={newAssignment.periods.includes(periodId)}
-                              className="pointer-events-none h-4 w-4"
-                            />
-                            <span>Period {periodId}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-[140px] justify-start text-left font-normal">
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {format(newAssignment.date, 'PP')}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={newAssignment.date}
-                      onSelect={(date) => {
-                        if (date) {
-                          setNewAssignment(prev => prev ? { ...prev, date } : null);
-                        }
-                      }}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              <Button onClick={saveAssignment} className="w-full">
-                Create Assignment
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-        {/* Existing Assignments */}
-        <div className="flex gap-4 mb-4">
-          <Select
-            value={subjectFilter}
-            onValueChange={(value: 'all' | 'Math 8' | 'Algebra I') => setSubjectFilter(value)}
+        <div className="flex justify-between items-center">
+          <Button
+            onClick={handleNewAssignment}
+            className="w-[200px]"
           >
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Filter by subject" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Subjects</SelectItem>
-              <SelectItem value="Math 8">Math 8</SelectItem>
-              <SelectItem value="Algebra I">Algebra I</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select
-            value={dateFilter}
-            onValueChange={(value: 'asc' | 'desc' | 'none') => setDateFilter(value)}
-          >
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Sort by date" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Manual Sort</SelectItem>
-              <SelectItem value="asc">Oldest First</SelectItem>
-              <SelectItem value="desc">Newest First</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex justify-between items-center mb-4">
-          <div className="flex gap-4">
-            <ColorSettings 
-              showColors={showColors}
-              colorMode={colorMode}
-              onShowColorsChange={handleShowColorsChange}
-              onColorModeChange={setColorMode}
-            />
-            <Select
-              value={groupBy}
-              onValueChange={(value: 'none' | 'type') => setGroupBy(value)}
+            Create New Assignment
+          </Button>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setViewMode('assignment')}
+              className={cn(viewMode === 'assignment' && "bg-secondary")}
             >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Group by..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No Grouping</SelectItem>
-                <SelectItem value="type">By Type</SelectItem>
-              </SelectContent>
-            </Select>
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setViewMode('roster')}
+              className={cn(viewMode === 'roster' && "bg-secondary")}
+            >
+              <Table className="h-4 w-4" />
+            </Button>
           </div>
-          <GradeExportDialog 
-            assignments={assignments}
-            students={students}
-            onExport={exportGrades} 
-          />
         </div>
-        {renderAssignmentsSection()}
+
+        {/* View Mode Content */}
+        {viewMode === 'assignment' ? (
+          // Your existing assignment view content
+          <>
+            {newAssignment && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>New Assignment</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Input 
+                    placeholder="Assignment Name"
+                    value={newAssignment?.name || ''}
+                    onChange={(e) => handleAssignmentNameChange(e.target.value)}
+                  />
+                  
+                  {/* Dropdowns row */}
+                  <div className="flex gap-2">
+                    <Select 
+                      value={selectedType}
+                      onValueChange={(value: 'Daily' | 'Assessment') => setSelectedType(value)}
+                    >
+                      <SelectTrigger className="w-[140px]">
+                        <SelectValue placeholder="Type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Daily">Daily</SelectItem>
+                        <SelectItem value="Assessment">Assessment</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    <Select
+                      value={newAssignment.subject}
+                      onValueChange={(value: 'Math 8' | 'Algebra I') => 
+                        setNewAssignment(prev => prev ? { ...prev, subject: value } : null)
+                      }
+                    >
+                      <SelectTrigger className="w-[140px]">
+                        <SelectValue placeholder="Subject" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Math 8">Math 8</SelectItem>
+                        <SelectItem value="Algebra I">Algebra I</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    <div className="w-[140px] relative">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button 
+                            variant="outline" 
+                            className="w-full justify-between text-sm font-normal h-9"
+                            role="combobox"
+                          >
+                            {newAssignment.periods.length 
+                              ? `${newAssignment.periods.length} selected` 
+                              : "Select periods"}
+                            <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[200px] p-0" side="bottom">
+                          <div className="space-y-1 p-2">
+                            {Object.keys(students).map(periodId => (
+                              <div
+                                key={periodId}
+                                className="flex items-center space-x-2 rounded hover:bg-accent hover:text-accent-foreground cursor-pointer p-2 text-sm"
+                                onClick={() => {
+                                  const isSelected = newAssignment.periods.includes(periodId);
+                                  setNewAssignment(prev => prev ? {
+                                    ...prev,
+                                    periods: isSelected 
+                                      ? prev.periods.filter(p => p !== periodId)
+                                      : [...prev.periods, periodId]
+                                  } : null);
+                                }}
+                              >
+                                <Checkbox 
+                                  checked={newAssignment.periods.includes(periodId)}
+                                  className="pointer-events-none h-4 w-4"
+                                />
+                                <span>Period {periodId}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-[140px] justify-start text-left font-normal">
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {format(newAssignment.date, 'PP')}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={newAssignment.date}
+                          onSelect={(date) => {
+                            if (date) {
+                              setNewAssignment(prev => prev ? { ...prev, date } : null);
+                            }
+                          }}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  <Button onClick={saveAssignment} className="w-full">
+                    Create Assignment
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+            <div className="flex gap-4 mb-4">
+              <Select
+                value={subjectFilter}
+                onValueChange={(value: 'all' | 'Math 8' | 'Algebra I') => setSubjectFilter(value)}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Filter by subject" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Subjects</SelectItem>
+                  <SelectItem value="Math 8">Math 8</SelectItem>
+                  <SelectItem value="Algebra I">Algebra I</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={dateFilter}
+                onValueChange={(value: 'asc' | 'desc' | 'none') => setDateFilter(value)}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Sort by date" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Manual Sort</SelectItem>
+                  <SelectItem value="asc">Oldest First</SelectItem>
+                  <SelectItem value="desc">Newest First</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {renderAssignmentsSection()}
+          </>
+        ) : (
+          // New Roster View
+          <div className="mt-4">
+            <Tabs 
+              value={activeTab} 
+              onValueChange={setActiveTab}
+              className="w-full"
+            >
+              <TabsList>
+                {Object.keys(students).sort().map(periodId => (
+                  <TabsTrigger
+                    key={periodId}
+                    value={periodId}
+                  >
+                    Period {periodId}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+              <TabsContent value={activeTab} className="mt-4">
+                <RosterView
+                  students={students}
+                  assignments={assignments}
+                  grades={grades}
+                  onGradeChange={handleGradeChange}
+                  getGradeValue={getGradeValue}
+                  calculateTotal={calculateTotal}
+                  activeTab={activeTab}
+                />
+              </TabsContent>
+            </Tabs>
+          </div>
+        )}
       </div>
     </div>
   </div>
