@@ -198,6 +198,19 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
     }
   };
 
+  // Update this function to be more flexible
+  const getLinkedPeriods = (mainPeriod: string) => {
+    // Define period relationships (main period -> linked periods)
+    const periodMap: Record<string, string[]> = {
+      '2': ['2 SPED'],
+      // Add more mappings as needed, e.g.:
+      // '3': ['3 SPED'],
+      // '4': ['4 SPED'],
+    };
+
+    return periodMap[mainPeriod] || [];
+  };
+
   return (
     <div className="border rounded-lg p-4 bg-white shadow-sm hover:shadow-md transition-shadow">
       <div className="flex flex-col gap-4">
@@ -281,15 +294,14 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
         </div>
       </div>
 
-      {selectedPeriods.map(period => (
-        <StudentMappingDialog
-          key={period}
-          courseId={course.id}
-          periodId={period}
-          open={showMappingDialog}
-          onOpenChange={setShowMappingDialog}
-        />
-      ))}
+      <StudentMappingDialog
+        key={selectedPeriods.join('-')} // Changed from single period
+        courseId={course.id}
+        periodId={selectedPeriods[0]} // Use first period as main
+        additionalPeriods={selectedPeriods.slice(1)} // Rest are additional
+        open={showMappingDialog}
+        onOpenChange={setShowMappingDialog}
+      />
 
       <AssignmentSelectDialog
         courseId={course.id}

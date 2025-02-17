@@ -14,19 +14,23 @@ interface MappingRow {
   classroomUserId: string; // Add this field
 }
 
-export function StudentMappingDialog({ 
-  courseId, 
-  periodId, 
-  open, 
-  onOpenChange 
-}: { 
+interface Props {
   courseId: string;
   periodId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}) {
+  additionalPeriods?: string[]; // Add this prop for linked periods
+}
+
+export function StudentMappingDialog({ 
+  courseId, 
+  periodId, 
+  additionalPeriods = [],
+  open, 
+  onOpenChange 
+}: Props) {
   const [mappings, setMappings] = useState<MappingRow[]>([]);
-  const [rosterStudents, setRosterStudents] = useState<Array<{ id: number; name: string }>>([]);
+  const [rosterStudents, setRosterStudents] = useState<Array<{ id: number; name: string; period: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [autoMatches, setAutoMatches] = useState<Set<string>>(new Set()); // Track auto-matched emails
 
@@ -86,14 +90,28 @@ export function StudentMappingDialog({
       
       setLoading(true);
       try {
-        // Fetch roster students for this period
+        // Get all periods we need to fetch
+        const periodsToFetch = [periodId, ...additionalPeriods];
+        
+        console.log('Fetching students for periods:', periodsToFetch);
+
+        // Fetch students from all relevant periods
         const { data: students } = await supabase
           .from('students')
-          .select('id, name')
-          .eq('period', periodId)
-          .order('name');
+          .select('id, name, period')
+          .in('period', periodsToFetch)
+          .order('period, name');
 
-        if (students) setRosterStudents(students);
+        if (students) {
+          setRosterStudents(students);
+          console.log('Loaded students:', {
+            total: students.length,
+            byPeriod: students.reduce((acc, s) => {
+              acc[s.period] = (acc[s.period] || 0) + 1;
+              return acc;
+            }, {} as Record<string, number>)
+          });
+        }
 
         // Fetch Google Classroom students with their IDs
         const response = await fetch(`/api/classroom/${courseId}/students`);
@@ -167,7 +185,7 @@ export function StudentMappingDialog({
     };
 
     loadData();
-  }, [courseId, periodId, open]);
+  }, [courseId, periodId, additionalPeriods, open]);
 
   const performAutoMapping = async (
     googleStudents: any[], 
@@ -453,7 +471,12 @@ export function StudentMappingDialog({
                           key={student.id} 
                           value={student.id.toString()}
                         >
-                          {student.name}
+                          {student.name} 
+                          {student.period !== periodId && (
+                            <span className="ml-2 text-muted-foreground">
+                              ({student.period})
+                            </span>
+                          )}
                         </SelectItem>
                       ))}
                     </SelectContent>
