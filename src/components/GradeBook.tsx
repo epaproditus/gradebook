@@ -960,36 +960,47 @@ const debouncedSaveGrades = useCallback(
 const handleGradeChange = (assignmentId: string, periodId: string, studentId: string, grade: string) => {
   const key = `${assignmentId}-${periodId}-${studentId}`;
   
-  // Don't modify empty values or valid numbers
-  if (grade === '' || (isFinite(Number(grade)) && Number(grade) >= 0 && Number(grade) <= 100)) {
-    // Update local state immediately for responsive typing
-    setLocalGrades(prev => ({
+  // Remove validation to allow any input temporarily
+  setLocalGrades(prev => ({
+    ...prev,
+    [key]: grade
+  }));
+
+  // If we have a valid grade, trigger save
+  if (grade !== '') {
+    setEditingGrades(prev => ({
       ...prev,
-      [key]: grade
+      [`${assignmentId}-${periodId}`]: true
     }));
 
-    // Only trigger save if we have a valid grade
-    if (grade !== '') {
-      debouncedSaveGrades(assignmentId);
-    }
+    setUnsavedGrades(prev => ({
+      ...prev,
+      [assignmentId]: {
+        ...prev[assignmentId],
+        [periodId]: {
+          ...prev[assignmentId]?.[periodId],
+          [studentId]: grade
+        }
+      }
+    }));
+
+    debouncedSaveGrades(assignmentId);
   }
 };
 
-// Update the grade input value logic in the render:
 const getGradeValue = (assignmentId: string, periodId: string, studentId: string) => {
-  const localKey = `${assignmentId}-${periodId}-${studentId}`;
-  const localValue = localGrades[localKey];
-  
-  // First check local value
-  if (localValue !== undefined) return localValue;
-  
-  // Then check unsaved grades
+  // First check unsaved/editing grades
   if (editingGrades[`${assignmentId}-${periodId}`]) {
     const unsavedValue = unsavedGrades[assignmentId]?.[periodId]?.[studentId];
     if (unsavedValue !== undefined) return unsavedValue;
   }
   
-  // Finally check saved grades
+  // Then check local grades for immediate feedback
+  const localKey = `${assignmentId}-${periodId}-${studentId}`;
+  const localValue = localGrades[localKey];
+  if (localValue !== undefined) return localValue;
+  
+  // Finally fall back to saved grades
   const savedValue = grades[assignmentId]?.[periodId]?.[studentId];
   return savedValue !== undefined ? savedValue : '';
 };
@@ -1848,42 +1859,52 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
 
           {assignment.periods.map(periodId => (
             <TabsContent key={periodId} value={periodId}>
-              <div className="space-y-4">
-                <PeriodStudentSearch 
-                  students={Object.values(students).flat()}
-                  assignmentId={assignmentId}
-                  onSelect={(studentId, periodId) => {
-                    const tabTrigger = document.querySelector(`[value="${periodId}"]`) as HTMLButtonElement;
-                    if (tabTrigger) tabTrigger.click();
-                    
-                    setTimeout(() => {
-                      const gradeInput = document.querySelector(
-                        `input[id="grade-${assignmentId}-${periodId}-${studentId}"]`
-                      ) as HTMLInputElement;
-                      if (gradeInput) {
-                        gradeInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        gradeInput.focus();
-                      }
-                    }, 100);
-                  }}
-                  activeTab={activeTab}
-                  onTabChange={setActiveTab}
-                />
-                <div className="flex justify-between items-center">
-                  <Select
-                    value={studentSortOrder}
-                    onValueChange={(value: 'none' | 'highest' | 'lowest') => setStudentSortOrder(value)}
-                  >
-                    <SelectTrigger className="w-32">
-                      <SelectValue placeholder="Sort by..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No Sort</SelectItem>
-                      <SelectItem value="highest">Highest</SelectItem>
-                      <SelectItem value="lowest">Lowest</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+  <div className="space-y-4">
+    <PeriodStudentSearch 
+      students={Object.values(students).flat()}
+      assignmentId={assignmentId}
+      onSelect={(studentId, periodId) => {
+        const tabTrigger = document.querySelector(`[value="${periodId}"]`) as HTMLButtonElement;
+        if (tabTrigger) tabTrigger.click();
+        
+        setTimeout(() => {
+          const gradeInput = document.querySelector(
+            `input[id="grade-${assignmentId}-${periodId}-${studentId}"]`
+          ) as HTMLInputElement;
+          if (gradeInput) {
+            gradeInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            gradeInput.focus();
+          }
+        }, 100);
+      }}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+    />
+    
+    <div className="flex justify-between items-center">
+      <Select
+        value={studentSortOrder}
+        onValueChange={(value: 'none' | 'highest' | 'lowest') => setStudentSortOrder(value)}
+      >
+        <SelectTrigger className="w-32">
+          <SelectValue placeholder="Sort by..." />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="none">No Sort</SelectItem>
+          <SelectItem value="highest">Highest</SelectItem>
+          <SelectItem value="lowest">Lowest</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+
+    {/* Grid headers moved here */}
+    <div className="grid grid-cols-[1fr_100px_100px_100px_auto] gap-2 px-2 py-1 bg-muted text-sm font-medium">
+      <div className="flex items-center">Student ID & Name</div>
+      <div className="flex items-center justify-center">Initial Grade</div>
+      <div className="flex items-center justify-center">Extra Points</div>
+      <div className="flex items-center justify-center">Total Grade</div>
+      <div className="flex items-center justify-end">Tags</div>
+    </div>
                 <div className="space-y-2">
                   {sortStudents(students[periodId] || [], assignmentId, periodId).map(student => (
                     <div 
