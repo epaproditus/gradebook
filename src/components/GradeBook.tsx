@@ -2343,6 +2343,20 @@ const handleSyncGrades = async (assignmentId: string) => {
   }
 };
 
+// Function to get the first available period
+const getDefaultPeriod = () => {
+  const periods = Object.keys(students).sort();
+  return periods[0] || '';
+};
+
+// Update the view mode handler to set default period
+const handleViewModeChange = (mode: 'assignment' | 'roster') => {
+  setViewMode(mode);
+  if (mode === 'roster' && !activeTab) {
+    setActiveTab(getDefaultPeriod());
+  }
+};
+
 return (
   <div className="p-6">
     <div className="flex gap-6">
@@ -2439,7 +2453,7 @@ return (
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setViewMode('assignment')}
+              onClick={() => handleViewModeChange('assignment')}
               className={cn(viewMode === 'assignment' && "bg-secondary")}
             >
               <LayoutGrid className="h-4 w-4" />
@@ -2447,7 +2461,7 @@ return (
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setViewMode('roster')}
+              onClick={() => handleViewModeChange('roster')}
               className={cn(viewMode === 'roster' && "bg-secondary")}
             >
               <Table className="h-4 w-4" />
