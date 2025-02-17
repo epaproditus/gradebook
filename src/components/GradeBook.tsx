@@ -29,6 +29,7 @@ import { v4 as uuidv4 } from 'uuid';  // Add this import at the top
 import { useSession } from 'next-auth/react';
 import { getGradesForSync } from '@/lib/gradeSync';
 import debounce from 'lodash/debounce';
+import { loadConfig, saveConfig, defaultConfig } from '@/lib/storage';
 
 // Initialize Supabase client (this is fine outside component)
 const supabase = createClient(
@@ -672,10 +673,36 @@ const TodoList: FC<{
 type AssignmentStatus = 'in_progress' | 'completed' | 'not_started';
 
 const GradeBook: FC = () => {
-  // Change the initial value of showColors to false
-  const [showColors, setShowColors] = useState(false);
-  const [colorMode, setColorMode] = useState<'none' | 'subject' | 'type' | 'status'>('status');
-  
+  // Replace the individual state declarations with the loaded config
+  const [showColors, setShowColors] = useState(loadConfig().showColors);
+  const [colorMode, setColorMode] = useState(loadConfig().colorMode);
+  const [groupBy, setGroupBy] = useState(loadConfig().groupBy);
+  const [dateFilter, setDateFilter] = useState(loadConfig().dateFilter);
+  const [subjectFilter, setSubjectFilter] = useState(loadConfig().subjectFilter);
+  const [studentSortOrder, setStudentSortOrder] = useState(loadConfig().studentSortOrder);
+
+  // Add effect to save config when any related state changes
+  useEffect(() => {
+    const config = {
+      showColors,
+      colorMode,
+      groupBy,
+      dateFilter,
+      subjectFilter,
+      studentSortOrder
+    };
+    saveConfig(config);
+  }, [showColors, colorMode, groupBy, dateFilter, subjectFilter, studentSortOrder]);
+
+  // Update ColorSettings component to handle persistence
+  const handleShowColorsChange = (show: boolean) => {
+    setShowColors(show);
+    // Keep current color mode or set default to status when enabling
+    if (show && colorMode === 'none') {
+      setColorMode('status');
+    }
+  };
+
   // Move useState here
   const [calendarView, setCalendarView] = useState<'month' | 'week'>('week');
   
@@ -696,14 +723,10 @@ const GradeBook: FC = () => {
   const [extraPoints, setExtraPoints] = useState<Record<string, string>>({});
   const [retest, setRetest] = useState<Record<string, boolean>>({});
   const [isCalendarVisible, setIsCalendarVisible] = useState(true);
-  const [studentSortOrder, setStudentSortOrder] = useState<'none' | 'highest' | 'lowest'>('none');
   const [tags, setTags] = useState<AssignmentTag[]>([]);
   const [activeTab, setActiveTab] = useState<string>('');
   const [assignmentOrder, setAssignmentOrder] = useState<string[]>([]);
-  const [dateFilter, setDateFilter] = useState<'asc' | 'desc' | 'none'>('none');
-  const [subjectFilter, setSubjectFilter] = useState<'all' | 'Math 8' | 'Algebra I'>('all');
   const [editingAssignment, setEditingAssignment] = useState<string | null>(null);
-  const [groupBy, setGroupBy] = useState<'none' | 'type'>('none');
   const [showImport, setShowImport] = useState(false);
   const [syncingAssignments, setSyncingAssignments] = useState<Record<string, boolean>>({});
   const { data: session } = useSession();
@@ -2483,7 +2506,7 @@ return (
             <ColorSettings 
               showColors={showColors}
               colorMode={colorMode}
-              onShowColorsChange={setShowColors}
+              onShowColorsChange={handleShowColorsChange}
               onColorModeChange={setColorMode}
             />
             <Select
