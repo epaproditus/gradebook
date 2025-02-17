@@ -214,19 +214,20 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
   return (
     <div className="border rounded-lg p-4 bg-white shadow-sm hover:shadow-md transition-shadow">
       <div className="flex flex-col gap-4">
+        {/* Card Header */}
         <div className="border-b pb-3">
           <div className="flex justify-between items-center">
             <div>
               <h3 className="font-medium text-lg text-gray-800">{course.name}</h3>
               {course.section && (
-                <p className="text-sm text-gray-500">{course.section}</p>
+                <p className="text-sm text-muted-foreground">{course.section}</p>
               )}
             </div>
             <Select
               value={selectedSubject}
               onValueChange={(value: 'Math 8' | 'Algebra I') => setSelectedSubject(value)}
             >
-              <SelectTrigger className="w-24 h-7 text-xs">
+              <SelectTrigger className="w-28 h-8">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -237,68 +238,73 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
           </div>
         </div>
 
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <div className="flex gap-2">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    className="w-[200px] justify-between"
-                    role="combobox"
-                  >
-                    {selectedPeriods.length 
-                      ? `${selectedPeriods.length} periods selected`
-                      : "Select periods"}
-                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[200px] p-0" side="bottom">
-                  <div className="space-y-1 p-2">
-                    {availablePeriods.map(period => (
-                      <div
-                        key={period}
-                        className="flex items-center space-x-2 rounded hover:bg-accent hover:text-accent-foreground cursor-pointer p-2 text-sm"
-                        onClick={() => handlePeriodChange(period)}
-                      >
-                        <Checkbox 
-                          checked={selectedPeriods.includes(period)}
-                          className="pointer-events-none h-4 w-4"
-                        />
-                        <span>Period {period}</span>
-                      </div>
-                    ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowMappingDialog(true)}
-                className="flex items-center gap-2"
-              >
-                <Users className="h-4 w-4" />
-                Map Students
-              </Button>
-            </div>
+        {/* Card Actions */}
+        <div className="flex items-center justify-between">
+          {/* Left side buttons */}
+          <div className="flex items-center gap-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="h-8 text-sm font-medium"
+                >
+                  {selectedPeriods.length 
+                    ? `${selectedPeriods.length} Periods`
+                    : "Select Periods"}
+                  <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-48 p-0">
+                <div className="p-1">
+                  {availablePeriods.map(period => (
+                    <div
+                      key={period}
+                      className="flex items-center space-x-2 rounded-sm hover:bg-accent hover:text-accent-foreground cursor-pointer px-2 py-1.5 text-sm"
+                      onClick={() => handlePeriodChange(period)}
+                    >
+                      <Checkbox 
+                        checked={selectedPeriods.includes(period)}
+                        className="h-4 w-4"
+                      />
+                      <span className="font-medium">Period {period}</span>
+                    </div>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+
             <Button
-              variant="default"
+              variant="outline"
               size="sm"
-              onClick={() => setShowAssignments(true)}
-              disabled={loading || selectedPeriods.length === 0}
+              onClick={() => setShowMappingDialog(true)}
+              className="h-8 text-sm font-medium"
             >
-              {loading ? <LoadingSpinner className="w-4 h-4 mr-2" /> : null}
-              Import Assignment
+              <Users className="h-4 w-4 mr-2" />
+              Map Students
             </Button>
           </div>
+
+          {/* Right side button */}
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => setShowAssignments(true)}
+            disabled={loading || selectedPeriods.length === 0}
+            className="h-8 text-sm font-medium"
+          >
+            {loading ? <LoadingSpinner className="w-4 h-4 mr-2" /> : null}
+            Import Assignment
+          </Button>
         </div>
       </div>
 
+      {/* Dialogs */}
       <StudentMappingDialog
-        key={selectedPeriods.join('-')} // Changed from single period
+        key={selectedPeriods.join('-')}
         courseId={course.id}
-        periodId={selectedPeriods[0]} // Use first period as main
-        additionalPeriods={selectedPeriods.slice(1)} // Rest are additional
+        periodId={selectedPeriods[0]}
+        additionalPeriods={selectedPeriods.slice(1)}
         open={showMappingDialog}
         onOpenChange={setShowMappingDialog}
       />
