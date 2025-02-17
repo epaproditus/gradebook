@@ -1,24 +1,45 @@
 'use client';
 
-import { signIn } from 'next-auth/react';
-import { useSearchParams } from 'next/navigation';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function SignIn() {
-  const searchParams = useSearchParams() ?? new URLSearchParams();
-  const callbackUrl = searchParams.get('callbackUrl') || '/classroom';
-  
+  const router = useRouter();
+  const supabase = createClientComponentClient();
+
+  const handleGoogleSignIn = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
+    });
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold mb-4">Sign in to Gradebook</h1>
-        <Button
-          onClick={() => signIn('google', { callbackUrl })}
-          className="flex items-center gap-2"
-        >
-          Sign in with Google
-        </Button>
-      </div>
+    <div className="flex items-center justify-center min-h-screen">
+      <Card className="w-[350px]">
+        <CardHeader>
+          <CardTitle>Student Sign In</CardTitle>
+          <CardDescription>
+            Sign in with your school Google account
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button 
+            onClick={handleGoogleSignIn}
+            className="w-full"
+          >
+            Sign in with Google
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

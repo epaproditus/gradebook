@@ -13,6 +13,8 @@ import { TestMappingDialog } from './TestMappingDialog';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronDown } from 'lucide-react';
+import { StudentMappingDialog } from './StudentMappingDialog';
+import { Users } from 'lucide-react';
 
 interface CourseCardProps {
   course: Course;
@@ -28,6 +30,7 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
   const [selectedSubject, setSelectedSubject] = useState<'Math 8' | 'Algebra I'>(
     course.name.toLowerCase().includes('alg') ? 'Algebra I' : 'Math 8'
   );
+  const [showMappingDialog, setShowMappingDialog] = useState(false);
 
   useEffect(() => {
     const loadPeriods = async () => {
@@ -223,38 +226,48 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
 
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  className="w-[200px] justify-between"
-                  role="combobox"
-                >
-                  {selectedPeriods.length 
-                    ? `${selectedPeriods.length} periods selected`
-                    : "Select periods"}
-                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[200px] p-0" side="bottom">
-                <div className="space-y-1 p-2">
-                  {availablePeriods.map(period => (
-                    <div
-                      key={period}
-                      className="flex items-center space-x-2 rounded hover:bg-accent hover:text-accent-foreground cursor-pointer p-2 text-sm"
-                      onClick={() => handlePeriodChange(period)}
-                    >
-                      <Checkbox 
-                        checked={selectedPeriods.includes(period)}
-                        className="pointer-events-none h-4 w-4"
-                      />
-                      <span>Period {period}</span>
-                    </div>
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
-
+            <div className="flex gap-2">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    className="w-[200px] justify-between"
+                    role="combobox"
+                  >
+                    {selectedPeriods.length 
+                      ? `${selectedPeriods.length} periods selected`
+                      : "Select periods"}
+                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[200px] p-0" side="bottom">
+                  <div className="space-y-1 p-2">
+                    {availablePeriods.map(period => (
+                      <div
+                        key={period}
+                        className="flex items-center space-x-2 rounded hover:bg-accent hover:text-accent-foreground cursor-pointer p-2 text-sm"
+                        onClick={() => handlePeriodChange(period)}
+                      >
+                        <Checkbox 
+                          checked={selectedPeriods.includes(period)}
+                          className="pointer-events-none h-4 w-4"
+                        />
+                        <span>Period {period}</span>
+                      </div>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowMappingDialog(true)}
+                className="flex items-center gap-2"
+              >
+                <Users className="h-4 w-4" />
+                Map Students
+              </Button>
+            </div>
             <Button
               variant="default"
               size="sm"
@@ -267,6 +280,16 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
           </div>
         </div>
       </div>
+
+      {selectedPeriods.map(period => (
+        <StudentMappingDialog
+          key={period}
+          courseId={course.id}
+          periodId={period}
+          open={showMappingDialog}
+          onOpenChange={setShowMappingDialog}
+        />
+      ))}
 
       <AssignmentSelectDialog
         courseId={course.id}

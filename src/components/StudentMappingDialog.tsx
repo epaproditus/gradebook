@@ -1,141 +1,473 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { toast } from '@/components/ui/use-toast';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Button } from '@/components/ui/button'; // Add this import
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from '@/components/ui/badge';
+import { toast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabaseConfig';
 
-interface StudentMappingProps {
+interface MappingRow {
+  googleEmail: string;
+  studentId: number | null;
+  mappedAt: string | null;
+  classroomUserId: string; // Add this field
+}
+
+export function StudentMappingDialog({ 
+  courseId, 
+  periodId, 
+  open, 
+  onOpenChange 
+}: { 
   courseId: string;
   periodId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-export function StudentMappingDialog({ courseId, periodId, open, onOpenChange }: StudentMappingProps) {
-  const [mappings, setMappings] = useState<any[]>([]);
-  const [googleStudents, setGoogleStudents] = useState<any[]>([]);
+}) {
+  const [mappings, setMappings] = useState<MappingRow[]>([]);
+  const [rosterStudents, setRosterStudents] = useState<Array<{ id: number; name: string }>>([]);
   const [loading, setLoading] = useState(true);
+  const [autoMatches, setAutoMatches] = useState<Set<string>>(new Set()); // Track auto-matched emails
 
+  // Add helper function to clean names
+  const cleanName = (name: string): string => {
+    return name
+      .toLowerCase()
+      // Remove common suffixes
+      .replace(/\s+(jr\.?|sr\.?|ii|iii|iv)$/i, '')
+      // Remove any remaining periods
+      .replace(/\./g, '')
+      // Remove extra spaces
+      .trim();
+  };
+
+  const findBestNameMatch = (googleEmail: string, rosterStudents: Array<{ id: number; name: string }>) => {
+    // Extract name from email (format: firstname.lastname123@domain.com)
+    const emailMatch = googleEmail.match(/^([^.]+)\.([^0-9@]+)/);
+    if (!emailMatch) return null;
+
+    const [_, emailFirstName, emailLastName] = emailMatch;
+    const normalizedEmailFirst = cleanName(emailFirstName);
+    const normalizedEmailLast = cleanName(emailLastName);
+
+    // Find best matching student
+    return rosterStudents.find(student => {
+      // Parse roster name (format: "LastName, FirstName")
+      const [lastName, firstName] = student.name.split(',').map(s => cleanName(s));
+      
+      // Check for exact matches first
+      if (lastName === normalizedEmailLast && firstName === normalizedEmailFirst) {
+        return true;
+      }
+
+      // Handle compound last names and suffixes (e.g., "De La Cruz" or "Smith Jr")
+      const lastNames = lastName.split(' ').map(cleanName);
+      
+      // Check if any part of the last name matches
+      const hasMatchingLastName = lastNames.some(ln => 
+        normalizedEmailLast.includes(ln) || ln.includes(normalizedEmailLast)
+      );
+
+      // Check if first names match (allowing for shortened versions)
+      const firstNameMatch = 
+        normalizedEmailFirst === firstName ||
+        firstName.startsWith(normalizedEmailFirst) ||
+        normalizedEmailFirst.startsWith(firstName);
+
+      return hasMatchingLastName && firstNameMatch;
+    });
+  };
+
+  // Load existing mappings and roster students
   useEffect(() => {
-    if (open) {
-      fetchCurrentMappings();
-    }
-  }, [open]);
+    const loadData = async () => {
+      if (!open) return;
+      
+      setLoading(true);
+      try {
+        // Fetch roster students for this period
+        const { data: students } = await supabase
+          .from('students')
+          .select('id, name')
+          .eq('period', periodId)
+          .order('name');
 
-  const fetchCurrentMappings = async () => {
-    setLoading(true);
-    try {
-      // First fetch local students
-      const { data: localStudents, error: localError } = await supabase
-        .from('students')
-        .select('id, name')
-        .eq('course_id', courseId)
-        .eq('period', periodId); // Changed from period_id to period to match schema
+        if (students) setRosterStudents(students);
 
-      if (localError) throw new Error(localError.message);
+        // Fetch Google Classroom students with their IDs
+        const response = await fetch(`/api/classroom/${courseId}/students`);
+        const { students: googleStudents } = await response.json();
 
-      // Then fetch Google students
-      const response = await fetch(`/api/classroom/${courseId}/students`);
-      const { students: googleStudents } = await response.json();
+        // Update query to get all mappings for this period
+        const { data: existingMappings, error: mappingError } = await supabase
+          .from('student_mappings')
+          .select('*')
+          .eq('period', periodId); // Only filter by period
 
-      // Get existing mappings
-      const { data: existingMappings, error: mappingError } = await supabase
-        .from('student_mappings')
-        .select('*')
-        .eq('course_id', courseId)
-        .eq('period', periodId); // Changed from period_id to period
+        if (mappingError) {
+          console.error('Error fetching mappings:', mappingError);
+          throw mappingError;
+        }
 
-      if (mappingError) throw new Error(mappingError.message);
+        console.log('Debug mapping data:', {
+          periodId,
+          totalMappings: existingMappings?.length || 0,
+          mappings: existingMappings,
+          googleStudents: googleStudents.length,
+        });
 
-      // Create mapping objects
-      const mappings = localStudents?.map(student => ({
-        localStudent: student,
-        googleId: existingMappings?.find(m => m.student_id === student.id)?.google_id || null
-      })) || [];
+        // Create mapping rows with existing data
+        const rows: MappingRow[] = googleStudents.map(gStudent => {
+          const email = gStudent.profile.emailAddress;
+          const existingMapping = existingMappings?.find(m => m.google_email === email);
+          
+          // If no existing mapping, try to find a match by name
+          if (!existingMapping && students) {
+            const matchedStudent = findBestNameMatch(email, students);
+            if (matchedStudent) {
+              console.log('Found name match:', {
+                email,
+                matchedStudent: matchedStudent.name
+              });
+              return {
+                googleEmail: email,
+                studentId: matchedStudent.id,
+                mappedAt: null,
+                classroomUserId: gStudent.userId
+              };
+            }
+          }
+          
+          return {
+            googleEmail: email,
+            studentId: existingMapping?.student_id || null,
+            mappedAt: existingMapping?.created_at || null,
+            classroomUserId: gStudent.userId // Store the actual Google Classroom user ID
+          };
+        });
 
-      setMappings(mappings);
-      setGoogleStudents(googleStudents || []);
+        console.log('Mapping results:', {
+          total: rows.length,
+          matched: rows.filter(r => r.studentId !== null).length
+        });
 
-    } catch (error) {
-      console.error('Mapping fetch error:', error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch student mappings",
-        variant: "destructive"
+        setMappings(rows);
+
+      } catch (error) {
+        console.error('Error loading mapping data:', error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to load student data"
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, [courseId, periodId, open]);
+
+  const performAutoMapping = async (
+    googleStudents: any[], 
+    rosterStudents: Array<{ id: number; name: string }>
+  ) => {
+    const automaticMappings: MappingRow[] = [];
+    
+    for (const gStudent of googleStudents) {
+      const email = gStudent.profile.emailAddress;
+      const emailParts = email.split('@')[0].toLowerCase().split('.');
+      
+      // Parse email more carefully
+      const emailFirstName = emailParts[0];
+      const emailLastNameWithNumbers = emailParts[1] || '';
+      const emailLastName = emailLastNameWithNumbers.replace(/\d+$/, ''); // Remove trailing numbers
+
+      // Track best match score
+      let bestMatch = {
+        studentId: null as number | null,
+        score: 0,
+        mappedAt: null as string | null
+      };
+
+      // Check each roster student for a match
+      rosterStudents.forEach(student => {
+        // Parse roster name (format: "LastName, FirstName")
+        const [lastNames, firstName] = student.name.split(',').map(s => s.trim().toLowerCase());
+        const rosterLastNames = lastNames.split(' '); // Handle multiple last names
+        const rosterFirstName = firstName;
+
+        let score = 0;
+
+        // Check first name match (3 points)
+        if (emailFirstName === rosterFirstName) {
+          score += 3;
+        } else if (emailFirstName.startsWith(rosterFirstName) || rosterFirstName.startsWith(emailFirstName)) {
+          score += 2; // Partial first name match
+        }
+
+        // Check last name match (2 points)
+        if (rosterLastNames.some(ln => emailLastName === ln)) {
+          score += 2;
+        } else if (rosterLastNames.some(ln => emailLastName.includes(ln) || ln.includes(emailLastName))) {
+          score += 1; // Partial last name match
+        }
+
+        // Update best match if this score is higher
+        if (score > bestMatch.score) {
+          bestMatch = {
+            studentId: student.id,
+            score,
+            mappedAt: null
+          };
+        }
       });
-    } finally {
-      setLoading(false);
+
+      // Only auto-map if we have a good match (score of 4 or higher)
+      automaticMappings.push({
+        googleEmail: email,
+        studentId: bestMatch.score >= 4 ? bestMatch.studentId : null,
+        mappedAt: bestMatch.mappedAt,
+        classroomUserId: gStudent.userId // Store the actual Google Classroom user ID
+      });
+    }
+
+    console.log('Auto-mapping results:', automaticMappings);
+    setMappings(automaticMappings);
+    return automaticMappings;
+  };
+
+  // Updated handleSaveMatches to handle unique constraints
+  const handleSaveMatches = async () => {
+    try {
+      const matchesToSave = mappings.filter(m => m.studentId !== null);
+
+      if (matchesToSave.length === 0) {
+        toast({
+          title: "No Changes",
+          description: "No matches to save"
+        });
+        return;
+      }
+
+      // First, fetch all existing mappings
+      const { data: existingMappings } = await supabase
+        .from('student_mappings')
+        .select('google_id, google_email, student_id')
+        .eq('period', periodId);
+
+      // Prepare upsert data with unique google_ids
+      const upsertData = matchesToSave.map(mapping => ({
+        google_id: mapping.classroomUserId,        // The actual Google ID (e.g., '117250249726374130315')
+        classroom_user_id: `${mapping.googleEmail.split('@')[0]}_${periodId}`, // Our generated ID (e.g., 'cristian.marquez544_6th')
+        google_email: mapping.googleEmail,
+        student_id: mapping.studentId,
+        period: periodId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }));
+
+      // Delete existing mappings for this period
+      const { error: deleteError } = await supabase
+        .from('student_mappings')
+        .delete()
+        .eq('period', periodId);
+
+      if (deleteError) throw deleteError;
+
+      // Insert new mappings
+      const { error: insertError } = await supabase
+        .from('student_mappings')
+        .insert(upsertData);
+
+      if (insertError) throw insertError;
+
+      // Update local state
+      setMappings(prev => prev.map(m => ({
+        ...m,
+        mappedAt: matchesToSave.some(match => match.googleEmail === m.googleEmail)
+          ? new Date().toISOString()
+          : m.mappedAt
+      })));
+
+      toast({
+        title: "Success",
+        description: `Saved ${matchesToSave.length} student mappings`
+      });
+    } catch (error) {
+      console.error('Error saving matches:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to save mappings"
+      });
     }
   };
 
-  const handleUpdateMapping = async (localStudentId: number, googleId: string) => {
-    try {
-      const { error: updateError } = await supabase
-        .from('student_mappings')
-        .upsert({
-          student_id: localStudentId,
-          google_id: googleId,
-          course_id: courseId,
-          period: periodId, // Changed from period_id to period
-          last_synced: new Date().toISOString()
-        }, {
-          onConflict: 'student_id,course_id'
-        });
+  const handleUpdateMapping = async (googleEmail: string, value: string) => {
+    console.log('Updating mapping:', { googleEmail, value });
+    
+    const studentId = value === 'unmapped' ? null : Number(value);
 
-      if (updateError) throw updateError;
-      
-      toast({
-        title: "Success",
-        description: "Student mapping updated"
-      });
-      
-      fetchCurrentMappings();
+    try {
+      if (studentId) {
+        // First check if this student is already mapped in this period
+        const { data: existingMapping, error: checkError } = await supabase
+          .from('student_mappings')
+          .select('google_email')
+          .match({ 
+            student_id: studentId,
+            period: periodId 
+          })
+          .single();
+
+        if (existingMapping) {
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: "This student is already mapped to another Google account in this period"
+          });
+          return;
+        }
+
+        // Delete any existing mapping for this Google email
+        await supabase
+          .from('student_mappings')
+          .delete()
+          .match({ 
+            period: periodId,
+            google_email: googleEmail 
+          });
+
+        const mappingToUpdate = mappings.find(m => m.googleEmail === googleEmail);
+        if (!mappingToUpdate) return;
+
+        // Create new mapping with correct ID fields
+        const { error: insertError } = await supabase
+          .from('student_mappings')
+          .insert({
+            google_id: mappingToUpdate.classroomUserId,  // The actual Google ID
+            classroom_user_id: `${googleEmail.split('@')[0]}_${periodId}`, // Our generated ID
+            google_email: googleEmail,
+            student_id: studentId,
+            period: periodId,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+
+        if (insertError) {
+          console.error('Insert error:', insertError);
+          throw insertError;
+        }
+
+        // Update local state only after successful database update
+        setMappings(prev => prev.map(m => 
+          m.googleEmail === googleEmail 
+            ? { ...m, studentId, mappedAt: new Date().toISOString() }
+            : m
+        ));
+
+        toast({
+          title: "Success",
+          description: "Student mapping updated"
+        });
+      } else {
+        // Handle unmapping
+        const { error: deleteError } = await supabase
+          .from('student_mappings')
+          .delete()
+          .match({
+            period: periodId,
+            google_email: googleEmail
+          });
+
+        if (deleteError) throw deleteError;
+
+        // Update local state
+        setMappings(prev => prev.map(m => 
+          m.googleEmail === googleEmail 
+            ? { ...m, studentId: null, mappedAt: null }
+            : m
+        ));
+
+        toast({
+          title: "Success",
+          description: "Mapping removed"
+        });
+      }
     } catch (error) {
-      console.error('Update error:', error);
+      console.error('Mapping error:', error);
       toast({
+        variant: "destructive",
         title: "Error",
-        description: "Failed to update mapping",
-        variant: "destructive"
+        description: "Failed to update mapping"
       });
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Student Mappings</DialogTitle>
+      <DialogContent className="max-w-4xl">
+        <DialogHeader className="flex justify-between items-center">
+          <DialogTitle>Map Students - Period {periodId}</DialogTitle>
+          <Button
+            onClick={handleSaveMatches}
+            className="flex items-center gap-2"
+          >
+            Save All Matches
+            <span className="text-xs text-muted-foreground">
+              ({mappings.filter(m => (autoMatches.has(m.googleEmail) || m.mappedAt) && m.studentId).length})
+            </span>
+          </Button>
         </DialogHeader>
-        <ScrollArea className="h-[500px] pr-4">
+        <ScrollArea className="h-[600px] pr-4">
           {loading ? (
             <div>Loading...</div>
           ) : (
-            <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-4">
+              {/* Headers */}
+              <div className="font-medium text-sm">Google Email</div>
+              <div className="font-medium text-sm">Roster Student</div>
+              <div className="font-medium text-sm">Status</div>
+
+              {/* Mapping Rows */}
               {mappings.map((mapping) => (
-                <div key={mapping.localStudent.id} className="flex items-center justify-between p-2 border rounded">
-                  <div>
-                    <p className="font-medium">{mapping.localStudent.name}</p>
-                    <p className="text-sm text-gray-500">Local ID: {mapping.localStudent.id}</p>
-                  </div>
+                <React.Fragment key={mapping.googleEmail}>
+                  <div className="text-sm">{mapping.googleEmail}</div>
                   <Select
-                    value={mapping.googleId || ''}
-                    onValueChange={(value) => handleUpdateMapping(mapping.localStudent.id, value)}
+                    defaultValue="unmapped"
+                    value={mapping.studentId?.toString() || 'unmapped'}
+                    onValueChange={(value) => {
+                      console.log('Select value changed:', value); // Debug log
+                      handleUpdateMapping(mapping.googleEmail, value);
+                    }}
                   >
-                    <SelectTrigger className="w-[250px]">
-                      <SelectValue placeholder="Select Google student..." />
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Not mapped</SelectItem>
-                      {googleStudents.map((student) => (
-                        <SelectItem key={student.id} value={student.id}>
-                          {student.name.fullName} ({student.emailAddress})
+                      <SelectItem value="unmapped">Not mapped</SelectItem>
+                      {rosterStudents.map((student) => (
+                        <SelectItem 
+                          key={student.id} 
+                          value={student.id.toString()}
+                        >
+                          {student.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
+                  <div>
+                    {mapping.mappedAt ? (
+                      <Badge variant="success">
+                        Mapped {new Date(mapping.mappedAt).toLocaleDateString()}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline">Not Mapped</Badge>
+                    )}
+                  </div>
+                </React.Fragment>
               ))}
             </div>
           )}

@@ -1,66 +1,33 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs';
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 
-export async function middleware(request: NextRequest) {
-  // Only handle auth-related routes
-  if (!request.nextUrl.pathname.startsWith('/api/auth')) {
-    return NextResponse.next();
+export async function middleware(req: NextRequest) {
+  const res = NextResponse.next();
+  const supabase = createMiddlewareClient({ req, res });
+  const { data: { session } } = await supabase.auth.getSession();
+
+  // Check if accessing student routes
+  if (req.nextUrl.pathname.startsWith('/student')) {
+    if (!session) {
+      return NextResponse.redirect(new URL('/auth/signin', req.url));
+    }
+
+    // Find student record by Google email
+    const { data: student } = await supabase
+      .from('students')
+      .select('*')
+      .eq('google_email', session.user.email)
+      .single();
+
+    if (!student) {
+      return NextResponse.redirect(new URL('/auth/not-found', req.url));
+    }
   }
 
-  try {
-    const response = NextResponse.next();
-
-    // Pass through the state token if it exists
-    const stateToken = request.cookies.get('next-auth.state');
-    if (stateToken) {
-      response.cookies.set({
-        name: 'next-auth.state',
-        value: stateToken.value,
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 900 // 15 minutes
-      });
-    }
-
-    // Preserve the callback URL
-    const callbackUrl = request.cookies.get('next-auth.callback-url');
-    if (callbackUrl) {
-      response.cookies.set({
-        name: 'next-auth.callback-url',
-        value: callbackUrl.value,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/',
-      });
-    }
-
-    const csrfToken = request.cookies.get('next-auth.csrf-token');
-    if (csrfToken) {
-      response.cookies.set({
-        name: 'next-auth.csrf-token',
-        value: csrfToken.value,
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/',
-      });
-    }
-
-    return response;
-  } catch (error) {
-    console.error('Middleware error:', error);
-    return NextResponse.next();
-  }
+  return res;
 }
 
-// Update matcher to be more specific
 export const config = {
-  matcher: [
-    '/api/auth/:path*',
-    '/api/auth/callback/google',
-    '/api/auth/signin',
-    '/api/auth/signout'
-  ]
+  matcher: ['/student/:path*']
 };
