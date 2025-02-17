@@ -76,35 +76,43 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
 
   // Save selection and create mapping
   const handlePeriodChange = async (value: string, type: 'primary' | 'secondary') => {
-    const actualValue = value === 'none' ? '' : value;
-    const newPeriods = { ...selectedPeriods, [type]: actualValue };
-    
-    if (actualValue) {
-      try {
-        // Create new mapping
-        const { error } = await supabase
+    try {
+      const actualValue = value === 'none' ? '' : value;
+      const newPeriods = { ...selectedPeriods, [type]: actualValue };
+      
+      if (actualValue) {
+        // First check if mapping already exists
+        const { data: existingMapping, error: checkError } = await supabase
           .from('course_mappings')
-          .upsert({
-            google_course_id: course.id,
-            period: actualValue,
-            setup_completed: true,
-            setup_completed_at: new Date().toISOString(),
-            subject: course.name.toLowerCase().includes('algebra') ? 'Algebra I' : 'Math 8'
-          });
+          .select('*')
+          .eq('google_course_id', course.id)
+          .eq('period', actualValue)
+          .single();
 
-        if (error) {
-          toast({
-            title: "Error",
-            description: `Could not map ${course.name} to period ${actualValue}`,
-            variant: "destructive"
-          });
-          return; // Don't update state if mapping failed
+        if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "not found"
+          throw checkError;
         }
 
-        // Update mapped periods
+        if (!existingMapping) {
+          // Create new mapping
+          const { error: insertError } = await supabase
+            .from('course_mappings')
+            .insert({
+              google_course_id: course.id,
+              period: actualValue,
+              setup_completed: true,
+              setup_completed_at: new Date().toISOString(),
+              subject: selectedSubject,
+              course_name: course.name,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+
+          if (insertError) throw insertError;
+        }
+
+        // Update local state
         setMappedPeriods(prev => new Set([...prev, actualValue]));
-        
-        // Save to localStorage
         setSelectedPeriods(newPeriods);
         localStorage.setItem(storageKey, JSON.stringify(newPeriods));
 
@@ -112,47 +120,31 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
           title: "Success",
           description: `Mapped ${course.name} to period ${actualValue}`
         });
-      } catch (error) {
-        console.error('Failed to create mapping:', error);
-        toast({
-          title: "Error",
-          description: "Failed to save mapping",
-          variant: "destructive"
-        });
-      }
-    } else {
-      // Handle clearing selection
-      try {
-        // Remove mapping if it exists
-        const { error } = await supabase
+      } else {
+        // Handle removing mapping
+        const { error: deleteError } = await supabase
           .from('course_mappings')
           .delete()
           .eq('google_course_id', course.id)
           .eq('period', selectedPeriods[type]);
 
-        if (error) throw error;
+        if (deleteError) throw deleteError;
 
-        // Update state and localStorage
+        // Update state
         setSelectedPeriods(newPeriods);
         localStorage.setItem(storageKey, JSON.stringify(newPeriods));
         
-        // Remove from mapped periods
         const newMapped = new Set(mappedPeriods);
         newMapped.delete(selectedPeriods[type]);
         setMappedPeriods(newMapped);
-
-        toast({
-          title: "Success",
-          description: `Removed ${course.name} mapping from period ${selectedPeriods[type]}`
-        });
-      } catch (error) {
-        console.error('Failed to remove mapping:', error);
-        toast({
-          title: "Error",
-          description: "Failed to remove mapping",
-          variant: "destructive"
-        });
       }
+    } catch (error) {
+      console.error('Mapping error:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to save course mapping"
+      });
     }
   };
 

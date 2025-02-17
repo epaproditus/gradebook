@@ -11,6 +11,8 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { ChevronRight } from 'lucide-react';
+import { toast } from "@/components/ui/use-toast";
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
 interface ClassworkItem {
   id: string;
@@ -41,9 +43,70 @@ const GoogleClassroom: FC = () => {
   const { data: session } = useSession();
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<string | null>(null);
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('');  // Add this
   const [classwork, setClasswork] = useState<ClassworkItem[]>([]);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
   const [syncInProgress, setSyncInProgress] = useState(false);
+
+  const supabase = createClientComponentClient(); // Add this
+
+  // Add this function to handle period selection
+  const handlePeriodSelect = async (period: string) => {
+    try {
+      setSelectedPeriod(period);
+      
+      if (!selectedCourse) return;
+
+      // Update or create course mapping in database
+      const { error } = await supabase
+        .from('course_mappings')
+        .upsert({
+          course_id: selectedCourse,
+          period: period,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'course_id'
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: `Course mapped to Period ${period}`
+      });
+
+    } catch (error) {
+      console.error('Error saving period mapping:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to save period mapping"
+      });
+    }
+  };
+
+  // Add effect to load existing mapping when course is selected
+  useEffect(() => {
+    const loadPeriodMapping = async () => {
+      if (!selectedCourse) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('course_mappings')
+          .select('period')
+          .eq('course_id', selectedCourse)
+          .single();
+
+        if (error) throw error;
+        if (data) setSelectedPeriod(data.period);
+
+      } catch (error) {
+        console.error('Error loading period mapping:', error);
+      }
+    };
+
+    loadPeriodMapping();
+  }, [selectedCourse]);
 
   useEffect(() => {
     if (session) {
@@ -128,6 +191,22 @@ const GoogleClassroom: FC = () => {
           <div className="flex justify-between items-center">
             <h2 className="text-2xl font-bold">Google Classroom</h2>
             <div className="flex gap-4">
+              <Select
+                value={selectedPeriod}
+                onValueChange={handlePeriodSelect}
+              >
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Select period..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {['1', '2', '3', '4', '5', '6', '7', '8'].map((period) => (
+                    <SelectItem key={period} value={period}>
+                      Period {period}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
               <Select
                 value={selectedCourse || ''}
                 onValueChange={(value: string) => setSelectedCourse(value)}
