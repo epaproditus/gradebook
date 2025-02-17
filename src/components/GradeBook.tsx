@@ -1555,6 +1555,37 @@ const getCardColor = (assignment: Assignment) => {
   return '';
 };
 
+// Add these helper functions near the top with other utilities
+const formatPeriodName = (period: string) => {
+  if (period.match(/^\d+$/)) {
+    const num = parseInt(period);
+    const suffix = num === 1 ? 'st' : num === 2 ? 'nd' : num === 3 ? 'rd' : 'th';
+    return `${num}${suffix} Period`;
+  }
+  // Handle special cases like "1 SPED"
+  const match = period.match(/^(\d+)\s+(.+)$/);
+  if (match) {
+    const [_, num, label] = match;
+    const suffix = num === '1' ? 'st' : num === '2' ? 'nd' : num === '3' ? 'rd' : 'th';
+    return `${num}${suffix} Period (${label})`;
+  }
+  return period;
+};
+
+const sortPeriods = (periods: string[]) => {
+  return [...periods].sort((a, b) => {
+    // Extract numbers from period strings
+    const aNum = parseInt(a.match(/\d+/)?.[0] || '0');
+    const bNum = parseInt(b.match(/\d+/)?.[0] || '0');
+    
+    if (aNum === bNum) {
+      // If numbers are same, SPED goes after regular period
+      return a.includes('SPED') ? 1 : -1;
+    }
+    return aNum - bNum;
+  });
+};
+
 const renderAssignmentCard = (assignmentId: string, assignment: Assignment, provided?: any) => (
   <Card 
     className={getCardClassName(
@@ -1795,16 +1826,26 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
           value={activeTab || assignment.periods[0]} // Add this line
         >
           <TabsList className="w-full">
-            {assignment.periods.map(periodId => (
+            {sortPeriods(assignment.periods).map(periodId => (
               <TabsTrigger
                 key={periodId}
                 value={periodId}
                 className="flex-1"
               >
-                Period {periodId}
+                {formatPeriodName(periodId)}
               </TabsTrigger>
             ))}
           </TabsList>
+
+          {/* Add column headers */}
+          <div className="grid grid-cols-[1fr_100px_100px_100px_auto] gap-2 mb-2 px-2 py-1 bg-muted text-sm font-medium">
+            <div>Student ID & Name</div>
+            <div className="text-center">Initial Grade</div>
+            <div className="text-center">Extra Points</div>
+            <div className="text-center">Total Grade</div>
+            <div className="text-right">Tags</div>
+          </div>
+
           {assignment.periods.map(periodId => (
             <TabsContent key={periodId} value={periodId}>
               <div className="space-y-4">
@@ -1848,11 +1889,62 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
                     <div 
                       key={student.id} 
                       className={cn(
-                        "grid grid-cols-[auto_1fr_70px_70px_70px] gap-2 items-center p-2 rounded transition-colors",
+                        "grid grid-cols-[1fr_100px_100px_100px_auto] gap-2 items-center p-2 rounded transition-colors",
                         activeRow === `${assignmentId}-${periodId}-${student.id}` && "bg-blue-100/50 shadow-sm" // Stronger highlight
                       )}
                     >
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center bg-secondary rounded px-2 py-1">
+                        <span className="text-sm text-muted-foreground mr-2">
+                          {student.id}
+                        </span>
+                        <span className="text-sm">{student.name}</span>
+                      </div>
+                      
+                      <Input
+                        id={`grade-${assignmentId}-${periodId}-${student.id}`}
+                        type="number"
+                        min="0"
+                        max="100"
+                        placeholder="0"
+                        className="text-center h-8 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        value={getGradeValue(assignmentId, periodId, String(student.id))}
+                        onChange={(e) => handleGradeChange(assignmentId, periodId, String(student.id), e.target.value)}
+                        onFocus={() => setActiveRow(`${assignmentId}-${periodId}-${student.id}`)}
+                        onBlur={() => {
+                          setActiveRow(null);
+                          // Save on blur if we have local changes
+                          if (localGrades[`${assignmentId}-${periodId}-${student.id}`]) {
+                            debouncedSaveGrades(assignmentId);
+                          }
+                        }}
+                      />
+                      
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder="+0"
+                        className="text-center h-8 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        value={extraPoints[`${assignmentId}-${periodId}-${student.id}`] || ''}
+                        onChange={(e) => {
+                          handleExtraPointsChange(assignmentId, periodId, student.id, e.target.value);
+                          if (e.target.value !== '') {
+                            debouncedSaveGrades(assignmentId);
+                          }
+                        }}
+                      />
+                      
+                      <div className="flex items-center justify-center bg-secondary rounded px-2 h-8">
+                        <span className="text-sm font-medium">
+                          {calculateTotal(
+                            editingGrades[`${assignmentId}-${periodId}`]
+                              ? unsavedGrades[assignmentId]?.[periodId]?.[student.id]
+                              : grades[assignmentId]?.[periodId]?.[student.id],
+                            extraPoints[`${assignmentId}-${periodId}-${student.id}`]
+                          )}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1 justify-end">
                         <Button
                           variant="outline"
                           size="sm"
@@ -1899,53 +1991,6 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
                             Retest
                           </Button>
                         )}
-                      </div>
-                      <div className="flex items-center bg-secondary rounded px-2 py-1">
-                        <span className="text-sm text-muted-foreground mr-2">
-                          {student.id}
-                        </span>
-                        <span className="text-sm">{student.name}</span>
-                      </div>
-                      <Input
-                        id={`grade-${assignmentId}-${periodId}-${student.id}`}
-                        type="number"
-                        min="0"
-                        max="100"
-                        placeholder="0"
-                        className="text-center h-8 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                        value={getGradeValue(assignmentId, periodId, String(student.id))}
-                        onChange={(e) => handleGradeChange(assignmentId, periodId, String(student.id), e.target.value)}
-                        onFocus={() => setActiveRow(`${assignmentId}-${periodId}-${student.id}`)}
-                        onBlur={() => {
-                          setActiveRow(null);
-                          // Save on blur if we have local changes
-                          if (localGrades[`${assignmentId}-${periodId}-${student.id}`]) {
-                            debouncedSaveGrades(assignmentId);
-                          }
-                        }}
-                      />
-                      <Input
-                        type="number"
-                        min="0"
-                        placeholder="+0"
-                        className="text-center h-8 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                        value={extraPoints[`${assignmentId}-${periodId}-${student.id}`] || ''}
-                        onChange={(e) => {
-                          handleExtraPointsChange(assignmentId, periodId, student.id, e.target.value);
-                          if (e.target.value !== '') {
-                            debouncedSaveGrades(assignmentId);
-                          }
-                        }}
-                      />
-                      <div className="flex items-center justify-center bg-secondary rounded px-2 h-8">
-                        <span className="text-sm font-medium">
-                          {calculateTotal(
-                            editingGrades[`${assignmentId}-${periodId}`]
-                              ? unsavedGrades[assignmentId]?.[periodId]?.[student.id]
-                              : grades[assignmentId]?.[periodId]?.[student.id],
-                            extraPoints[`${assignmentId}-${periodId}-${student.id}`]
-                          )}
-                        </span>
                       </div>
                     </div>
                   ))}
