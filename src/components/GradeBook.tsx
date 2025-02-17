@@ -1593,13 +1593,13 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
           value={activeTab || assignment.periods[0]} // Add this line
         >
           <TabsList className="w-full">
-            {assignment.periods.map(periodId => (
+            {sortAndFormatPeriods(assignment.periods).map(periodId => (
               <TabsTrigger
                 key={periodId}
                 value={periodId}
                 className="flex-1"
               >
-                Period {periodId}
+                {formatPeriodName(periodId)}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -2083,6 +2083,34 @@ const handleSyncGrades = async (assignmentId: string) => {
   } finally {
     setSyncingAssignments(prev => ({ ...prev, [assignmentId]: false }));
   }
+};
+
+// Add this helper function near the top with other utility functions
+const sortAndFormatPeriods = (periods: string[]) => {
+  return [...periods].sort((a, b) => {
+    // Extract numbers from period strings for proper numerical sorting
+    const aNum = parseInt(a.match(/\d+/)?.[0] || '0');
+    const bNum = parseInt(b.match(/\d+/)?.[0] || '0');
+    if (aNum !== bNum) return aNum - bNum;
+    
+    // If numbers are the same, put regular classes before SPED
+    const aIsSPED = a.includes('SPED');
+    const bIsSPED = b.includes('SPED');
+    if (aIsSPED && !bIsSPED) return 1;
+    if (!aIsSPED && bIsSPED) return -1;
+    return a.localeCompare(b);
+  });
+};
+
+const formatPeriodName = (period: string) => {
+  // Convert "Period 1st" or "Period 1st (SPED)" to "1st Period" or "1st Period (SPED)"
+  const match = period.match(/Period\s+(\d+(?:st|nd|rd|th))\s*(.*)/) ||
+                period.match(/(\d+(?:st|nd|rd|th))\s*(.*)/);
+  if (match) {
+    const [_, number, suffix] = match;
+    return `${number} Period${suffix ? ` ${suffix}` : ''}`;
+  }
+  return period;
 };
 
 return (
