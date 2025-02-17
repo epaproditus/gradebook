@@ -724,7 +724,7 @@ const GradeBook: FC = () => {
   const [incomplete, setIncomplete] = useState<Record<string, boolean>>({});
   const [extraPoints, setExtraPoints] = useState<Record<string, string>>({});
   const [retest, setRetest] = useState<Record<string, boolean>>({});
-  const [isCalendarVisible, setIsCalendarVisible] = useState(true);
+  const [isCalendarVisible, setIsCalendarVisible] = useState(false);
   const [tags, setTags] = useState<AssignmentTag[]>([]);
   const [activeTab, setActiveTab] = useState<string>('');
   const [assignmentOrder, setAssignmentOrder] = useState<string[]>([]);
@@ -2355,6 +2355,24 @@ const handleViewModeChange = (mode: 'assignment' | 'roster') => {
   if (mode === 'roster' && !activeTab) {
     setActiveTab(getDefaultPeriod());
   }
+};
+
+// Add weighted average calculation helper
+const calculateWeightedAverage = (grades: number[], types: ('Daily' | 'Assessment')[]) => {
+  if (grades.length === 0) return 0;
+  
+  const dailyGrades = grades.filter((_, i) => types[i] === 'Daily');
+  const assessmentGrades = grades.filter((_, i) => types[i] === 'Assessment');
+  
+  const dailyAvg = dailyGrades.length > 0 
+    ? dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length 
+    : 0;
+  
+  const assessmentAvg = assessmentGrades.length > 0 
+    ? assessmentGrades.reduce((a, b) => a + b, 0) / assessmentGrades.length 
+    : 0;
+  
+  return Math.round((dailyAvg * 0.8) + (assessmentAvg * 0.2));
 };
 
 return (
