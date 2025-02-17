@@ -7,6 +7,12 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { STATUS_COLORS, TYPE_COLORS, SUBJECT_COLORS } from '@/lib/constants';
 import { Assignment } from '@/types/gradebook';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ChevronRight } from 'lucide-react';
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Info } from 'lucide-react';
 
 interface StudentData {
   id: number;
@@ -21,6 +27,8 @@ export function StudentDashboard() {
   const [grades, setGrades] = useState<Record<string, string>>({});
   const [extraPoints, setExtraPoints] = useState<Record<string, string>>({});
   const [tags, setTags] = useState<any[]>([]);
+  const [expandedAssignments, setExpandedAssignments] = useState<Set<string>>(new Set());
+  const [showColors, setShowColors] = useState(true);
   const supabase = createClientComponentClient();
 
   useEffect(() => {
@@ -109,6 +117,28 @@ export function StudentDashboard() {
     return 'completed';
   };
 
+  const calculateWeightedAverage = (grades: number[], types: ('Daily' | 'Assessment')[]) => {
+    if (grades.length === 0) return 0;
+    
+    const dailyGrades = grades.filter((_, i) => types[i] === 'Daily');
+    const assessmentGrades = grades.filter((_, i) => types[i] === 'Assessment');
+    
+    // If no assessments, use 100% daily grades
+    if (assessmentGrades.length === 0) {
+      return dailyGrades.length > 0 
+        ? Math.round(dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length)
+        : 0;
+    }
+    
+    const dailyAvg = dailyGrades.length > 0 
+      ? dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length 
+      : 0;
+    
+    const assessmentAvg = assessmentGrades.reduce((a, b) => a + b, 0) / assessmentGrades.length;
+    
+    return Math.round((dailyAvg * 0.8) + (assessmentAvg * 0.2));
+  };
+
   if (!student) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -117,68 +147,92 @@ export function StudentDashboard() {
     );
   }
 
-  const averages = assignments.reduce((acc, assignment) => {
-    const total = calculateTotal(assignment.id);
-    if (total > 0) {
-      if (!acc[assignment.type]) {
-        acc[assignment.type] = { sum: 0, count: 0 };
-      }
-      acc[assignment.type].sum += total;
-      acc[assignment.type].count++;
-    }
-    return acc;
-  }, {} as Record<string, { sum: number; count: number }>);
+  const validAssignments = assignments.map(assignment => ({
+    grade: calculateTotal(assignment.id),
+    type: assignment.type as 'Daily' | 'Assessment',
+    hasGrade: !!grades[assignment.id]
+  })).filter(a => a.hasGrade);
 
-  const dailyAverage = averages['Daily']?.count > 0 
-    ? Math.round(averages['Daily'].sum / averages['Daily'].count) 
-    : 0;
+  const averages = {
+    daily: calculateWeightedAverage(
+      validAssignments.filter(a => a.type === 'Daily').map(a => a.grade),
+      validAssignments.filter(a => a.type === 'Daily').map(a => a.type)
+    ),
+    assessment: calculateWeightedAverage(
+      validAssignments.filter(a => a.type === 'Assessment').map(a => a.grade),
+      validAssignments.filter(a => a.type === 'Assessment').map(a => a.type)
+    )
+  };
 
-  const assessmentAverage = averages['Assessment']?.count > 0 
-    ? Math.round(averages['Assessment'].sum / averages['Assessment'].count) 
-    : 0;
-
-  const finalAverage = Math.round((dailyAverage * 0.6) + (assessmentAverage * 0.4));
+  const finalAverage = Math.round((averages.daily * 0.8) + (averages.assessment * 0.2));
 
   return (
     <div className="container mx-auto py-8 space-y-6">
-      {/* Header with averages */}
-      <div className="grid grid-cols-4 gap-4">
-        <Card>
+      {/* Larger Development Alert */}
+      <Alert className="bg-yellow-50 border-yellow-200">
+        <Info className="h-5 w-5 text-yellow-600" />
+        <AlertDescription className="text-base font-medium text-yellow-800">
+          👋 Welcome! This dashboard is in development. Please verify your grades with me as features are being added.
+        </AlertDescription>
+      </Alert>
+
+      {/* Color Toggle */}
+      <div className="flex items-center space-x-2">
+        <Switch
+          id="color-mode"
+          checked={showColors}
+          onCheckedChange={setShowColors}
+        />
+        <Label htmlFor="color-mode">Show Assignment Type Colors</Label>
+      </div>
+
+      {/* Updated Header Cards with Gradients */}
+      <div className="grid grid-cols-3 gap-4">
+        <Card className={cn(
+          "transition-colors",
+          showColors && "bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 border-blue-200 hover:shadow-md"
+        )}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Daily Average</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dailyAverage}%</div>
+            <div className="text-2xl font-bold">{averages.daily}%</div>
             <p className="text-xs text-muted-foreground">
-              {averages['Daily']?.count || 0} assignments
+              {validAssignments.filter(a => a.type === 'Daily').length} assignments
             </p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={cn(
+          "transition-colors",
+          showColors && "bg-gradient-to-br from-purple-50 via-pink-50 to-purple-100 border-purple-200 hover:shadow-md"
+        )}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Test Average</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{assessmentAverage}%</div>
+            <div className="text-2xl font-bold">{averages.assessment}%</div>
             <p className="text-xs text-muted-foreground">
-              {averages['Assessment']?.count || 0} assignments
+              {validAssignments.filter(a => a.type === 'Assessment').length} assignments
             </p>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={cn(
+          "transition-colors",
+          showColors && "bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100 border-emerald-200 hover:shadow-md"
+        )}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Final Average</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{finalAverage}%</div>
             <p className="text-xs text-muted-foreground">
-              60% Daily / 40% Tests
+              80% Daily / 20% Tests
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Assignments List */}
+      {/* Assignment List */}
       <div className="space-y-4">
         {assignments.map(assignment => {
           const grade = grades[assignment.id];
@@ -186,54 +240,92 @@ export function StudentDashboard() {
           const extraPoint = extraPoints[assignment.id];
           const total = calculateTotal(assignment.id);
           const assignmentTags = tags.filter(t => t.assignment_id === assignment.id);
+          const isExpanded = expandedAssignments.has(assignment.id);
 
           return (
-            <Card 
+            <Collapsible
               key={assignment.id}
-              className={cn(
-                "transition-colors",
-                assignment.type === 'Assessment' ? 'border-l-4 border-l-blue-500' : ''
-              )}
+              open={isExpanded}
+              onOpenChange={(open) => {
+                setExpandedAssignments(prev => {
+                  const next = new Set(prev);
+                  if (open) {
+                    next.add(assignment.id);
+                  } else {
+                    next.delete(assignment.id);
+                  }
+                  return next;
+                });
+              }}
             >
-              <CardHeader className="pb-2">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <CardTitle className="text-lg">{assignment.name}</CardTitle>
-                    <div className="text-sm text-muted-foreground">
-                      {format(assignment.date, 'PPP')} · {assignment.subject}
-                    </div>
-                  </div>
-                  {grade && (
-                    <div className="text-right">
-                      <div className="text-2xl font-bold">{total}%</div>
-                      {extraPoint && (
-                        <div className="text-sm text-green-600">+{extraPoint}</div>
+              <Card className={cn(
+                "transition-colors",
+                showColors && assignment.type === 'Daily' && "bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-100 border-blue-200 hover:shadow-md",
+                showColors && assignment.type === 'Assessment' && "bg-gradient-to-r from-purple-50 via-pink-50 to-purple-100 border-purple-200 hover:shadow-md"
+              )}>
+                <CollapsibleTrigger className="w-full">
+                  <CardHeader className="pb-2">
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-center gap-2">
+                        <ChevronRight className={cn(
+                          "h-4 w-4 transition-transform",
+                          isExpanded && "transform rotate-90"
+                        )} />
+                        <div>
+                          <CardTitle className="text-lg">{assignment.name}</CardTitle>
+                          <div className="text-sm text-muted-foreground">
+                            {format(assignment.date, 'PPP')} · {assignment.type}
+                          </div>
+                        </div>
+                      </div>
+                      {grade && (
+                        <div className="text-right">
+                          <div className="text-2xl font-bold">{total}%</div>
+                          {extraPoint && (
+                            <div className="text-sm text-green-600">+{extraPoint}</div>
+                          )}
+                        </div>
                       )}
                     </div>
-                  )}
-                </div>
-              </CardHeader>
-              {assignmentTags.length > 0 && (
-                <CardContent className="pt-0">
-                  <div className="flex gap-2">
-                    {assignmentTags.map(tag => (
-                      <span 
-                        key={tag.id}
-                        className={cn(
-                          "text-xs px-2 py-1 rounded-full",
-                          tag.tag_type === 'absent' && "bg-red-100 text-red-700",
-                          tag.tag_type === 'late' && "bg-yellow-100 text-yellow-700",
-                          tag.tag_type === 'incomplete' && "bg-orange-100 text-orange-700",
-                          tag.tag_type === 'retest' && "bg-blue-100 text-blue-700"
-                        )}
-                      >
-                        {tag.tag_type.charAt(0).toUpperCase() + tag.tag_type.slice(1)}
-                      </span>
-                    ))}
-                  </div>
-                </CardContent>
-              )}
-            </Card>
+                  </CardHeader>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="pt-0 space-y-4">
+                    {/* Assignment details */}
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-muted-foreground">Due Date</p>
+                        <p className="font-medium">{format(assignment.date, 'PPP')}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Subject</p>
+                        <p className="font-medium">{assignment.subject}</p>
+                      </div>
+                    </div>
+
+                    {/* Tags */}
+                    {assignmentTags.length > 0 && (
+                      <div className="flex gap-2">
+                        {assignmentTags.map(tag => (
+                          <span 
+                            key={tag.id}
+                            className={cn(
+                              "text-xs px-2 py-1 rounded-full",
+                              tag.tag_type === 'absent' && "bg-red-100 text-red-700",
+                              tag.tag_type === 'late' && "bg-yellow-100 text-yellow-700",
+                              tag.tag_type === 'incomplete' && "bg-orange-100 text-orange-700",
+                              tag.tag_type === 'retest' && "bg-blue-100 text-blue-700"
+                            )}
+                          >
+                            {tag.tag_type.charAt(0).toUpperCase() + tag.tag_type.slice(1)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
           );
         })}
       </div>

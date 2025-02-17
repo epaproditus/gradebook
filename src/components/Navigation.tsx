@@ -23,12 +23,6 @@ export function Navigation() {
         >
           My Grades
         </Link>
-        <Link
-          href="/student/progress"
-          className={pathname === '/student/progress' ? 'font-bold' : ''}
-        >
-          Progress Report
-        </Link>
       </nav>
     );
   }
