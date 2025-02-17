@@ -649,6 +649,20 @@
       "indexdef": "CREATE INDEX idx_assignments_google_id ON public.assignments USING btree (google_classroom_id)"
     },
     {
+      "table_name": "assignments",
+      "column_name": "completed",
+      "data_type": "boolean",
+      "is_nullable": "YES",
+      "column_default": "false"
+    },
+    {
+      "table_name": "assignments",
+      "column_name": "completed_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
       "table_name": "assignments_backup",
       "column_name": "name",
       "data_type": "text",
@@ -2063,7 +2077,7 @@
       "is_nullable": "NO",
       "column_default": null,
       "constraint_type": "UNIQUE",
-      "constraint_name": "unique_student_period",
+      "constraint_name": "student_mappings_student_id_period_key",
       "indexname": "student_mappings_student_id_period_key",
       "indexdef": "CREATE UNIQUE INDEX student_mappings_student_id_period_key ON public.student_mappings USING btree (student_id, period)"
     },
@@ -2074,7 +2088,7 @@
       "is_nullable": "NO",
       "column_default": null,
       "constraint_type": "UNIQUE",
-      "constraint_name": "unique_student_period",
+      "constraint_name": "student_mappings_student_id_period_key",
       "indexname": "student_mappings_pkey",
       "indexdef": "CREATE UNIQUE INDEX student_mappings_pkey ON public.student_mappings USING btree (id)"
     },
@@ -2085,22 +2099,8 @@
       "is_nullable": "NO",
       "column_default": null,
       "constraint_type": "UNIQUE",
-      "constraint_name": "unique_student_period",
+      "constraint_name": "student_mappings_student_id_period_key",
       "indexname": "unique_google_id",
-      "indexdef": "CREATE UNIQUE INDEX unique_google_id ON public.student_mappings USING btree (google_id)"
-    },
-    {
-      "table_name": "student_mappings",
-      "column_name": "student_id",
-      "data_type": "bigint",
-      "is_nullable": "NO",
-      "column_default": null,
-      "constraint_type": "UNIQUE",
-      "constraint_name": "unique_student_period",
-      "indexname": "idx_student_mappings_google_id",
-      "indexdef": "CREATE INDEX idx_student_mappings_google_id ON public.student_mappings USING btree (google_id)"
-    },
-    {
       "table_name": "student_mappings",
       "column_name": "student_id",
       "data_type": "bigint",
