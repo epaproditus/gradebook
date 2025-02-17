@@ -2,30 +2,56 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { cn } from '@/lib/utils';
+import { useEffect, useState } from 'react';
+import { getUserRole } from '@/lib/auth';
 
 export function Navigation() {
   const pathname = usePathname();
+  const [userRole, setUserRole] = useState<string | null>(null);
 
-  const links = [
-    { href: '/gradebook', label: 'Gradebook', match: '/gradebook' },
-    { href: '/classroom', label: 'Google Classroom', match: '/classroom' }
-  ];
+  useEffect(() => {
+    getUserRole().then(setUserRole);
+  }, []);
 
-  return (
-    <nav className="flex gap-6 border-b">
-      {links.map(({ href, label, match }) => (
+  // Only show student links for students
+  if (userRole === 'student') {
+    return (
+      <nav className="flex items-center space-x-4 h-14">
         <Link
-          key={href}
-          href={href}
-          className={cn(
-            "px-4 py-3 text-sm font-medium hover:text-primary transition-colors",
-            pathname?.startsWith(match) ? "border-b-2 border-primary text-primary" : "text-muted-foreground"
-          )}
+          href="/student"
+          className={pathname === '/student' ? 'font-bold' : ''}
         >
-          {label}
+          My Grades
         </Link>
-      ))}
-    </nav>
-  );
+        <Link
+          href="/student/progress"
+          className={pathname === '/student/progress' ? 'font-bold' : ''}
+        >
+          Progress Report
+        </Link>
+      </nav>
+    );
+  }
+
+  // Show teacher links for teachers
+  if (userRole === 'teacher') {
+    return (
+      <nav className="flex items-center space-x-4 h-14">
+        <Link
+          href="/gradebook"
+          className={pathname === '/gradebook' ? 'font-bold' : ''}
+        >
+          Gradebook
+        </Link>
+        <Link
+          href="/classroom"
+          className={pathname === '/classroom' ? 'font-bold' : ''}
+        >
+          Google Classroom
+        </Link>
+      </nav>
+    );
+  }
+
+  return null;
 }

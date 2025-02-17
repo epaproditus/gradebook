@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from "@/components/ui/use-toast";  // Updated import
+import { useEffect } from 'react';
 
 export default function SignIn() {
   const router = useRouter();
@@ -15,6 +16,14 @@ export default function SignIn() {
   const errorDescription = searchParams.get('error_description');
   const supabase = createClientComponentClient();
   const { toast } = useToast();
+
+  useEffect(() => {
+    // Clear any existing session on mount
+    const clearSession = async () => {
+      await supabase.auth.signOut();
+    };
+    clearSession();
+  }, []);
 
   const handleGoogleSignIn = async () => {
     try {

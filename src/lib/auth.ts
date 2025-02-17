@@ -2,6 +2,7 @@ import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import { JWT } from "next-auth/jwt";
 import { Session } from "next-auth";
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
 interface ExtendedToken extends JWT {
   accessToken?: string;
@@ -49,6 +50,33 @@ async function refreshAccessToken(token: ExtendedToken): Promise<ExtendedToken> 
       error: "RefreshAccessTokenError",
     };
   }
+}
+
+export async function getUserRole() {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session?.user?.email) return null;
+
+  // Check if user is a teacher (you can store this in a separate table)
+  const { data: teacher } = await supabase
+    .from('teachers')
+    .select('*')
+    .eq('email', session.user.email)
+    .single();
+
+  if (teacher) return 'teacher';
+
+  // Check if user is a student
+  const { data: student } = await supabase
+    .from('student_mappings')
+    .select('*')
+    .eq('google_email', session.user.email)
+    .single();
+
+  if (student) return 'student';
+
+  return null;
 }
 
 export const authOptions: NextAuthOptions = {
