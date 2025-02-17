@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "@/components/Providers";
 import { NextAuthProvider } from '@/providers/auth';
 import { Navigation } from '@/components/Navigation';
+import { Toaster } from '@/components/ui/toaster';  // Fixed quote
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -46,6 +47,7 @@ export default function RootLayout({
             </div>
           </NextAuthProvider>
         </Providers>
+        <Toaster />
       </body>
     </html>
   );
