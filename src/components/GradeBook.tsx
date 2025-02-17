@@ -488,12 +488,31 @@ const TYPE_COLORS = {
   'Assessment': 'bg-red-50 hover:bg-red-100'
 } as const;
 
+// Combined status colors for both backgrounds and text
+const STATUS_COLORS = {
+  'not_started': {
+    bg: 'bg-gray-50 hover:bg-gray-100 border-gray-200',
+    text: 'text-gray-400',
+    dot: 'bg-gray-400'
+  },
+  'in_progress': {
+    bg: 'bg-yellow-50 hover:bg-yellow-100 border-yellow-200',
+    text: 'text-yellow-600',
+    dot: 'bg-yellow-400'
+  },
+  'completed': {
+    bg: 'bg-green-50 hover:bg-green-100 border-green-200',
+    text: 'text-green-600',
+    dot: 'bg-green-400'
+  }
+} as const;
+
 // Add ColorSettings component at the top level
 const ColorSettings: FC<{
   showColors: boolean;
-  colorMode: 'none' | 'subject' | 'type';
+  colorMode: 'none' | 'subject' | 'type' | 'status';
   onShowColorsChange: (show: boolean) => void;
-  onColorModeChange: (mode: 'none' | 'subject' | 'type') => void;
+  onColorModeChange: (mode: 'none' | 'subject' | 'type' | 'status') => void;
 }> = ({ showColors, colorMode, onShowColorsChange, onColorModeChange }) => {
   return (
     <div className="flex items-center gap-4">
@@ -507,7 +526,7 @@ const ColorSettings: FC<{
       {showColors && (
         <Select
           value={colorMode}
-          onValueChange={(value: 'none' | 'subject' | 'type') => onColorModeChange(value)}
+          onValueChange={(value: 'none' | 'subject' | 'type' | 'status') => onColorModeChange(value)}
         >
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Color by..." />
@@ -515,6 +534,7 @@ const ColorSettings: FC<{
           <SelectContent>
             <SelectItem value="subject">Color by Subject</SelectItem>
             <SelectItem value="type">Color by Type</SelectItem>
+            <SelectItem value="status">Color by Status</SelectItem>
           </SelectContent>
         </Select>
       )}
@@ -528,7 +548,8 @@ const getCardClassName = (assignment: Assignment, isExpanded: boolean, colorMode
     "mb-2 transition-all duration-200",
     isExpanded ? "col-span-2" : "",  // Make card span full width when expanded
     showColors && colorMode === 'subject' && SUBJECT_COLORS[assignment.subject],
-    showColors && colorMode === 'type' && TYPE_COLORS[assignment.type]
+    showColors && colorMode === 'type' && TYPE_COLORS[assignment.type],
+    showColors && colorMode === 'status' && STATUS_COLORS[assignment.status || 'not_started'].bg
   );
 };
 
@@ -644,17 +665,10 @@ const TodoList: FC<{
 // Add new interface for assignment status options
 type AssignmentStatus = 'in_progress' | 'completed' | 'not_started';
 
-// Add status color mapping
-const STATUS_COLORS = {
-  in_progress: 'text-yellow-600',
-  completed: 'text-green-600',
-  not_started: 'text-gray-400'
-} as const;
-
 const GradeBook: FC = () => {
   // Change the initial value of showColors to false
   const [showColors, setShowColors] = useState(false);
-  const [colorMode, setColorMode] = useState<'none' | 'subject' | 'type'>('none');
+  const [colorMode, setColorMode] = useState<'none' | 'subject' | 'type' | 'status'>('none');
   
   // Move useState here
   const [calendarView, setCalendarView] = useState<'month' | 'week'>('week');
@@ -1698,8 +1712,8 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
             <SelectTrigger className="w-[180px]">
               <div className="flex items-center gap-2">
                 <div className={cn(
-                  "h-2 w-2 rounded-full",
-                  STATUS_COLORS[assignment.status || 'not_started']
+                  "h-3 w-3 rounded-full",
+                  STATUS_COLORS[assignment.status || 'not_started'].dot
                 )} />
                 <SelectValue />
               </div>
