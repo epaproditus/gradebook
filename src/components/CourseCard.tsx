@@ -10,6 +10,9 @@ import type { GoogleAssignment } from './AssignmentSelectDialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/components/ui/use-toast';
 import { TestMappingDialog } from './TestMappingDialog';
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ChevronDown } from 'lucide-react';
 
 interface CourseCardProps {
   course: Course;
@@ -20,130 +23,110 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
   const { data: session } = useSession();
   const [loading, setLoading] = useState(false);
   const [showAssignments, setShowAssignments] = useState(false);
-  const [availablePeriods, setAvailablePeriods] = useState<string[]>([]);
-  const [selectedPeriods, setSelectedPeriods] = useState<{
-    primary: string;
-    secondary: string;
-  }>({ primary: '', secondary: '' });
-
-  const storageKey = React.useMemo(() => `selected-periods-${course.id}`, [course.id]);
-
-  // Add state to track if periods are mapped
-  const [mappedPeriods, setMappedPeriods] = useState<Set<string>>(new Set());
-
-  // Add state for selected subject
+  const [availablePeriods, setAvailablePeriods] = useState(['1', '2', '3', '4', '5', '6', '7', '8']);
+  const [selectedPeriods, setSelectedPeriods] = useState<string[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<'Math 8' | 'Algebra I'>(
     course.name.toLowerCase().includes('alg') ? 'Algebra I' : 'Math 8'
   );
 
-  // Modified to check existing mappings
   useEffect(() => {
-    async function loadPeriodsAndMappings() {
-      // Load available periods
+    const loadPeriods = async () => {
       const { data: periodsData } = await supabase
         .from('students')
         .select('period')
-        .not('period', 'is', null)
-        .order('period');
+        .not('period', 'is', null);
 
-      const uniquePeriods = Array.from(new Set(periodsData?.map(p => p.period)));
-      setAvailablePeriods(uniquePeriods);
-      
-      // Get existing mappings for this course
-      const { data: mappings } = await supabase
-        .from('course_mappings')
-        .select('period')
-        .eq('google_course_id', course.id)
-        .eq('setup_completed', true);
+      if (periodsData) {
+        const uniquePeriods = Array.from(new Set(periodsData.map(p => p.period))).sort();
+        setAvailablePeriods(uniquePeriods);
+      }
+    };
 
-      const mapped = new Set(mappings?.map(m => m.period) || []);
-      setMappedPeriods(mapped);
+    loadPeriods();
+  }, []);
 
-      // Load saved selections, but only if they're still valid
-      const savedPeriods = localStorage.getItem(storageKey);
-      if (savedPeriods) {
-        const parsed = JSON.parse(savedPeriods);
-        // Only restore selections if they were properly mapped
-        setSelectedPeriods({
-          primary: mapped.has(parsed.primary) ? parsed.primary : '',
-          secondary: mapped.has(parsed.secondary) ? parsed.secondary : ''
+  useEffect(() => {
+    const loadExistingMappings = async () => {
+      try {
+        const { data: mappings, error } = await supabase
+          .from('course_mappings')
+          .select('period')
+          .eq('google_course_id', course.id);
+
+        if (error) throw error;
+
+        if (mappings) {
+          const periods = mappings.map(m => m.period);
+          console.log('Loaded existing mappings:', periods);
+          setSelectedPeriods(periods);
+        }
+      } catch (error) {
+        console.error('Error loading mappings:', error);
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to load existing period mappings"
         });
       }
-    }
+    };
 
-    loadPeriodsAndMappings();
-  }, [storageKey, course.id]);
+    loadExistingMappings();
+  }, [course.id]);
 
-  // Save selection and create mapping
-  const handlePeriodChange = async (value: string, type: 'primary' | 'secondary') => {
+  const handlePeriodChange = async (period: string) => {
     try {
-      const actualValue = value === 'none' ? '' : value;
-      const newPeriods = { ...selectedPeriods, [type]: actualValue };
-      
-      if (actualValue) {
-        // First check if mapping already exists
-        const { data: existingMapping, error: checkError } = await supabase
+      const isSelected = selectedPeriods.includes(period);
+      const newPeriods = isSelected
+        ? selectedPeriods.filter(p => p !== period)
+        : [...selectedPeriods, period];
+
+      // Update local state first for immediate feedback
+      setSelectedPeriods(newPeriods);
+
+      if (!isSelected) {
+        // Add new mapping
+        const { error: insertError } = await supabase
           .from('course_mappings')
-          .select('*')
-          .eq('google_course_id', course.id)
-          .eq('period', actualValue)
-          .single();
+          .insert({
+            google_course_id: course.id,
+            period: period,
+            subject: selectedSubject,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
 
-        if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "not found"
-          throw checkError;
-        }
-
-        if (!existingMapping) {
-          // Create new mapping
-          const { error: insertError } = await supabase
-            .from('course_mappings')
-            .insert({
-              google_course_id: course.id,
-              period: actualValue,
-              setup_completed: true,
-              setup_completed_at: new Date().toISOString(),
-              subject: selectedSubject,
-              course_name: course.name,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            });
-
-          if (insertError) throw insertError;
-        }
-
-        // Update local state
-        setMappedPeriods(prev => new Set([...prev, actualValue]));
-        setSelectedPeriods(newPeriods);
-        localStorage.setItem(storageKey, JSON.stringify(newPeriods));
-
-        toast({
-          title: "Success",
-          description: `Mapped ${course.name} to period ${actualValue}`
-        });
+        if (insertError) throw insertError;
       } else {
-        // Handle removing mapping
+        // Remove mapping
         const { error: deleteError } = await supabase
           .from('course_mappings')
           .delete()
-          .eq('google_course_id', course.id)
-          .eq('period', selectedPeriods[type]);
+          .match({
+            google_course_id: course.id,
+            period: period
+          });
 
         if (deleteError) throw deleteError;
-
-        // Update state
-        setSelectedPeriods(newPeriods);
-        localStorage.setItem(storageKey, JSON.stringify(newPeriods));
-        
-        const newMapped = new Set(mappedPeriods);
-        newMapped.delete(selectedPeriods[type]);
-        setMappedPeriods(newMapped);
       }
+
+      toast({
+        title: "Success",
+        description: isSelected 
+          ? `Removed Period ${period}`
+          : `Added Period ${period}`
+      });
     } catch (error) {
-      console.error('Mapping error:', error);
+      // Revert local state on error
+      setSelectedPeriods(prev => isSelected 
+        ? [...prev, period]
+        : prev.filter(p => p !== period)
+      );
+
+      console.error('Period selection error:', error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to save course mapping"
+        description: "Failed to update period selection"
       });
     }
   };
@@ -160,7 +143,7 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
     
     setLoading(true);
     try {
-      const periods = [selectedPeriods.primary, selectedPeriods.secondary].filter(Boolean);
+      const periods = selectedPeriods.filter(Boolean);
       
       console.log('Importing assignment with:', {
         periods,
@@ -179,13 +162,12 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
           },
           body: JSON.stringify({ 
             periods,
-            subject: selectedSubject // Make sure we send the subject
+            subject: selectedSubject
           })
         }
       );
 
       if (importRes.status === 401) {
-        // Refresh the page to trigger re-auth
         window.location.reload();
         return;
       }
@@ -216,7 +198,6 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
   return (
     <div className="border rounded-lg p-4 bg-white shadow-sm hover:shadow-md transition-shadow">
       <div className="flex flex-col gap-4">
-        {/* Course Header */}
         <div className="border-b pb-3">
           <div className="flex justify-between items-center">
             <div>
@@ -240,58 +221,45 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
           </div>
         </div>
 
-        {/* Card Actions - Updated Layout */}
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <div className="flex gap-2">
-              <Select 
-                value={selectedPeriods.primary || 'none'}
-                onValueChange={(value) => handlePeriodChange(value, 'primary')}
-              >
-                <SelectTrigger className="w-28">
-                  <SelectValue placeholder="Period 1" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Clear</SelectItem>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  className="w-[200px] justify-between"
+                  role="combobox"
+                >
+                  {selectedPeriods.length 
+                    ? `${selectedPeriods.length} periods selected`
+                    : "Select periods"}
+                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[200px] p-0" side="bottom">
+                <div className="space-y-1 p-2">
                   {availablePeriods.map(period => (
-                    <SelectItem 
-                      key={period} 
-                      value={period}
-                      disabled={period === selectedPeriods.secondary}
+                    <div
+                      key={period}
+                      className="flex items-center space-x-2 rounded hover:bg-accent hover:text-accent-foreground cursor-pointer p-2 text-sm"
+                      onClick={() => handlePeriodChange(period)}
                     >
-                      {period}
-                    </SelectItem>
+                      <Checkbox 
+                        checked={selectedPeriods.includes(period)}
+                        className="pointer-events-none h-4 w-4"
+                      />
+                      <span>Period {period}</span>
+                    </div>
                   ))}
-                </SelectContent>
-              </Select>
-
-              <Select 
-                value={selectedPeriods.secondary || 'none'}
-                onValueChange={(value) => handlePeriodChange(value, 'secondary')}
-              >
-                <SelectTrigger className="w-28">
-                  <SelectValue placeholder="Period 2" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Clear</SelectItem>
-                  {availablePeriods.map(period => (
-                    <SelectItem 
-                      key={period} 
-                      value={period}
-                      disabled={period === selectedPeriods.primary}
-                    >
-                      {period}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                </div>
+              </PopoverContent>
+            </Popover>
 
             <Button
               variant="default"
               size="sm"
               onClick={() => setShowAssignments(true)}
-              disabled={loading || (!selectedPeriods.primary && !selectedPeriods.secondary)}
+              disabled={loading || selectedPeriods.length === 0}
             >
               {loading ? <LoadingSpinner className="w-4 h-4 mr-2" /> : null}
               Import Assignment
