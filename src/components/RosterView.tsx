@@ -283,15 +283,11 @@ const RosterView: FC<RosterViewProps> = ({
                     >
                       {!collapsedColumns.has(assignment.id) ? (
                         <Input
-                          type="number"
+                          type="text" // Changed from "number"
                           min="0"
                           max="100"
                           placeholder="0"
-                          className={cn(
-                            "text-center h-8 text-sm border-0 focus:ring-1",
-                            "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
-                            getGradeValue(assignment.id, activeTab, student.id.toString()) && "bg-secondary"
-                          )}
+                          className="text-center h-8 text-sm"
                           value={getGradeValue(assignment.id, activeTab, student.id.toString())}
                           onChange={(e) => onGradeChange(assignment.id, activeTab, student.id.toString(), e.target.value)}
                         />

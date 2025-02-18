@@ -1833,7 +1833,7 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
           <div className="grid grid-cols-[1fr_100px_100px_100px_auto] gap-2 mb-2 px-2 py-1 bg-muted text-sm font-medium">
             <div>Student ID & Name</div>
             <div className="text-center">Initial Grade</div>
-            <div className="text-center">Extra Points</div>
+            <div className="text-center">Extra Points</div> {/* Fixed title */}
             <div className="text-center">Total Grade</div>
             <div className="text-right">Tags</div>
           </div>
@@ -1904,11 +1904,9 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
                       
                       <Input
                         id={`grade-${assignmentId}-${periodId}-${student.id}`}
-                        type="number"
-                        min="0"
-                        max="100"
+                        type="text" // Changed from "number"
                         placeholder="0"
-                        className="text-center h-8 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        className="text-center h-8 text-sm"
                         value={getGradeValue(assignmentId, periodId, String(student.id))}
                         onChange={(e) => handleGradeChange(assignmentId, periodId, String(student.id), e.target.value)}
                         onFocus={() => setActiveRow(`${assignmentId}-${periodId}-${student.id}`)}
@@ -1922,10 +1920,9 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
                       />
                       
                       <Input
-                        type="number"
-                        min="0"
+                        type="text" // Changed from "number"
                         placeholder="+0"
-                        className="text-center h-8 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        className="text-center h-8 text-sm"
                         value={extraPoints[`${assignmentId}-${periodId}-${student.id}`] || ''}
                         onChange={(e) => {
                           handleExtraPointsChange(assignmentId, periodId, student.id, e.target.value);
