@@ -4,8 +4,6 @@ import "./globals.css";
 import { Providers } from "@/components/Providers";
 import { NextAuthProvider } from '@/providers/auth';
 import { Navigation } from '@/components/Navigation';
-import { Toaster } from '@/components/ui/toaster';  // Fixed quote
-import { UserBanner } from '@/components/UserBanner';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -42,14 +40,12 @@ export default function RootLayout({
               </header>
               <main className="flex-1">
                 <div className="container mx-auto">
-                  <UserBanner />
                   {children}
                 </div>
               </main>
             </div>
           </NextAuthProvider>
         </Providers>
-        <Toaster />
       </body>
     </html>
   );
