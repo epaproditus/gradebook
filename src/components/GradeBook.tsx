@@ -33,6 +33,7 @@ import { loadConfig, saveConfig, defaultConfig } from '@/lib/storage';
 import RosterView from './RosterView';
 import { LayoutGrid, Table } from 'lucide-react';
 import { STATUS_COLORS, TYPE_COLORS, SUBJECT_COLORS } from '@/lib/constants';
+import { SignOutButton } from './SignOutButton';
 
 // Initialize Supabase client (this is fine outside component)
 const supabase = createClient(
@@ -2352,6 +2353,10 @@ const calculateWeightedAverage = (grades: number[], types: ('Daily' | 'Assessmen
 
 return (
   <div className="p-6">
+    <div className="flex justify-between items-center mb-4">
+      <h1 className="text-2xl font-bold">Gradebook</h1>
+      <SignOutButton />
+    </div>
     <div className="flex gap-6">
       {/* Left side - Collapsible Calendar */}
       <div className={cn("space-y-4", !isCalendarVisible && "w-auto")}>
@@ -2635,7 +2640,13 @@ return (
                   getGradeValue={getGradeValue}
                   calculateTotal={calculateTotal}
                   activeTab={activeTab}
-                  saveGrades={saveGrades} // Add this prop
+                  unsavedGrades={unsavedGrades}
+                  setUnsavedGrades={setUnsavedGrades}
+                  setEditingGrades={setEditingGrades}
+                  handleImportGrades={handleImportGrades}
+                  exportGrades={exportGrades}
+                  saveGrades={saveGrades}
+                  extraPoints={extraPoints}  // Add this prop
                 />
               </TabsContent>
             </Tabs>

@@ -13,6 +13,7 @@ import {
 import { ChevronRight } from 'lucide-react';
 import { toast } from "@/components/ui/use-toast";
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { SignOutButton } from './SignOutButton';
 
 interface ClassworkItem {
   id: string;
@@ -182,6 +183,10 @@ const GoogleClassroom: FC = () => {
 
   return (
     <div className="p-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold">Google Classroom</h2>
+        <SignOutButton />
+      </div>
       {!session ? (
         <Button onClick={handleAuth}>
           Connect Google Classroom
@@ -189,7 +194,6 @@ const GoogleClassroom: FC = () => {
       ) : (
         <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-bold">Google Classroom</h2>
             <div className="flex gap-4">
               <Select
                 value={selectedPeriod}

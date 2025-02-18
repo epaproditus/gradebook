@@ -26,6 +26,7 @@ interface RosterViewProps {
   handleImportGrades: (assignmentId: string, periodId: string, grades: Record<string, string>) => void;
   exportGrades: (assignmentIds: string[], periodIds: string[], merge: boolean) => void;
   saveGrades: (assignmentId: string, periodId: string) => Promise<void>; // Add this
+  extraPoints: Record<string, string>;  // Add this prop
 }
 
 const RosterView: FC<RosterViewProps> = ({
@@ -42,6 +43,7 @@ const RosterView: FC<RosterViewProps> = ({
   handleImportGrades,
   exportGrades,
   saveGrades, // Add this
+  extraPoints,  // Add this prop
 }) => {
   const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(new Set());
   // Add color state
@@ -103,10 +105,8 @@ const RosterView: FC<RosterViewProps> = ({
   // Update average calculation
   const calculateStudentAverage = (student: Student) => {
     const grades = sortedAssignments.map(assignment => ({
-      grade: calculateTotal(
-        getGradeValue(assignment.id, activeTab, student.id.toString()),
-        '0'
-      ),
+      grade: getGradeValue(assignment.id, activeTab, student.id.toString()),
+      extra: extraPoints[`${assignment.id}-${activeTab}-${student.id}`] || '0',
       type: assignment.type,
       hasGrade: getGradeValue(assignment.id, activeTab, student.id.toString()) !== ''
     }));
@@ -116,8 +116,9 @@ const RosterView: FC<RosterViewProps> = ({
     if (validGrades.length === 0) return 0;
 
     return calculateWeightedAverage(
-      validGrades.map(g => g.grade),
-      validGrades.map(g => g.type)
+      validGrades.map(g => parseInt(g.grade) || 0),
+      validGrades.map(g => g.type),
+      validGrades.map(g => g.extra)
     );
   };
 
@@ -293,7 +294,10 @@ const RosterView: FC<RosterViewProps> = ({
                         />
                       ) : (
                         <div className="flex items-center justify-center h-8 text-sm font-medium">
-                          {getGradeValue(assignment.id, activeTab, student.id.toString()) || '-'}
+                          {calculateTotal(
+                            getGradeValue(assignment.id, activeTab, student.id.toString()),
+                            extraPoints[`${assignment.id}-${activeTab}-${student.id}`] || '0'
+                          )}%
                         </div>
                       )}
                     </TableCell>

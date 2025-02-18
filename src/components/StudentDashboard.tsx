@@ -13,6 +13,8 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Info } from 'lucide-react';
+import { calculateWeightedAverage, calculateTotal } from '@/lib/gradeCalculations';
+import { SignOutButton } from './SignOutButton';
 
 interface StudentData {
   id: number;
@@ -29,7 +31,10 @@ export function StudentDashboard() {
   const [tags, setTags] = useState<any[]>([]);
   const [expandedAssignments, setExpandedAssignments] = useState<Set<string>>(new Set());
   const [showColors, setShowColors] = useState(true);
-  const supabase = createClientComponentClient();
+  const supabase = createClientComponentClient({
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  });
 
   useEffect(() => {
     const loadStudentData = async () => {
@@ -104,39 +109,11 @@ export function StudentDashboard() {
     loadStudentData();
   }, []);
 
-  const calculateTotal = (assignmentId: string): number => {
-    const grade = parseInt(grades[assignmentId] || '0');
-    const extra = parseInt(extraPoints[assignmentId] || '0');
-    return Math.min(100, grade + extra);
-  };
-
   const getAssignmentStatus = (assignment: Assignment, grade?: string) => {
     if (!grade) return 'not_started';
-    const total = calculateTotal(assignment.id);
+    const total = calculateTotal(grades[assignment.id], extraPoints[assignment.id] || '0');
     if (assignment.type === 'Assessment' && total < 70) return 'needs_retest';
     return 'completed';
-  };
-
-  const calculateWeightedAverage = (grades: number[], types: ('Daily' | 'Assessment')[]) => {
-    if (grades.length === 0) return 0;
-    
-    const dailyGrades = grades.filter((_, i) => types[i] === 'Daily');
-    const assessmentGrades = grades.filter((_, i) => types[i] === 'Assessment');
-    
-    // If no assessments, use 100% daily grades
-    if (assessmentGrades.length === 0) {
-      return dailyGrades.length > 0 
-        ? Math.round(dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length)
-        : 0;
-    }
-    
-    const dailyAvg = dailyGrades.length > 0 
-      ? dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length 
-      : 0;
-    
-    const assessmentAvg = assessmentGrades.reduce((a, b) => a + b, 0) / assessmentGrades.length;
-    
-    return Math.round((dailyAvg * 0.8) + (assessmentAvg * 0.2));
   };
 
   if (!student) {
@@ -148,19 +125,26 @@ export function StudentDashboard() {
   }
 
   const validAssignments = assignments.map(assignment => ({
-    grade: calculateTotal(assignment.id),
+    grade: grades[assignment.id] || '0',
+    extra: extraPoints[assignment.id] || '0',
+    total: calculateTotal(
+      grades[assignment.id] || '0', 
+      extraPoints[assignment.id] || '0'
+    ),
     type: assignment.type as 'Daily' | 'Assessment',
     hasGrade: !!grades[assignment.id]
   })).filter(a => a.hasGrade);
 
   const averages = {
     daily: calculateWeightedAverage(
-      validAssignments.filter(a => a.type === 'Daily').map(a => a.grade),
-      validAssignments.filter(a => a.type === 'Daily').map(a => a.type)
+      validAssignments.filter(a => a.type === 'Daily').map(a => parseInt(a.grade) || 0),
+      validAssignments.filter(a => a.type === 'Daily').map(a => a.type),
+      validAssignments.filter(a => a.type === 'Daily').map(a => a.extra)
     ),
     assessment: calculateWeightedAverage(
-      validAssignments.filter(a => a.type === 'Assessment').map(a => a.grade),
-      validAssignments.filter(a => a.type === 'Assessment').map(a => a.type)
+      validAssignments.filter(a => a.type === 'Assessment').map(a => parseInt(a.grade) || 0),
+      validAssignments.filter(a => a.type === 'Assessment').map(a => a.type),
+      validAssignments.filter(a => a.type === 'Assessment').map(a => a.extra)
     )
   };
 
@@ -168,14 +152,15 @@ export function StudentDashboard() {
 
   return (
     <div className="container mx-auto py-8 space-y-6">
-      {/* Larger Development Alert */}
-      <Alert className="bg-yellow-50 border-yellow-200">
-        <Info className="h-5 w-5 text-yellow-600" />
-        <AlertDescription className="text-base font-medium text-yellow-800">
-          👋 Welcome! This dashboard is in development. Please verify your grades with me as features are being added.
-        </AlertDescription>
-      </Alert>
-
+      <div className="flex justify-between items-center">
+        <Alert className="flex-1 bg-yellow-50 border-yellow-200">
+          <Info className="h-5 w-5 text-yellow-600" />
+          <AlertDescription className="text-base font-medium text-yellow-800">
+            👋 Welcome! This dashboard is in development. Please verify your grades with me as features are being added.
+          </AlertDescription>
+        </Alert>
+        <SignOutButton />
+      </div>
       {/* Color Toggle */}
       <div className="flex items-center space-x-2">
         <Switch
@@ -238,7 +223,7 @@ export function StudentDashboard() {
           const grade = grades[assignment.id];
           const status = getAssignmentStatus(assignment, grade);
           const extraPoint = extraPoints[assignment.id];
-          const total = calculateTotal(assignment.id);
+          const total = calculateTotal(grades[assignment.id], extraPoints[assignment.id] || '0');
           const assignmentTags = tags.filter(t => t.assignment_id === assignment.id);
           const isExpanded = expandedAssignments.has(assignment.id);
 
