@@ -3,9 +3,9 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 
 export async function GET(request: NextRequest) {
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  
   try {
-    // Always use the public URL for redirects
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL;
     const requestUrl = new URL(request.url);
     const code = requestUrl.searchParams.get('code');
     const error = requestUrl.searchParams.get('error');
@@ -19,13 +19,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${baseUrl}/auth/signin?error=missing_code`);
     }
 
-    // Create Supabase client with proper cookie store
     const cookieStore = cookies();
     const supabase = createRouteHandlerClient({ 
-      cookies: async () => cookieStore 
+      cookies: () => cookieStore 
     });
 
-    // Exchange code for session
     const { data: { session }, error: sessionError } = await supabase.auth.exchangeCodeForSession(code);
     
     if (sessionError) {
@@ -35,10 +33,8 @@ export async function GET(request: NextRequest) {
 
     const response = NextResponse.redirect(`${baseUrl}/gradebook`);
 
-    // Set cookies with proper attributes
-    await cookieStore.set({
-      name: 'sb-access-token',
-      value: session.access_token,
+    // Set cookies using the response object
+    response.cookies.set('sb-access-token', session.access_token, {
       path: '/',
       secure: true,
       sameSite: 'lax',
