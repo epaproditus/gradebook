@@ -15,25 +15,22 @@ export const calculateWeightedAverage = (
 ) => {
   if (grades.length === 0) return 0;
   
-  // Calculate totals with extra points first
-  const gradesWithExtra = grades.map((grade, i) => 
-    calculateTotal(grade.toString(), extraPoints[i] || '0')
-  );
+  const dailyGrades = grades.filter((_, i) => types[i] === 'Daily');
+  const assessmentGrades = grades.filter((_, i) => types[i] === 'Assessment');
   
-  const dailyGrades = gradesWithExtra.filter((_, i) => types[i] === 'Daily');
-  const assessmentGrades = gradesWithExtra.filter((_, i) => types[i] === 'Assessment');
-  
-  // If no assessments, use 100% daily grades
-  if (assessmentGrades.length === 0) {
-    return dailyGrades.length > 0 
-      ? Math.round(dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length)
+  // If either type is missing, use 100% of the available type
+  if (dailyGrades.length === 0) {
+    return assessmentGrades.length > 0 
+      ? Math.round(assessmentGrades.reduce((a, b) => a + b, 0) / assessmentGrades.length)
       : 0;
   }
   
-  const dailyAvg = dailyGrades.length > 0 
-    ? dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length 
-    : 0;
+  if (assessmentGrades.length === 0) {
+    return Math.round(dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length);
+  }
   
+  // Otherwise use 80/20 split
+  const dailyAvg = dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length;
   const assessmentAvg = assessmentGrades.reduce((a, b) => a + b, 0) / assessmentGrades.length;
   
   return Math.round((dailyAvg * 0.8) + (assessmentAvg * 0.2));

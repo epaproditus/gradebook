@@ -135,20 +135,30 @@ export function StudentDashboard() {
     hasGrade: !!grades[assignment.id]
   })).filter(a => a.hasGrade);
 
-  const averages = {
-    daily: calculateWeightedAverage(
-      validAssignments.filter(a => a.type === 'Daily').map(a => parseInt(a.grade) || 0),
-      validAssignments.filter(a => a.type === 'Daily').map(a => a.type),
-      validAssignments.filter(a => a.type === 'Daily').map(a => a.extra)
-    ),
-    assessment: calculateWeightedAverage(
-      validAssignments.filter(a => a.type === 'Assessment').map(a => parseInt(a.grade) || 0),
-      validAssignments.filter(a => a.type === 'Assessment').map(a => a.type),
-      validAssignments.filter(a => a.type === 'Assessment').map(a => a.extra)
-    )
+  const getDailyPoints = () => {
+    const dailyGrades = validAssignments
+      .filter(a => a.type === 'Daily')
+      .map(a => parseInt(a.grade) || 0);
+    
+    if (dailyGrades.length === 0) return 0;
+    const average = dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length;
+    return (average * 0.8).toFixed(1); // Showing one decimal place for points
   };
 
-  const finalAverage = Math.round((averages.daily * 0.8) + (averages.assessment * 0.2));
+  const getAssessmentPoints = () => {
+    const assessmentGrades = validAssignments
+      .filter(a => a.type === 'Assessment')
+      .map(a => parseInt(a.grade) || 0);
+    
+    if (assessmentGrades.length === 0) return 0;
+    const average = assessmentGrades.reduce((a, b) => a + b, 0) / assessmentGrades.length;
+    return (average * 0.2).toFixed(1); // Showing one decimal place for points
+  };
+
+  const dailyPoints = getDailyPoints();  // Already outputs #.#
+  const assessmentPoints = getAssessmentPoints();  // Already outputs #.#
+  // Change from Math.round to toFixed(1) for consistency
+  const totalPoints = (parseFloat(dailyPoints) + parseFloat(assessmentPoints)).toFixed(1);
 
   return (
     <div className="container mx-auto py-8 space-y-6">
@@ -178,13 +188,15 @@ export function StudentDashboard() {
           showColors && "bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 border-blue-200 hover:shadow-md"
         )}>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Daily Average</CardTitle>
+            <CardTitle className="text-sm font-medium">Daily Work</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{averages.daily}%</div>
-            <p className="text-xs text-muted-foreground">
-              {validAssignments.filter(a => a.type === 'Daily').length} assignments
-            </p>
+            <div className="flex flex-col items-center">
+              <div className="text-2xl font-bold">{dailyPoints}</div>
+              <div className="w-12 border-t border-current my-1"></div>
+              <div className="text-lg">80</div>
+              <div className="text-xs text-muted-foreground mt-1">points</div>
+            </div>
           </CardContent>
         </Card>
         <Card className={cn(
@@ -192,13 +204,15 @@ export function StudentDashboard() {
           showColors && "bg-gradient-to-br from-purple-50 via-pink-50 to-purple-100 border-purple-200 hover:shadow-md"
         )}>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Test Average</CardTitle>
+            <CardTitle className="text-sm font-medium">Tests</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{averages.assessment}%</div>
-            <p className="text-xs text-muted-foreground">
-              {validAssignments.filter(a => a.type === 'Assessment').length} assignments
-            </p>
+            <div className="flex flex-col items-center">
+              <div className="text-2xl font-bold">{assessmentPoints}</div>
+              <div className="w-12 border-t border-current my-1"></div>
+              <div className="text-lg">20</div>
+              <div className="text-xs text-muted-foreground mt-1">points</div>
+            </div>
           </CardContent>
         </Card>
         <Card className={cn(
@@ -206,13 +220,15 @@ export function StudentDashboard() {
           showColors && "bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100 border-emerald-200 hover:shadow-md"
         )}>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Final Average</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Points</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{finalAverage}%</div>
-            <p className="text-xs text-muted-foreground">
-              80% Daily / 20% Tests
-            </p>
+            <div className="flex flex-col items-center">
+              <div className="text-2xl font-bold">{totalPoints}</div>
+              <div className="w-12 border-t border-current my-1"></div>
+              <div className="text-lg">100</div>
+              <div className="text-xs text-muted-foreground mt-1">points</div>
+            </div>
           </CardContent>
         </Card>
       </div>
