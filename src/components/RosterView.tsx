@@ -193,11 +193,7 @@ const RosterView: FC<RosterViewProps> = ({
               students={students}
               grades={grades}
             />
-            <GradeExportDialog
-              assignments={assignments}
-              students={students}
-              onExport={exportGrades}
-            />
+            {/* GradeExportDialog removed from here */}
           </div>
           <ColorSettings
             showColors={showColors}

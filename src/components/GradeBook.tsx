@@ -107,9 +107,12 @@ const GradeExportDialog: FC<ExportDialogProps> = ({ assignments, students, onExp
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="outline" className="flex items-center gap-2">
+        <Button 
+          variant="ghost"
+          size="icon"
+          onClick={(e) => e.stopPropagation()}
+        >
           <Download className="h-4 w-4" />
-          Export Grades
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-md">
@@ -1728,6 +1731,11 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
         </div>
       )}
       <div className="flex items-center gap-2 ml-4">
+        <GradeExportDialog
+          assignments={{ [assignmentId]: assignment }}
+          students={students}
+          onExport={(ids, periods, merge) => exportGrades(ids, periods, merge)}
+        />
         <Button
           variant="ghost"
           size="icon"
