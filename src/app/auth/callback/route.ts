@@ -4,17 +4,19 @@ import { cookies } from 'next/headers';
 
 export async function GET(request: NextRequest) {
   try {
+    // Always use the public URL for redirects
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL;
     const requestUrl = new URL(request.url);
     const code = requestUrl.searchParams.get('code');
     const error = requestUrl.searchParams.get('error');
     
     if (error) {
       console.error('Auth error:', error);
-      return NextResponse.redirect(new URL('/auth/signin?error=' + error, requestUrl.origin));
+      return NextResponse.redirect(`${baseUrl}/auth/signin?error=${error}`);
     }
 
     if (!code) {
-      return NextResponse.redirect(new URL('/auth/signin?error=missing_code', requestUrl.origin));
+      return NextResponse.redirect(`${baseUrl}/auth/signin?error=missing_code`);
     }
 
     // Create Supabase client with proper cookie store
@@ -28,10 +30,10 @@ export async function GET(request: NextRequest) {
     
     if (sessionError) {
       console.error('Session error:', sessionError);
-      return NextResponse.redirect(new URL('/auth/signin?error=auth_failed', requestUrl.origin));
+      return NextResponse.redirect(`${baseUrl}/auth/signin?error=auth_failed`);
     }
 
-    const response = NextResponse.redirect(new URL('/gradebook', requestUrl.origin));
+    const response = NextResponse.redirect(`${baseUrl}/gradebook`);
 
     // Set cookies with proper attributes
     await cookieStore.set({
@@ -46,6 +48,6 @@ export async function GET(request: NextRequest) {
     return response;
   } catch (error) {
     console.error('Auth callback error:', error);
-    return NextResponse.redirect(new URL('/auth/signin?error=unknown', request.url));
+    return NextResponse.redirect(`${baseUrl}/auth/signin?error=unknown`);
   }
 }
