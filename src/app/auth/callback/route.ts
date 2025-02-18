@@ -39,7 +39,8 @@ export async function GET(request: Request) {
               .eq('id', student.id);
           }
 
-          return NextResponse.redirect(new URL('/student', requestUrl.origin));
+          // Use NEXT_PUBLIC_SITE_URL instead of requestUrl.origin
+          return NextResponse.redirect(`${process.env.NEXT_PUBLIC_SITE_URL}/student`);
         }
       }
 
