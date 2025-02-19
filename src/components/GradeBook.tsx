@@ -1047,65 +1047,95 @@ const saveGrades = async (assignmentId: string) => {
     const assignment = assignments[assignmentId];
     if (!assignment) return;
 
+    toast({
+      title: "Saving grades...",
+      description: "Please wait while your changes are saved.",
+    });
+
+    // First, get all existing grades
+    const existingGrades = grades[assignmentId] || {};
+
     // Collect all the grades we want to save
     const gradesToSave = assignment.periods.flatMap(periodId => {
-      const periodGrades = unsavedGrades[assignmentId]?.[periodId] || {};
+      const periodGrades = {
+        ...existingGrades[periodId],
+        ...unsavedGrades[assignmentId]?.[periodId]
+      };
+
       return Object.entries(periodGrades)
-        .filter(([_, grade]) => grade !== '' && grade !== '0') // Only save non-empty, non-zero grades
+        .filter(([_, grade]) => grade !== '' && grade !== '0')
         .map(([studentId, grade]) => ({
           assignment_id: assignmentId,
-          student_id: parseInt(studentId),
+          student_id: studentId,
           period: periodId,
           grade: grade,
-          extra_points: extraPoints[`${assignmentId}-${periodId}-${studentId}`] || '0'
+          extra_points: parseInt(extraPoints[`${assignmentId}-${periodId}-${studentId}`] || '0')
         }));
     });
 
     if (gradesToSave.length > 0) {
-      // First, delete existing grades for this assignment
+      // First delete existing grades for this assignment
       const { error: deleteError } = await supabase
         .from('grades')
         .delete()
         .eq('assignment_id', assignmentId);
 
-      if (deleteError) {
-        throw new Error('Failed to delete existing grades');
-      }
+      if (deleteError) throw deleteError;
 
-      // Then insert new grades
+      // Then insert the new grades
       const { error: insertError } = await supabase
         .from('grades')
         .insert(gradesToSave);
 
-      if (insertError) {
-        throw new Error('Failed to insert new grades');
-      }
-    }
+      if (insertError) throw insertError;
 
-    // Update local state
-    setGrades(prev => ({
-      ...prev,
-      [assignmentId]: assignment.periods.reduce((acc, periodId) => ({
-        ...acc,
-        [periodId]: {
-          ...prev[assignmentId]?.[periodId],
-          ...unsavedGrades[assignmentId]?.[periodId]
-        }
-      }), {})
-    }));
-
-    // Clear editing state
-    assignment.periods.forEach(periodId => {
-      setEditingGrades(prev => ({
+      // Update local state
+      setGrades(prev => ({
         ...prev,
-        [`${assignmentId}-${periodId}`]: false
+        [assignmentId]: assignment.periods.reduce((acc, periodId) => ({
+          ...acc,
+          [periodId]: {
+            ...prev[assignmentId]?.[periodId],
+            ...unsavedGrades[assignmentId]?.[periodId]
+          }
+        }), {})
       }));
-    });
 
-    alert('Grades saved successfully!');
+      // Clear editing state
+      assignment.periods.forEach(periodId => {
+        setEditingGrades(prev => ({
+          ...prev,
+          [`${assignmentId}-${periodId}`]: false
+        }));
+      });
+
+      setUnsavedGrades(prev => {
+        const updated = { ...prev };
+        delete updated[assignmentId];
+        return updated;
+      });
+
+      toast({
+        title: "Success",
+        description: `Saved ${gradesToSave.length} grades successfully`,
+        variant: "success"
+      });
+    } else {
+      toast({
+        title: "No Changes",
+        description: "No grades to save",
+        variant: "default"
+      });
+    }
   } catch (error) {
     console.error('Error saving grades:', error);
-    alert('Failed to save grades. Please try again.');
+    toast({
+      variant: "destructive",
+      title: "Error",
+      description: error instanceof Error 
+        ? `Failed to save grades: ${error.message}`
+        : "Failed to save grades. Please try again."
+    });
   }
 };
 
