@@ -12,7 +12,7 @@ export async function GET(request: Request) {
       return NextResponse.redirect(`${baseUrl}/auth/signin?error=no_code`);
     }
 
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
 
     const { data: { session }, error: sessionError } = await supabase.auth.exchangeCodeForSession(code);
