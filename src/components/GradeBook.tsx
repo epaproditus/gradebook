@@ -224,8 +224,11 @@ const ImportScoresDialog: FC<{
           // Look for 6-digit number (student ID)
           studentIdIndex = firstDataRow.findIndex(col => /^\d{6}$/.test(col));
           
-          // Look for 2-3 digit number (grade)
-          scoreIndex = firstDataRow.findIndex(col => /^\d{2,3}$/.test(col));
+          // Look for valid score (0-100)
+          scoreIndex = firstDataRow.findIndex(col => {
+            const num = parseInt(col);
+            return !isNaN(num) && num >= 0 && num <= 100;
+          });
 
           // If still not found, scan all columns
           if (studentIdIndex === -1) {
@@ -236,14 +239,17 @@ const ImportScoresDialog: FC<{
           
           if (scoreIndex === -1) {
             scoreIndex = headers.findIndex((_, index) => 
-              rows.slice(1).some(row => /^\d{2,3}$/.test(row.split(',')[index]?.trim()))
+              rows.slice(1).some(row => {
+                const val = parseInt(row.split(',')[index]?.trim());
+                return !isNaN(val) && val >= 0 && val <= 100;
+              })
             );
           }
         }
       }
 
       if (studentIdIndex === -1 || scoreIndex === -1) {
-        alert('Could not find student ID (6 digits) and grade (2-3 digits) columns in the file.');
+        alert('Could not find student ID (6 digits) and grade (0-100) columns in the file.');
         return;
       }
 
@@ -258,7 +264,7 @@ const ImportScoresDialog: FC<{
         const score = columns[scoreIndex];
 
         // Validate both studentId and score
-        if (/^\d{6}$/.test(studentId) && /^\d{2,3}$/.test(score)) {
+        if (/^\d{6}$/.test(studentId) && !isNaN(parseInt(score)) && parseInt(score) >= 0 && parseInt(score) <= 100) {
           importedGrades[studentId] = score;
         }
       }

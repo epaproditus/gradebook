@@ -2,7 +2,6 @@ import { FC, useState, useEffect } from 'react';
 import { Assignment, Student, GradeData } from '@/types/gradebook';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { ChevronRight, ChevronDown, ChevronUp, Save } from 'lucide-react';
@@ -13,7 +12,6 @@ import { STATUS_COLORS, TYPE_COLORS } from '@/lib/constants';
 import { toast } from "@/components/ui/use-toast";
 import { ColorSettings } from './ColorSettings'; // New import
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // New import
-import { calculateTotal, calculateWeightedAverage } from '@/lib/gradeCalculations';
 
 interface RosterViewProps {
   students: Record<string, Student[]>;
@@ -59,9 +57,6 @@ const RosterView: FC<RosterViewProps> = ({
   // Add temporary grade storage
   const [tempGrades, setTempGrades] = useState<Record<string, string>>({});
 
-  // Add new state for sort order
-  const [dateSort, setDateSort] = useState<'asc' | 'desc'>('desc');
-
   // Update debug logging to be more focused
   const debugLog = (context: string, data: any, studentId?: string) => {
     // Only log if it's a specific student interaction
@@ -96,13 +91,10 @@ const RosterView: FC<RosterViewProps> = ({
     return Math.round((dailyAvg * 0.8) + (assessmentAvg * 0.2));
   };
 
-  // Update sortedAssignments to use sort order
+  // Convert assignments to array and sort by date
   const sortedAssignments = Object.entries(assignments)
     .filter(([, assignment]) => assignment.periods.includes(activeTab))
-    .sort(([, a], [, b]) => {
-      const comparison = a.date.getTime() - b.date.getTime();
-      return dateSort === 'asc' ? comparison : -comparison;
-    })
+    .sort(([, a], [, b]) => b.date.getTime() - a.date.getTime()) // Reverse sort: newest first
     .map(([id, assignment]) => ({ id, ...assignment }));
 
   // Get students for current period
@@ -128,34 +120,25 @@ const RosterView: FC<RosterViewProps> = ({
     return format(date, 'MM/dd');
   };
 
-  // Update average calculation to match StudentDashboard exactly
+  // Update average calculation
   const calculateStudentAverage = (student: Student) => {
-    const validAssignments = sortedAssignments.map(assignment => ({
+    const grades = sortedAssignments.map(assignment => ({
       grade: calculateTotal(
         getGradeValue(assignment.id, activeTab, student.id.toString()),
-        extraPoints[`${assignment.id}-${activeTab}-${student.id}`] || '0'
+        '0'
       ),
-      type: assignment.type as 'Daily' | 'Assessment'
+      type: assignment.type,
+      hasGrade: getGradeValue(assignment.id, activeTab, student.id.toString()) !== ''
     }));
 
-    const dailyGrades = validAssignments
-      .filter(a => a.type === 'Daily')
-      .map(a => a.grade);
-    
-    const assessmentGrades = validAssignments
-      .filter(a => a.type === 'Assessment')
-      .map(a => a.grade);
+    // Filter out assignments without grades
+    const validGrades = grades.filter(g => g.hasGrade);
+    if (validGrades.length === 0) return 0;
 
-    const dailyAvg = dailyGrades.length > 0 
-      ? dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length 
-      : 0;
-
-    const assessmentAvg = assessmentGrades.length > 0 
-      ? assessmentGrades.reduce((a, b) => a + b, 0) / assessmentGrades.length 
-      : 0;
-
-    const total = (dailyAvg * 0.8) + (assessmentAvg * 0.2);
-    return Number(total.toFixed(1)); // Now matches StudentDashboard's precision
+    return calculateWeightedAverage(
+      validGrades.map(g => g.grade),
+      validGrades.map(g => g.type)
+    );
   };
 
   // Add save function for the roster view
@@ -231,7 +214,7 @@ const RosterView: FC<RosterViewProps> = ({
   const getGradeTotal = (assignmentId: string, studentId: string) => {
     const grade = getGradeValue(assignmentId, activeTab, studentId);
     const extra = extraPoints[`${assignmentId}-${activeTab}-${studentId}`] || '0';
-    return grade ? calculateTotal(grade, extra) : ''; // Show empty if no grade
+    return calculateTotal(grade, extra);
   };
 
   // Add this new component inside RosterView
@@ -310,6 +293,7 @@ const RosterView: FC<RosterViewProps> = ({
   const handleExtraPointsChange = (assignmentId: string, periodId: string, studentId: string, points: string) => {
     const key = `${assignmentId}-${periodId}-${studentId}`;
     setTempGrades(prev => ({
+      ...prev,
       [`${key}_extra`]: points // Store extra points separately in tempGrades
     }));
 
@@ -332,7 +316,7 @@ const RosterView: FC<RosterViewProps> = ({
     if (!newGrade && !newExtra) return;
 
     try {
-      // First update parent state
+      // Update parent state
       if (newGrade) {
         onGradeChange(assignmentId, periodId, studentId, newGrade);
       }
@@ -340,14 +324,11 @@ const RosterView: FC<RosterViewProps> = ({
         onExtraPointsChange(assignmentId, periodId, studentId, newExtra);
       }
 
-      // Mark as editing
+      // Update editing state
       setEditingGrades(prev => ({
         ...prev,
         [`${assignmentId}-${periodId}`]: true
       }));
-
-      // Call the actual save function from GradeBook
-      await saveGrades(assignmentId, periodId);
 
       // Clear temporary values after successful save
       setTempGrades(prev => {
@@ -357,17 +338,14 @@ const RosterView: FC<RosterViewProps> = ({
         return next;
       });
 
-      toast({
-        title: "Success",
-        description: "Grade saved successfully"
-      });
+      debugLog('handleSaveGrade Complete', {
+        savedGrade: newGrade,
+        savedExtra: newExtra,
+        total: calculateTotal(newGrade || '0', newExtra || '0')
+      }, studentId);
 
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to save grade. Please try again."
-      });
+      debugLog('handleSaveGrade Error', { error }, studentId);
       console.error('Error saving grade:', error);
     }
   };
@@ -438,8 +416,6 @@ const RosterView: FC<RosterViewProps> = ({
       onSave();
     };
 
-    const displayValue = (grade: string) => grade || ''; // Show empty string for blank grades
-
     return (
       <Popover>
         <PopoverTrigger asChild>
@@ -488,21 +464,8 @@ const RosterView: FC<RosterViewProps> = ({
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        {/* Add sort controls */}
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <Select
-              value={dateSort}
-              onValueChange={(value: 'asc' | 'desc') => setDateSort(value)}
-            >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Sort assignments by..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="asc">Oldest First</SelectItem>
-                <SelectItem value="desc">Latest First</SelectItem>
-              </SelectContent>
-            </Select>
             <ImportScoresDialog
               assignmentId={sortedAssignments[0]?.id}
               periodId={activeTab}
@@ -595,7 +558,7 @@ const RosterView: FC<RosterViewProps> = ({
                     {student.name}
                   </TableCell>
                   <TableCell className="sticky left-0 bg-background z-40 font-medium text-right">
-                    {average.toFixed(1)}%
+                    {average}%
                   </TableCell>
                   {sortedAssignments.map((assignment) => (
                     <TableCell 
