@@ -26,6 +26,7 @@ interface RosterViewProps {
   handleImportGrades: (assignmentId: string, periodId: string, grades: Record<string, string>) => void;
   exportGrades: (assignmentIds: string[], periodIds: string[], merge: boolean) => void;
   saveGrades: (assignmentId: string, periodId: string) => Promise<void>; // Add this
+  extraPoints: Record<string, string>;  // Make sure this prop is passed
 }
 
 const RosterView: FC<RosterViewProps> = ({
@@ -42,6 +43,7 @@ const RosterView: FC<RosterViewProps> = ({
   handleImportGrades,
   exportGrades,
   saveGrades, // Add this
+  extraPoints,  // Add this to the destructuring
 }) => {
   const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(new Set());
   // Add color state
@@ -177,6 +179,12 @@ const RosterView: FC<RosterViewProps> = ({
     );
   };
 
+  const getGradeTotal = (assignmentId: string, studentId: string) => {
+    const grade = getGradeValue(assignmentId, activeTab, studentId);
+    const extra = extraPoints[`${assignmentId}-${activeTab}-${studentId}`] || '0';
+    return calculateTotal(grade, extra);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -215,6 +223,9 @@ const RosterView: FC<RosterViewProps> = ({
             <TableRow className="h-[160px]"> {/* Reduced height */}
               <TableHead className="sticky left-0 top-0 bg-background z-50 w-[200px] min-w-[200px]">
                 Student
+              </TableHead>
+              <TableHead className="sticky left-0 top-0 bg-background z-50 w-[100px] min-w-[100px]">
+                Average
               </TableHead>
               {sortedAssignments.map((assignment, index) => (
                 <TableHead 
@@ -258,9 +269,6 @@ const RosterView: FC<RosterViewProps> = ({
                   </div>
                 </TableHead>
               ))}
-              <TableHead className="sticky right-0 top-0 bg-background z-50 w-[100px] min-w-[100px]">
-                Average
-              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -272,6 +280,9 @@ const RosterView: FC<RosterViewProps> = ({
                 <TableRow key={student.id}>
                   <TableCell className="sticky left-0 bg-background z-40 font-medium">
                     {student.name}
+                  </TableCell>
+                  <TableCell className="sticky left-0 bg-background z-40 font-medium text-right">
+                    {average}%
                   </TableCell>
                   {sortedAssignments.map((assignment) => (
                     <TableCell 
@@ -293,14 +304,11 @@ const RosterView: FC<RosterViewProps> = ({
                         />
                       ) : (
                         <div className="flex items-center justify-center h-8 text-sm font-medium">
-                          {getGradeValue(assignment.id, activeTab, student.id.toString()) || '-'}
+                          {getGradeTotal(assignment.id, student.id.toString()) || '-'}
                         </div>
                       )}
                     </TableCell>
                   ))}
-                  <TableCell className="sticky right-0 bg-background z-40 font-medium text-right">
-                    {average}%
-                  </TableCell>
                 </TableRow>
               );
             })}
