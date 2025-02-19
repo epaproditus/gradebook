@@ -35,7 +35,6 @@ import { LayoutGrid, Table } from 'lucide-react';
 import { STATUS_COLORS, TYPE_COLORS, SUBJECT_COLORS } from '@/lib/constants';
 import { SignOutButton } from './SignOutButton';
 import { calculateTotal, calculateWeightedAverage } from '@/lib/gradeCalculations';
-import { StudentGradeDetails } from './StudentGradeDetails';
 
 // Initialize Supabase client (this is fine outside component)
 const supabase = createClient(
@@ -717,7 +716,6 @@ const GradeBook: FC = () => {
   const [activeRow, setActiveRow] = useState<string | null>(null);
   const [localGrades, setLocalGrades] = useState<Record<string, string>>({});
   const [viewMode, setViewMode] = useState<'assignment' | 'roster'>('assignment');
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
 
   // Fetch students from Supabase
   useEffect(() => {
@@ -1938,10 +1936,7 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
                         activeRow === `${assignmentId}-${periodId}-${student.id}` && "bg-blue-100/50 shadow-sm" // Stronger highlight
                       )}
                     >
-                      <div 
-                        className="flex items-center bg-secondary rounded px-2 py-1 cursor-pointer hover:text-blue-600"
-                        onClick={() => setSelectedStudent(student)}
-                      >
+                      <div className="flex items-center bg-secondary rounded px-2 py-1">
                         <span className="text-sm text-muted-foreground mr-2">
                           {student.id}
                         </span>
@@ -2403,86 +2398,7 @@ return (
       <SignOutButton />
     </div>
     <div className="flex gap-6">
-      {/* Left side - Collapsible Calendar */}
-      <div className={cn("space-y-4", !isCalendarVisible && "w-auto")}>
-        <Button 
-          variant="outline" 
-          onClick={() => setIsCalendarVisible(prev => !prev)}
-          className="w-full"
-        >
-          {isCalendarVisible ? <ChevronLeft /> : <ChevronRight />}
-          {isCalendarVisible ? "Hide Calendar" : "Show Calendar"}
-        </Button>
-        
-        {isCalendarVisible && (
-          <Card className="w-72"> {/* Reduced from w-96 to w-72 */}
-            <CardHeader className="p-2"> {/* Reduced padding */}
-              <div className="flex justify-between items-center">
-                <CardTitle className="text-sm">Calendar</CardTitle> {/* Smaller title */}
-                <Select
-                  defaultValue="month"
-                  onValueChange={(value) => setCalendarView(value as 'month' | 'week')}
-                >
-                  <SelectTrigger className="h-8 w-24"> {/* Smaller trigger */}
-                    <SelectValue placeholder="View" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="month">Month</SelectItem>
-                    <SelectItem value="week">Week</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardHeader>
-            <CardContent className="p-2"> {/* Reduced padding */}
-              {calendarView === 'month' ? (
-                <Calendar
-                  mode="single"
-                  selected={selectedDate || undefined}
-                  onSelect={handleDateSelect}
-                  className="w-full"
-                  modifiers={{
-                    assignment: (date) => {
-                      return Object.values(assignments).some(
-                        assignment => assignment.date.toDateString() === date.toDateString()
-                      );
-                    }
-                  }}
-                  modifiersStyles={{
-                    assignment: {
-                      border: '1px solid var(--primary)', // Thinner border
-                    }
-                  }}
-                  classNames={{
-                    day_today: "bg-accent/50 font-semibold text-accent-foreground", // More subtle today highlight
-                    day: "h-8 w-8 text-sm p-0", // Smaller day cells
-                    head_cell: "text-xs font-normal text-muted-foreground", // Smaller header text
-                  }}
-                />
-              ) : (
-                <CustomWeekView
-                  date={selectedDate || new Date()}
-                  onDateSelect={handleDateSelect}
-                  assignments={assignments}
-                  onWeekChange={handleWeekChange}
-                />
-              )}
-              <BirthdayList 
-                students={Object.values(students).flat()}
-                currentDate={selectedDate || new Date()}
-                view={calendarView}
-              />
-              <TodoList 
-                tags={tags}
-                students={students}
-                assignments={assignments}
-                onRemoveTag={handleRemoveTag}
-              />
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      {/* Right side */}
+      {/* Main content moved to left side */}
       <div className="flex-grow space-y-4">
         <div className="flex justify-between items-center">
           <Button
@@ -2708,20 +2624,86 @@ return (
           </div>
         )}
       </div>
+
+      {/* Calendar moved to right side */}
+      <div className={cn("space-y-4", !isCalendarVisible && "w-auto")}>
+        <Button 
+          variant="outline" 
+          onClick={() => setIsCalendarVisible(prev => !prev)}
+          className="w-full"
+        >
+          {isCalendarVisible ? <ChevronRight /> : <ChevronLeft />}
+          {isCalendarVisible ? "Hide Calendar" : "Show Calendar"}
+        </Button>
+        
+        {isCalendarVisible && (
+          <Card className="w-72">
+            <CardHeader className="p-2"> {/* Reduced padding */}
+              <div className="flex justify-between items-center">
+                <CardTitle className="text-sm">Calendar</CardTitle> {/* Smaller title */}
+                <Select
+                  defaultValue="month"
+                  onValueChange={(value) => setCalendarView(value as 'month' | 'week')}
+                >
+                  <SelectTrigger className="h-8 w-24"> {/* Smaller trigger */}
+                    <SelectValue placeholder="View" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="month">Month</SelectItem>
+                    <SelectItem value="week">Week</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
+            <CardContent className="p-2"> {/* Reduced padding */}
+              {calendarView === 'month' ? (
+                <Calendar
+                  mode="single"
+                  selected={selectedDate || undefined}
+                  onSelect={handleDateSelect}
+                  className="w-full"
+                  modifiers={{
+                    assignment: (date) => {
+                      return Object.values(assignments).some(
+                        assignment => assignment.date.toDateString() === date.toDateString()
+                      );
+                    }
+                  }}
+                  modifiersStyles={{
+                    assignment: {
+                      border: '1px solid var(--primary)', // Thinner border
+                    }
+                  }}
+                  classNames={{
+                    day_today: "bg-accent/50 font-semibold text-accent-foreground", // More subtle today highlight
+                    day: "h-8 w-8 text-sm p-0", // Smaller day cells
+                    head_cell: "text-xs font-normal text-muted-foreground", // Smaller header text
+                  }}
+                />
+              ) : (
+                <CustomWeekView
+                  date={selectedDate || new Date()}
+                  onDateSelect={handleDateSelect}
+                  assignments={assignments}
+                  onWeekChange={handleWeekChange}
+                />
+              )}
+              <BirthdayList 
+                students={Object.values(students).flat()}
+                currentDate={selectedDate || new Date()}
+                view={calendarView}
+              />
+              <TodoList 
+                tags={tags}
+                students={students}
+                assignments={assignments}
+                onRemoveTag={handleRemoveTag}
+              />
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
-    {selectedStudent && (
-      <StudentGradeDetails
-        isOpen={!!selectedStudent}
-        onClose={() => setSelectedStudent(null)}
-        studentName={selectedStudent.name}
-        period={activeTab}  // Add this
-        studentId={selectedStudent.id.toString()}  // Add this
-        assignments={Object.values(assignments)}
-        grades={grades[activeTab]?.[selectedStudent.id] || {}}
-        extraPoints={extraPoints}
-        subject={selectedStudent.subject || 'Math 8'}  // Add this
-      />
-    )}
   </div>
 );
 };

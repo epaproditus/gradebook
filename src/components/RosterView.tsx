@@ -14,7 +14,6 @@ import { ColorSettings } from './ColorSettings'; // New import
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // New import
 import { calculateWeightedAverage, calculateTotal } from '@/lib/gradeCalculations';
 import { formatGradeDisplay, getGradeDisplayClass } from '@/lib/displayFormatters';
-import { StudentGradeDetails } from './StudentGradeDetails';
 
 interface RosterViewProps {
   students: Record<string, Student[]>;
@@ -59,7 +58,6 @@ const RosterView: FC<RosterViewProps> = ({
   const [colorMode, setColorMode] = useState<'none' | 'subject' | 'type' | 'status'>('none');
   // Add temporary grade storage
   const [tempGrades, setTempGrades] = useState<Record<string, string>>({});
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
 
   // Update debug logging to be more focused
   const debugLog = (context: string, data: any, studentId?: string) => {
@@ -540,10 +538,7 @@ const RosterView: FC<RosterViewProps> = ({
 
               return (
                 <TableRow key={student.id}>
-                  <TableCell 
-                    className="sticky left-0 bg-background z-40 font-medium cursor-pointer hover:text-blue-600"
-                    onClick={() => setSelectedStudent(student)}
-                  >
+                  <TableCell className="sticky left-0 bg-background z-40 font-medium">
                     {student.name}
                   </TableCell>
                   <TableCell className="sticky left-0 bg-background z-40 font-medium text-right">
@@ -615,20 +610,6 @@ const RosterView: FC<RosterViewProps> = ({
           </tfoot>
         </Table>
       </div>
-      {/* Add the popup */}
-      {selectedStudent && (
-        <StudentGradeDetails
-          isOpen={!!selectedStudent}
-          onClose={() => setSelectedStudent(null)}
-          studentName={selectedStudent.name}
-          period={activeTab}  // Add this
-          studentId={selectedStudent.id.toString()}  // Add this
-          assignments={sortedAssignments}
-          grades={grades[activeTab]?.[selectedStudent.id] || {}}
-          extraPoints={extraPoints}
-          subject={assignments[Object.keys(assignments)[0]]?.subject || 'Math 8'}  // Add this
-        />
-      )}
     </div>
   );
 };
