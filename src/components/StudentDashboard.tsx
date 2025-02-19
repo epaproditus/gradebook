@@ -125,15 +125,14 @@ export function StudentDashboard() {
   }
 
   const validAssignments = assignments.map(assignment => ({
-    grade: grades[assignment.id] || '0',
+    grade: calculateTotal(grades[assignment.id]),
     extra: extraPoints[assignment.id] || '0',
     total: calculateTotal(
-      grades[assignment.id] || '0', 
-      extraPoints[assignment.id] || '0'
+      grades[assignment.id],
+      extraPoints[assignment.id]
     ),
-    type: assignment.type as 'Daily' | 'Assessment',
-    hasGrade: !!grades[assignment.id]
-  })).filter(a => a.hasGrade);
+    type: assignment.type as 'Daily' | 'Assessment'
+  }));
 
   const getDailyPoints = () => {
     const dailyGrades = validAssignments
@@ -291,7 +290,7 @@ export function StudentDashboard() {
                                 <span>{total} pts</span>
                               </>
                             ) : (
-                              <span>{grade} pts</span>
+                              <span>{grade ? `${grade} pts` : ''}</span>
                             )}
                           </div>
                         </div>

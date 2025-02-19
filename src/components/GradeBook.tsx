@@ -34,6 +34,7 @@ import RosterView from './RosterView';
 import { LayoutGrid, Table } from 'lucide-react';
 import { STATUS_COLORS, TYPE_COLORS, SUBJECT_COLORS } from '@/lib/constants';
 import { SignOutButton } from './SignOutButton';
+import { calculateTotal, calculateWeightedAverage } from '@/lib/gradeCalculations';
 
 // Initialize Supabase client (this is fine outside component)
 const supabase = createClient(

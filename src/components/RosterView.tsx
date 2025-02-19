@@ -12,6 +12,7 @@ import { STATUS_COLORS, TYPE_COLORS } from '@/lib/constants';
 import { toast } from "@/components/ui/use-toast";
 import { ColorSettings } from './ColorSettings'; // New import
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // New import
+import { calculateTotal, calculateWeightedAverage } from '@/lib/gradeCalculations';
 
 interface RosterViewProps {
   students: Record<string, Student[]>;
@@ -125,7 +126,7 @@ const RosterView: FC<RosterViewProps> = ({
     const grades = sortedAssignments.map(assignment => ({
       grade: calculateTotal(
         getGradeValue(assignment.id, activeTab, student.id.toString()),
-        '0'
+        extraPoints[`${assignment.id}-${activeTab}-${student.id}`]
       ),
       type: assignment.type,
       hasGrade: getGradeValue(assignment.id, activeTab, student.id.toString()) !== ''
@@ -214,7 +215,7 @@ const RosterView: FC<RosterViewProps> = ({
   const getGradeTotal = (assignmentId: string, studentId: string) => {
     const grade = getGradeValue(assignmentId, activeTab, studentId);
     const extra = extraPoints[`${assignmentId}-${activeTab}-${studentId}`] || '0';
-    return calculateTotal(grade, extra);
+    return grade ? calculateTotal(grade, extra) : ''; // Show empty if no grade
   };
 
   // Add this new component inside RosterView
@@ -293,7 +294,6 @@ const RosterView: FC<RosterViewProps> = ({
   const handleExtraPointsChange = (assignmentId: string, periodId: string, studentId: string, points: string) => {
     const key = `${assignmentId}-${periodId}-${studentId}`;
     setTempGrades(prev => ({
-      ...prev,
       [`${key}_extra`]: points // Store extra points separately in tempGrades
     }));
 
@@ -316,7 +316,7 @@ const RosterView: FC<RosterViewProps> = ({
     if (!newGrade && !newExtra) return;
 
     try {
-      // Update parent state
+      // First update parent state
       if (newGrade) {
         onGradeChange(assignmentId, periodId, studentId, newGrade);
       }
@@ -324,11 +324,14 @@ const RosterView: FC<RosterViewProps> = ({
         onExtraPointsChange(assignmentId, periodId, studentId, newExtra);
       }
 
-      // Update editing state
+      // Mark as editing
       setEditingGrades(prev => ({
         ...prev,
         [`${assignmentId}-${periodId}`]: true
       }));
+
+      // Call the actual save function from GradeBook
+      await saveGrades(assignmentId, periodId);
 
       // Clear temporary values after successful save
       setTempGrades(prev => {
@@ -338,14 +341,17 @@ const RosterView: FC<RosterViewProps> = ({
         return next;
       });
 
-      debugLog('handleSaveGrade Complete', {
-        savedGrade: newGrade,
-        savedExtra: newExtra,
-        total: calculateTotal(newGrade || '0', newExtra || '0')
-      }, studentId);
+      toast({
+        title: "Success",
+        description: "Grade saved successfully"
+      });
 
     } catch (error) {
-      debugLog('handleSaveGrade Error', { error }, studentId);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to save grade. Please try again."
+      });
       console.error('Error saving grade:', error);
     }
   };
@@ -415,6 +421,8 @@ const RosterView: FC<RosterViewProps> = ({
       onExtraPointsChange(state.extra);
       onSave();
     };
+
+    const displayValue = (grade: string) => grade || ''; // Show empty string for blank grades
 
     return (
       <Popover>
