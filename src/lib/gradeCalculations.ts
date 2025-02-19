@@ -1,37 +1,37 @@
-export const calculateTotal = (grade: string = '0', extra: string = '0'): number => {
-  const baseGrade = Math.max(0, Math.min(100, parseInt(grade) || 0));
-  const extraGrade = Math.max(0, Math.min(100, parseInt(extra) || 0));
-  return Math.min(100, baseGrade + extraGrade);
+type GradeInfo = {
+  grade: string | null;
+  extra: string;
+  type: 'Daily' | 'Assessment';
 };
 
-// This file is already set up correctly with:
-// - calculateTotal() - combines grade + extra points
-// - calculateWeightedAverage() - handles weighted averages with extra points
+export const calculateTotal = (grade: string | null | undefined, extra: string = '0'): number => {
+  // Key change: Now we ALWAYS count a grade, whether it's missing, null, undefined, or '0'
+  const baseGrade = parseInt(grade || '0') || 0; // This ensures 0 for any invalid/missing grade
+  const extraGrade = parseInt(extra || '0') || 0;
+  
+  return Math.min(100, Math.max(0, baseGrade + extraGrade));
+};
 
-export const calculateWeightedAverage = (
-  grades: number[], 
-  types: ('Daily' | 'Assessment')[],
-  extraPoints: string[] = []
-) => {
-  if (grades.length === 0) return 0;
+export const calculateWeightedAverage = (grades: GradeInfo[]): number => {
+  const dailyGrades = grades
+    .filter(g => g.type === 'Daily')
+    .map(g => calculateTotal(g.grade, g.extra)); // Every grade counts, no filtering
   
-  const dailyGrades = grades.filter((_, i) => types[i] === 'Daily');
-  const assessmentGrades = grades.filter((_, i) => types[i] === 'Assessment');
-  
-  // If either type is missing, use 100% of the available type
-  if (dailyGrades.length === 0) {
-    return assessmentGrades.length > 0 
-      ? Math.round(assessmentGrades.reduce((a, b) => a + b, 0) / assessmentGrades.length)
-      : 0;
-  }
-  
-  if (assessmentGrades.length === 0) {
-    return Math.round(dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length);
-  }
-  
-  // Otherwise use 80/20 split
-  const dailyAvg = dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length;
-  const assessmentAvg = assessmentGrades.reduce((a, b) => a + b, 0) / assessmentGrades.length;
-  
-  return Math.round((dailyAvg * 0.8) + (assessmentAvg * 0.2));
+  const assessmentGrades = grades
+    .filter(g => g.type === 'Assessment')
+    .map(g => calculateTotal(g.grade, g.extra));
+
+  // Every grade counts in the average
+  const dailyAvg = dailyGrades.length > 0
+    ? dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length
+    : 0;
+
+  const assessmentAvg = assessmentGrades.length > 0
+    ? assessmentGrades.reduce((a, b) => a + b, 0) / assessmentGrades.length
+    : 0;
+
+  const dailyPoints = dailyAvg * 0.8;
+  const assessmentPoints = assessmentAvg * 0.2;
+
+  return parseFloat((dailyPoints + assessmentPoints).toFixed(1));
 };

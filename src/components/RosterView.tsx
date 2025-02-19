@@ -12,6 +12,8 @@ import { STATUS_COLORS, TYPE_COLORS } from '@/lib/constants';
 import { toast } from "@/components/ui/use-toast";
 import { ColorSettings } from './ColorSettings'; // New import
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // New import
+import { calculateWeightedAverage, calculateTotal } from '@/lib/gradeCalculations';
+import { formatGradeDisplay, getGradeDisplayClass } from '@/lib/displayFormatters';
 
 interface RosterViewProps {
   students: Record<string, Student[]>;
@@ -68,29 +70,6 @@ const RosterView: FC<RosterViewProps> = ({
     }
   };
 
-  // Update average calculation to handle missing assessment types
-  const calculateWeightedAverage = (grades: number[], types: ('Daily' | 'Assessment')[]) => {
-    if (grades.length === 0) return 0;
-    
-    const dailyGrades = grades.filter((_, i) => types[i] === 'Daily');
-    const assessmentGrades = grades.filter((_, i) => types[i] === 'Assessment');
-    
-    // If no assessments, use 100% daily grades
-    if (assessmentGrades.length === 0) {
-      return dailyGrades.length > 0 
-        ? Math.round(dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length)
-        : 0;
-    }
-    
-    const dailyAvg = dailyGrades.length > 0 
-      ? dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length 
-      : 0;
-    
-    const assessmentAvg = assessmentGrades.reduce((a, b) => a + b, 0) / assessmentGrades.length;
-    
-    return Math.round((dailyAvg * 0.8) + (assessmentAvg * 0.2));
-  };
-
   // Convert assignments to array and sort by date
   const sortedAssignments = Object.entries(assignments)
     .filter(([, assignment]) => assignment.periods.includes(activeTab))
@@ -122,23 +101,22 @@ const RosterView: FC<RosterViewProps> = ({
 
   // Update average calculation
   const calculateStudentAverage = (student: Student) => {
-    const grades = sortedAssignments.map(assignment => ({
-      grade: calculateTotal(
-        getGradeValue(assignment.id, activeTab, student.id.toString()),
-        '0'
-      ),
-      type: assignment.type,
-      hasGrade: getGradeValue(assignment.id, activeTab, student.id.toString()) !== ''
-    }));
+    // Add debug logging
+    console.log('Calculating average for:', student.name);
+    
+    const grades = sortedAssignments.map(assignment => {
+      const grade = getGradeValue(assignment.id, activeTab, student.id.toString());
+      console.log('Assignment:', assignment.name, 'Grade:', grade);
+      return {
+        grade,
+        extra: extraPoints[`${assignment.id}-${activeTab}-${student.id}`] || '0',
+        type: assignment.type
+      };
+    });
 
-    // Filter out assignments without grades
-    const validGrades = grades.filter(g => g.hasGrade);
-    if (validGrades.length === 0) return 0;
-
-    return calculateWeightedAverage(
-      validGrades.map(g => g.grade),
-      validGrades.map(g => g.type)
-    );
+    const avg = calculateWeightedAverage(grades);
+    console.log('Final average:', avg);
+    return avg;
   };
 
   // Add save function for the roster view
@@ -420,7 +398,9 @@ const RosterView: FC<RosterViewProps> = ({
       <Popover>
         <PopoverTrigger asChild>
           <div className="w-full h-8 flex items-center justify-center cursor-pointer hover:bg-accent/50">
-            {total}
+            <span className={getGradeDisplayClass(total)}>
+              {formatGradeDisplay(total)} {/* <-- Let's debug this */}
+            </span>
           </div>
         </PopoverTrigger>
         <PopoverContent className="w-60 p-2">
@@ -430,8 +410,12 @@ const RosterView: FC<RosterViewProps> = ({
               <Input
                 type="text"
                 className="h-7"
-                value={state.grade}
-                onChange={(e) => setState(prev => ({ ...prev, grade: e.target.value }))}
+                value={state.grade === null ? '' : state.grade}
+                onChange={(e) => setState(prev => ({ 
+                  ...prev, 
+                  grade: e.target.value.trim() === '' ? null : e.target.value 
+                }))}
+                placeholder="-"
               />
             </div>
             <div className="grid grid-cols-2 gap-2 items-center">

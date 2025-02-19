@@ -13,8 +13,9 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Info } from 'lucide-react';
-import { calculateWeightedAverage, calculateTotal } from '@/lib/gradeCalculations';
+import { calculateDailyPoints, calculateAssessmentPoints, calculateTotal, calculateWeightedAverage } from '@/lib/gradeCalculations';
 import { SignOutButton } from './SignOutButton';
+import { formatGradeDisplay, getGradeDisplayClass } from '@/lib/displayFormatters';
 
 interface StudentData {
   id: number;
@@ -116,6 +117,32 @@ export function StudentDashboard() {
     return 'completed';
   };
 
+  const getAssignmentDisplay = (assignment: Assignment) => {
+    const grade = grades[assignment.id];
+    const extra = extraPoints[assignment.id];
+    const total = calculateTotal(grade, extra);
+
+    if (total === null) {
+      return <span className="text-muted-foreground italic">-</span>;
+    }
+
+    if (extra && parseInt(extra) > 0) {
+      return (
+        <>
+          <span className={getGradeDisplayClass(parseInt(grade || '0'))}>
+            {grade}
+          </span>
+          <span className="text-sm text-muted-foreground">+</span>
+          <span className="text-lg text-green-600">{extra}</span>
+          <span className="text-sm text-muted-foreground">=</span>
+          <span className={getGradeDisplayClass(total)}>{total} pts</span>
+        </>
+      );
+    }
+    
+    return <span className={getGradeDisplayClass(total)}>{total} pts</span>;
+  };
+
   if (!student) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -124,39 +151,23 @@ export function StudentDashboard() {
     );
   }
 
-  const validAssignments = assignments.map(assignment => ({
-    grade: calculateTotal(grades[assignment.id]),
-    extra: extraPoints[assignment.id] || '0',
-    total: calculateTotal(
-      grades[assignment.id],
-      extraPoints[assignment.id]
-    ),
-    type: assignment.type as 'Daily' | 'Assessment'
-  }));
-
-  const getDailyPoints = () => {
-    const dailyGrades = validAssignments
-      .filter(a => a.type === 'Daily')
-      .map(a => parseInt(a.grade) || 0);
+  const validAssignments = assignments.map(assignment => {
+    // Add debug logging
+    console.log('Assignment:', assignment.name);
+    console.log('Grade:', grades[assignment.id]);
+    console.log('Extra:', extraPoints[assignment.id] || '0');
     
-    if (dailyGrades.length === 0) return 0;
-    const average = dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length;
-    return (average * 0.8).toFixed(1); // Showing one decimal place for points
-  };
+    return {
+      grade: grades[assignment.id],
+      extra: extraPoints[assignment.id] || '0',
+      type: assignment.type as 'Daily' | 'Assessment'
+    };
+  });
 
-  const getAssessmentPoints = () => {
-    const assessmentGrades = validAssignments
-      .filter(a => a.type === 'Assessment')
-      .map(a => parseInt(a.grade) || 0);
-    
-    if (assessmentGrades.length === 0) return 0;
-    const average = assessmentGrades.reduce((a, b) => a + b, 0) / assessmentGrades.length;
-    return (average * 0.2).toFixed(1); // Showing one decimal place for points
-  };
-
-  const dailyPoints = getDailyPoints();  // Already outputs #.#
-  const assessmentPoints = getAssessmentPoints();  // Already outputs #.#
-  const totalPoints = (parseFloat(dailyPoints) + parseFloat(assessmentPoints)).toFixed(1);
+  const dailyPoints = calculateDailyPoints(validAssignments);
+  const assessmentPoints = calculateAssessmentPoints(validAssignments);
+  const totalPoints = calculateWeightedAverage(validAssignments);
+  console.log('Total Points:', totalPoints);
 
   return (
     <div className="container mx-auto py-8 space-y-6">
@@ -274,17 +285,7 @@ export function StudentDashboard() {
                       {grade && (
                         <div className="text-right">
                           <div className="text-2xl font-bold flex items-baseline justify-end gap-1">
-                            {extraPoint ? (
-                              <>
-                                <span className="text-lg text-muted-foreground">{grade}</span>
-                                <span className="text-sm text-muted-foreground">+</span>
-                                <span className="text-lg text-green-600">{extraPoint}</span>
-                                <span className="text-sm text-muted-foreground">=</span>
-                                <span>{total} pts</span>
-                              </>
-                            ) : (
-                              <span>{grade ? `${grade} pts` : ''}</span>
-                            )}
+                            {getAssignmentDisplay(assignment)}
                           </div>
                         </div>
                       )}
