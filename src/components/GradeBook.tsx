@@ -936,15 +936,18 @@ const debouncedSaveGrades = useCallback(
 
 const handleGradeChange = (assignmentId: string, periodId: string, studentId: string, grade: string) => {
   const key = `${assignmentId}-${periodId}-${studentId}`;
+  const extraPoint = extraPoints[key] || '0';
   
-  // Remove validation to allow any input temporarily
+  // Calculate total grade considering extra points
+  const totalGrade = calculateTotal(grade, extraPoint).toString();
+  
   setLocalGrades(prev => ({
     ...prev,
-    [key]: grade
+    [key]: totalGrade // Save the total grade instead of just the initial grade
   }));
 
   // If we have a valid grade, trigger save
-  if (grade !== '') {
+  if (totalGrade !== '') {
     setEditingGrades(prev => ({
       ...prev,
       [`${assignmentId}-${periodId}`]: true
@@ -956,7 +959,7 @@ const handleGradeChange = (assignmentId: string, periodId: string, studentId: st
         ...prev[assignmentId],
         [periodId]: {
           ...prev[assignmentId]?.[periodId],
-          [studentId]: grade
+          [studentId]: totalGrade // Save total grade here too
         }
       }
     }));
@@ -2686,6 +2689,7 @@ return (
                   }}
                   extraPoints={extraPoints}
                   editingGrades={editingGrades}  // Add this prop
+                  onExtraPointsChange={handleExtraPointsChange}
                 />
               </TabsContent>
             </Tabs>

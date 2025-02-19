@@ -1,4 +1,4 @@
-import { FC, useState } from 'react';
+import { FC, useState, useEffect } from 'react';
 import { Assignment, Student, GradeData } from '@/types/gradebook';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import { GradeExportDialog } from './GradeExportDialog';
 import { STATUS_COLORS, TYPE_COLORS } from '@/lib/constants';
 import { toast } from "@/components/ui/use-toast";
 import { ColorSettings } from './ColorSettings'; // New import
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // New import
 
 interface RosterViewProps {
   students: Record<string, Student[]>;
@@ -28,6 +29,7 @@ interface RosterViewProps {
   saveGrades: (assignmentId: string, periodId: string) => Promise<void>; // Add this
   extraPoints: Record<string, string>;  // Make sure this prop is passed
   editingGrades: Record<string, boolean>;  // Add this prop
+  onExtraPointsChange: (assignmentId: string, periodId: string, studentId: string, points: string) => void;
 }
 
 const RosterView: FC<RosterViewProps> = ({
@@ -46,11 +48,25 @@ const RosterView: FC<RosterViewProps> = ({
   saveGrades, // Add this
   extraPoints,  // Add this to the destructuring
   editingGrades,  // Add this to destructuring
+  onExtraPointsChange,  // Add this to destructuring
 }) => {
   const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(new Set());
   // Add color state
   const [showColors, setShowColors] = useState(false);
   const [colorMode, setColorMode] = useState<'none' | 'subject' | 'type' | 'status'>('none');
+  // Add temporary grade storage
+  const [tempGrades, setTempGrades] = useState<Record<string, string>>({});
+
+  // Update debug logging to be more focused
+  const debugLog = (context: string, data: any, studentId?: string) => {
+    // Only log if it's a specific student interaction
+    if (studentId) {
+      console.log(`[Grade Debug] ${context} - Student ${studentId}:`, {
+        ...data,
+        timestamp: new Date().toISOString()
+      });
+    }
+  };
 
   // Update average calculation to handle missing assessment types
   const calculateWeightedAverage = (grades: number[], types: ('Daily' | 'Assessment')[]) => {
@@ -232,6 +248,219 @@ const RosterView: FC<RosterViewProps> = ({
       Object.keys(unsavedGrades[assignmentId] || {}).includes(activeTab);
   };
 
+  // Add helper function to maintain extra points while updating grades
+  const handleGradeChange = (assignmentId: string, periodId: string, studentId: string, newGrade: string) => {
+    debugLog('handleGradeChange', {
+      assignmentId,
+      periodId,
+      studentId,
+      newGrade,
+      currentExtraPoints: extraPoints[`${assignmentId}-${periodId}-${studentId}`]
+    });
+
+    const key = `${assignmentId}-${periodId}-${studentId}`;
+    setTempGrades(prev => ({
+      ...prev,
+      [key]: newGrade
+    }));
+
+    // Then update unsavedGrades to trigger parent update
+    setUnsavedGrades(prev => ({
+      ...prev,
+      [assignmentId]: {
+        ...prev[assignmentId],
+        [periodId]: {
+          ...prev[assignmentId]?.[periodId],
+          [studentId]: newGrade
+        }
+      }
+    }));
+
+    // Mark as editing
+    setEditingGrades(prev => ({
+      ...prev,
+      [`${assignmentId}-${periodId}`]: true
+    }));
+
+    debugLog('handleGradeChange', {
+      key,
+      newGrade,
+      currentExtra: extraPoints[key]
+    }, studentId);
+  };
+
+  // Add handleExtraPointsChange function
+  const handleExtraPointsChange = (assignmentId: string, periodId: string, studentId: string, points: string) => {
+    const key = `${assignmentId}-${periodId}-${studentId}`;
+    setTempGrades(prev => ({
+      ...prev,
+      [`${key}_extra`]: points // Store extra points separately in tempGrades
+    }));
+
+    // Update parent state
+    onExtraPointsChange(assignmentId, periodId, studentId, points);
+  };
+
+  // Update handleSaveGrade to handle both grade and extra points
+  const handleSaveGrade = async (assignmentId: string, periodId: string, studentId: string) => {
+    const key = `${assignmentId}-${periodId}-${studentId}`;
+    const newGrade = tempGrades[key];
+    const newExtra = tempGrades[`${key}_extra`];
+
+    debugLog('handleSaveGrade Start', {
+      newGrade,
+      newExtra,
+      key
+    }, studentId);
+
+    if (!newGrade && !newExtra) return;
+
+    try {
+      // Update parent state
+      if (newGrade) {
+        onGradeChange(assignmentId, periodId, studentId, newGrade);
+      }
+      if (newExtra) {
+        onExtraPointsChange(assignmentId, periodId, studentId, newExtra);
+      }
+
+      // Update editing state
+      setEditingGrades(prev => ({
+        ...prev,
+        [`${assignmentId}-${periodId}`]: true
+      }));
+
+      // Clear temporary values after successful save
+      setTempGrades(prev => {
+        const next = { ...prev };
+        delete next[key];
+        delete next[`${key}_extra`];
+        return next;
+      });
+
+      debugLog('handleSaveGrade Complete', {
+        savedGrade: newGrade,
+        savedExtra: newExtra,
+        total: calculateTotal(newGrade || '0', newExtra || '0')
+      }, studentId);
+
+    } catch (error) {
+      debugLog('handleSaveGrade Error', { error }, studentId);
+      console.error('Error saving grade:', error);
+    }
+  };
+
+  // Updated GradeCell component with proper initial/extra point handling
+  const GradeCell: FC<{
+    assignmentId: string;
+    studentId: string;
+    periodId: string;
+    initialGrade: string;
+    extraPoints: string;
+    onGradeChange: (grade: string) => void;
+    onExtraPointsChange: (points: string) => void;
+    onSave: () => void;
+  }> = ({ 
+    assignmentId, 
+    studentId, 
+    periodId, 
+    initialGrade,
+    extraPoints, 
+    onGradeChange,
+    onExtraPointsChange,
+    onSave 
+  }) => {
+    const [state, setState] = useState({
+      grade: initialGrade || '0',
+      extra: extraPoints || '0'
+    });
+
+    // Update local state when parent state changes
+    useEffect(() => {
+      setState({
+        grade: initialGrade || '0',
+        extra: extraPoints || '0'
+      });
+    }, [initialGrade, extraPoints]);
+
+    const total = calculateTotal(state.grade, state.extra);
+    const hasChanges = state.grade !== initialGrade || state.extra !== extraPoints;
+
+    // Update parent's tempGrades immediately when saving
+    const handleSave = () => {
+      if (!hasChanges) return;
+
+      debugLog('GradeCell Save', {
+        before: {
+          grade: initialGrade,
+          extra: extraPoints,
+        },
+        after: {
+          grade: state.grade,
+          extra: state.extra,
+        },
+        total
+      }, studentId);
+
+      // Update parent's tempGrades directly
+      const key = `${assignmentId}-${periodId}-${studentId}`;
+      setTempGrades(prev => ({
+        ...prev,
+        [key]: state.grade,
+        [`${key}_extra`]: state.extra
+      }));
+
+      // Then call the parent handlers
+      onGradeChange(state.grade);
+      onExtraPointsChange(state.extra);
+      onSave();
+    };
+
+    return (
+      <Popover>
+        <PopoverTrigger asChild>
+          <div className="w-full h-8 flex items-center justify-center cursor-pointer hover:bg-accent/50">
+            {total}
+          </div>
+        </PopoverTrigger>
+        <PopoverContent className="w-60 p-2">
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2 items-center">
+              <span className="text-sm text-muted-foreground">Initial Grade:</span>
+              <Input
+                type="text"
+                className="h-7"
+                value={state.grade}
+                onChange={(e) => setState(prev => ({ ...prev, grade: e.target.value }))}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2 items-center">
+              <span className="text-sm text-muted-foreground">Extra Points:</span>
+              <Input
+                type="text"
+                className="h-7"
+                value={state.extra}
+                onChange={(e) => setState(prev => ({ ...prev, extra: e.target.value }))}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2 items-center">
+              <span className="text-sm text-muted-foreground">Total:</span>
+              <span className="text-sm font-medium">{total}</span>
+            </div>
+            <Button 
+              className="w-full mt-2" 
+              size="sm"
+              onClick={handleSave}
+              disabled={!hasChanges}
+            >
+              Save Changes
+            </Button>
+          </div>
+        </PopoverContent>
+      </Popover>
+    );
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -340,14 +569,25 @@ const RosterView: FC<RosterViewProps> = ({
                       )}
                     >
                       {!collapsedColumns.has(assignment.id) ? (
-                        <Input
-                          type="text" // Changed from "number"
-                          min="0"
-                          max="100"
-                          placeholder="0"
-                          className="text-center h-8 text-sm"
-                          value={getGradeValue(assignment.id, activeTab, student.id.toString())}
-                          onChange={(e) => onGradeChange(assignment.id, activeTab, student.id.toString(), e.target.value)}
+                        <GradeCell
+                          assignmentId={assignment.id}
+                          studentId={student.id.toString()}
+                          periodId={activeTab}
+                          initialGrade={getGradeValue(assignment.id, activeTab, student.id.toString())}
+                          extraPoints={extraPoints[`${assignment.id}-${activeTab}-${student.id}`] || '0'}
+                          onGradeChange={(value) => handleGradeChange(
+                            assignment.id,
+                            activeTab,
+                            student.id.toString(),
+                            value
+                          )}
+                          onExtraPointsChange={(value) => handleExtraPointsChange(
+                            assignment.id,
+                            activeTab,
+                            student.id,
+                            value
+                          )}
+                          onSave={() => handleSaveGrade(assignment.id, activeTab, student.id.toString())}
                         />
                       ) : (
                         <div className="flex items-center justify-center h-8 text-sm font-medium">
