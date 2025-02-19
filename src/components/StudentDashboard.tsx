@@ -156,7 +156,6 @@ export function StudentDashboard() {
 
   const dailyPoints = getDailyPoints();  // Already outputs #.#
   const assessmentPoints = getAssessmentPoints();  // Already outputs #.#
-  // Change from Math.round to toFixed(1) for consistency
   const totalPoints = (parseFloat(dailyPoints) + parseFloat(assessmentPoints)).toFixed(1);
 
   return (
@@ -180,7 +179,7 @@ export function StudentDashboard() {
         <Label htmlFor="color-mode">Show Assignment Type Colors</Label>
       </div>
 
-      {/* Updated Header Cards with Gradients */}
+      {/* Updated Header Cards with bigger total grade */}
       <div className="grid grid-cols-3 gap-4">
         <Card className={cn(
           "transition-colors",
@@ -191,10 +190,8 @@ export function StudentDashboard() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col items-center">
-              <div className="text-2xl font-bold">{dailyPoints} pts</div>
-              <div className="w-12 border-t border-current my-1"></div>
-              <div className="text-lg">80</div>
-              <div className="text-xs text-muted-foreground mt-1">possible</div>
+              <div className="text-2xl font-bold">{dailyPoints} / 80</div>
+              <div className="text-xs text-muted-foreground mt-1">points possible</div>
             </div>
           </CardContent>
         </Card>
@@ -207,10 +204,8 @@ export function StudentDashboard() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col items-center">
-              <div className="text-2xl font-bold">{assessmentPoints} pts</div>
-              <div className="w-12 border-t border-current my-1"></div>
-              <div className="text-lg">20</div>
-              <div className="text-xs text-muted-foreground mt-1">possible</div>
+              <div className="text-2xl font-bold">{assessmentPoints} / 20</div>
+              <div className="text-xs text-muted-foreground mt-1">points possible</div>
             </div>
           </CardContent>
         </Card>
@@ -219,14 +214,12 @@ export function StudentDashboard() {
           showColors && "bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100 border-emerald-200 hover:shadow-md"
         )}>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Total Points</CardTitle>
+            <CardTitle className="text-sm font-medium">Current Grade</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col items-center">
-              <div className="text-2xl font-bold">{totalPoints} pts</div>
-              <div className="w-12 border-t border-current my-1"></div>
-              <div className="text-lg">100</div>
-              <div className="text-xs text-muted-foreground mt-1">possible</div>
+              <div className="text-4xl font-bold text-emerald-600">{totalPoints}%</div>
+              <div className="text-sm text-muted-foreground mt-1">overall average</div>
             </div>
           </CardContent>
         </Card>

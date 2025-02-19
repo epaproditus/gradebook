@@ -2,6 +2,7 @@ import { FC, useState, useEffect } from 'react';
 import { Assignment, Student, GradeData } from '@/types/gradebook';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { ChevronRight, ChevronDown, ChevronUp, Save } from 'lucide-react';
@@ -58,6 +59,9 @@ const RosterView: FC<RosterViewProps> = ({
   // Add temporary grade storage
   const [tempGrades, setTempGrades] = useState<Record<string, string>>({});
 
+  // Add new state for sort order
+  const [dateSort, setDateSort] = useState<'asc' | 'desc'>('desc');
+
   // Update debug logging to be more focused
   const debugLog = (context: string, data: any, studentId?: string) => {
     // Only log if it's a specific student interaction
@@ -92,10 +96,13 @@ const RosterView: FC<RosterViewProps> = ({
     return Math.round((dailyAvg * 0.8) + (assessmentAvg * 0.2));
   };
 
-  // Convert assignments to array and sort by date
+  // Update sortedAssignments to use sort order
   const sortedAssignments = Object.entries(assignments)
     .filter(([, assignment]) => assignment.periods.includes(activeTab))
-    .sort(([, a], [, b]) => b.date.getTime() - a.date.getTime()) // Reverse sort: newest first
+    .sort(([, a], [, b]) => {
+      const comparison = a.date.getTime() - b.date.getTime();
+      return dateSort === 'asc' ? comparison : -comparison;
+    })
     .map(([id, assignment]) => ({ id, ...assignment }));
 
   // Get students for current period
@@ -121,25 +128,34 @@ const RosterView: FC<RosterViewProps> = ({
     return format(date, 'MM/dd');
   };
 
-  // Update average calculation
+  // Update average calculation to match StudentDashboard exactly
   const calculateStudentAverage = (student: Student) => {
-    const grades = sortedAssignments.map(assignment => ({
+    const validAssignments = sortedAssignments.map(assignment => ({
       grade: calculateTotal(
         getGradeValue(assignment.id, activeTab, student.id.toString()),
-        extraPoints[`${assignment.id}-${activeTab}-${student.id}`]
+        extraPoints[`${assignment.id}-${activeTab}-${student.id}`] || '0'
       ),
-      type: assignment.type,
-      hasGrade: getGradeValue(assignment.id, activeTab, student.id.toString()) !== ''
+      type: assignment.type as 'Daily' | 'Assessment'
     }));
 
-    // Filter out assignments without grades
-    const validGrades = grades.filter(g => g.hasGrade);
-    if (validGrades.length === 0) return 0;
+    const dailyGrades = validAssignments
+      .filter(a => a.type === 'Daily')
+      .map(a => a.grade);
+    
+    const assessmentGrades = validAssignments
+      .filter(a => a.type === 'Assessment')
+      .map(a => a.grade);
 
-    return calculateWeightedAverage(
-      validGrades.map(g => g.grade),
-      validGrades.map(g => g.type)
-    );
+    const dailyAvg = dailyGrades.length > 0 
+      ? dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length 
+      : 0;
+
+    const assessmentAvg = assessmentGrades.length > 0 
+      ? assessmentGrades.reduce((a, b) => a + b, 0) / assessmentGrades.length 
+      : 0;
+
+    const total = (dailyAvg * 0.8) + (assessmentAvg * 0.2);
+    return Number(total.toFixed(1)); // Now matches StudentDashboard's precision
   };
 
   // Add save function for the roster view
@@ -472,8 +488,21 @@ const RosterView: FC<RosterViewProps> = ({
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
+        {/* Add sort controls */}
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
+            <Select
+              value={dateSort}
+              onValueChange={(value: 'asc' | 'desc') => setDateSort(value)}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Sort assignments by..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="asc">Oldest First</SelectItem>
+                <SelectItem value="desc">Latest First</SelectItem>
+              </SelectContent>
+            </Select>
             <ImportScoresDialog
               assignmentId={sortedAssignments[0]?.id}
               periodId={activeTab}
@@ -566,7 +595,7 @@ const RosterView: FC<RosterViewProps> = ({
                     {student.name}
                   </TableCell>
                   <TableCell className="sticky left-0 bg-background z-40 font-medium text-right">
-                    {average}%
+                    {average.toFixed(1)}%
                   </TableCell>
                   {sortedAssignments.map((assignment) => (
                     <TableCell 
