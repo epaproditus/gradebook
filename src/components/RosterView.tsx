@@ -101,22 +101,21 @@ const RosterView: FC<RosterViewProps> = ({
 
   // Update average calculation
   const calculateStudentAverage = (student: Student) => {
-    // Add debug logging
-    console.log('Calculating average for:', student.name);
-    
-    const grades = sortedAssignments.map(assignment => {
+    const studentGrades = sortedAssignments.map(assignment => {
       const grade = getGradeValue(assignment.id, activeTab, student.id.toString());
-      console.log('Assignment:', assignment.name, 'Grade:', grade);
+      const extra = extraPoints[`${assignment.id}-${activeTab}-${student.id}`] || '0';
+      const total = calculateTotal(grade, extra);
       return {
-        grade,
-        extra: extraPoints[`${assignment.id}-${activeTab}-${student.id}`] || '0',
+        total,
         type: assignment.type
       };
     });
 
-    const avg = calculateWeightedAverage(grades);
-    console.log('Final average:', avg);
-    return avg;
+    // Extract arrays for weighted average calculation
+    const gradeValues = studentGrades.map(g => g.total);
+    const types = studentGrades.map(g => g.type);
+
+    return calculateWeightedAverage(gradeValues, types);
   };
 
   // Add save function for the roster view

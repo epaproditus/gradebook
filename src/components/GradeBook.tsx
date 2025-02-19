@@ -2400,14 +2400,14 @@ return (
     <div className="flex gap-6">
       {/* Main content moved to left side */}
       <div className="flex-grow space-y-4">
-        <div className="flex justify-between items-center">
+        <div className="flex items-center gap-4">
           <Button
             onClick={handleNewAssignment}
             className="w-[200px]"
           >
             Create New Assignment
           </Button>
-
+          
           <div className="flex items-center gap-2">
             <Button
               variant="outline"

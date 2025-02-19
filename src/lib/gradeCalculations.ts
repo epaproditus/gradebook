@@ -10,28 +10,44 @@ export const calculateTotal = (grade: string = '0', extra: string = '0'): number
 
 export const calculateWeightedAverage = (
   grades: number[], 
-  types: ('Daily' | 'Assessment')[],
-  extraPoints: string[] = []
-) => {
-  if (grades.length === 0) return 0;
-  
-  const dailyGrades = grades.filter((_, i) => types[i] === 'Daily');
-  const assessmentGrades = grades.filter((_, i) => types[i] === 'Assessment');
-  
-  // If either type is missing, use 100% of the available type
-  if (dailyGrades.length === 0) {
-    return assessmentGrades.length > 0 
-      ? Math.round(assessmentGrades.reduce((a, b) => a + b, 0) / assessmentGrades.length)
-      : 0;
+  types: ('Daily' | 'Assessment')[]
+): number => {
+  // Validate input arrays
+  if (!Array.isArray(grades) || !Array.isArray(types) || grades.length !== types.length) {
+    console.warn('Invalid input to calculateWeightedAverage:', { grades, types });
+    return 0;
   }
-  
-  if (assessmentGrades.length === 0) {
-    return Math.round(dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length);
+
+  // Filter valid pairs of grades and types
+  const validPairs = grades.map((grade, i) => ({ grade, type: types[i] }))
+    .filter(pair => pair.type !== undefined);
+
+  const dailyGrades = validPairs
+    .filter(pair => pair.type === 'Daily')
+    .map(pair => pair.grade);
+
+  const assessmentGrades = validPairs
+    .filter(pair => pair.type === 'Assessment')
+    .map(pair => pair.grade);
+
+  // If no valid grades, return 0
+  if (dailyGrades.length === 0 && assessmentGrades.length === 0) {
+    return 0;
   }
-  
-  // Otherwise use 80/20 split
-  const dailyAvg = dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length;
-  const assessmentAvg = assessmentGrades.reduce((a, b) => a + b, 0) / assessmentGrades.length;
-  
+
+  // Calculate averages
+  const dailyAvg = dailyGrades.length > 0
+    ? dailyGrades.reduce((sum, grade) => sum + grade, 0) / dailyGrades.length
+    : 0;
+
+  const assessmentAvg = assessmentGrades.length > 0
+    ? assessmentGrades.reduce((sum, grade) => sum + grade, 0) / assessmentGrades.length
+    : 0;
+
+  // Apply weights based on available grades
+  if (dailyGrades.length === 0) return assessmentAvg;
+  if (assessmentGrades.length === 0) return dailyAvg;
+
+  // Normal weighted calculation
   return Math.round((dailyAvg * 0.8) + (assessmentAvg * 0.2));
 };
