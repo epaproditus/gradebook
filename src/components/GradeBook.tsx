@@ -2675,8 +2675,17 @@ return (
                   setEditingGrades={setEditingGrades}
                   handleImportGrades={handleImportGrades}
                   exportGrades={exportGrades}
-                  saveGrades={saveGrades}
-                  extraPoints={extraPoints}  // Add this prop
+                  saveGrades={async (assignmentId: string) => {
+                    try {
+                      await saveGrades(assignmentId);
+                      return true;
+                    } catch (error) {
+                      console.error('Error saving grades:', error);
+                      return false;
+                    }
+                  }}
+                  extraPoints={extraPoints}
+                  editingGrades={editingGrades}  // Add this prop
                 />
               </TabsContent>
             </Tabs>

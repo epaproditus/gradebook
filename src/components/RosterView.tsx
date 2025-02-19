@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronRight, ChevronDown, ChevronUp, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ImportScoresDialog } from './ImportScoresDialog';
 import { GradeExportDialog } from './GradeExportDialog';
@@ -27,6 +27,7 @@ interface RosterViewProps {
   exportGrades: (assignmentIds: string[], periodIds: string[], merge: boolean) => void;
   saveGrades: (assignmentId: string, periodId: string) => Promise<void>; // Add this
   extraPoints: Record<string, string>;  // Make sure this prop is passed
+  editingGrades: Record<string, boolean>;  // Add this prop
 }
 
 const RosterView: FC<RosterViewProps> = ({
@@ -44,6 +45,7 @@ const RosterView: FC<RosterViewProps> = ({
   exportGrades,
   saveGrades, // Add this
   extraPoints,  // Add this to the destructuring
+  editingGrades,  // Add this to destructuring
 }) => {
   const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(new Set());
   // Add color state
@@ -126,7 +128,11 @@ const RosterView: FC<RosterViewProps> = ({
   // Add save function for the roster view
   const handleSaveAll = async () => {
     try {
-      // Get all assignments that have unsaved changes
+      toast({
+        title: "Saving grades...",
+        description: "Please wait while your changes are saved."
+      });
+
       const assignmentsToSave = sortedAssignments
         .filter(assignment => 
           editingGrades[`${assignment.id}-${activeTab}`] ||
@@ -142,13 +148,27 @@ const RosterView: FC<RosterViewProps> = ({
       }
 
       // Save each assignment's grades
-      const promises = assignmentsToSave.map(assignment => 
-        saveGrades(assignment.id, activeTab)
+      const results = await Promise.all(
+        assignmentsToSave.map(assignment => saveGrades(assignment.id))
       );
-      
-      await Promise.all(promises);
-      
-      // Clear editing states
+
+      const successCount = results.filter(Boolean).length;
+      const failCount = results.length - successCount;
+
+      if (failCount === 0) {
+        toast({
+          title: "Success",
+          description: `Saved all ${successCount} assignments successfully`
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Warning",
+          description: `Saved ${successCount} assignments, but ${failCount} failed`
+        });
+      }
+
+      // Clear editing states for successful saves
       assignmentsToSave.forEach(assignment => {
         setEditingGrades(prev => ({
           ...prev,
@@ -156,15 +176,11 @@ const RosterView: FC<RosterViewProps> = ({
         }));
       });
 
-      toast({
-        title: "Success",
-        description: `Saved grades for ${assignmentsToSave.length} assignments`
-      });
     } catch (error) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to save some grades"
+        description: "Failed to save grades. Please try again."
       });
     }
   };
@@ -183,6 +199,37 @@ const RosterView: FC<RosterViewProps> = ({
     const grade = getGradeValue(assignmentId, activeTab, studentId);
     const extra = extraPoints[`${assignmentId}-${activeTab}-${studentId}`] || '0';
     return calculateTotal(grade, extra);
+  };
+
+  // Add this new component inside RosterView
+  const AssignmentColumnFooter = ({ 
+    assignmentId, 
+    activeTab, 
+    hasUnsavedChanges, 
+    onSave 
+  }: { 
+    assignmentId: string;
+    activeTab: string;
+    hasUnsavedChanges: boolean;
+    onSave: () => Promise<void>;
+  }) => (
+    <div className="sticky bottom-0 p-2 bg-background border-t">
+      <Button 
+        size="sm" 
+        className="w-full"
+        disabled={!hasUnsavedChanges}
+        onClick={onSave}
+      >
+        <Save className="h-3 w-3 mr-1" />
+        Save
+      </Button>
+    </div>
+  );
+
+  // Add this helper function inside RosterView component
+  const hasUnsavedChanges = (assignmentId: string) => {
+    return editingGrades[`${assignmentId}-${activeTab}`] || 
+      Object.keys(unsavedGrades[assignmentId] || {}).includes(activeTab);
   };
 
   return (
@@ -220,7 +267,7 @@ const RosterView: FC<RosterViewProps> = ({
       <div className="overflow-x-auto border rounded-md">
         <Table>
           <TableHeader>
-            <TableRow className="h-[160px]"> {/* Reduced height */}
+            <TableRow className="h-[160px]">{/* Remove extra whitespace */}
               <TableHead className="sticky left-0 top-0 bg-background z-50 w-[200px] min-w-[200px]">
                 Student
               </TableHead>
@@ -313,6 +360,30 @@ const RosterView: FC<RosterViewProps> = ({
               );
             })}
           </TableBody>
+          <tfoot>
+            <tr>
+              <td className="sticky left-0 bg-background z-40" colSpan={2}></td>
+              {sortedAssignments.map((assignment) => (
+                <td 
+                  key={`footer-${assignment.id}`} 
+                  className={cn(
+                    "p-2 border-t text-center",
+                    collapsedColumns.has(assignment.id) ? "w-12" : "w-32"
+                  )}
+                >
+                  <Save 
+                    className={cn(
+                      "h-4 w-4 inline-block transition-opacity cursor-pointer",
+                      hasUnsavedChanges(assignment.id) 
+                        ? "text-primary hover:text-primary/80" 
+                        : "text-muted-foreground/40 cursor-default"
+                    )}
+                    onClick={() => hasUnsavedChanges(assignment.id) && saveGrades(assignment.id, activeTab)}
+                  />
+                </td>
+              ))}
+            </tr>
+          </tfoot>
         </Table>
       </div>
     </div>
