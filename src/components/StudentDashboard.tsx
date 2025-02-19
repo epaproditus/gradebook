@@ -192,10 +192,10 @@ export function StudentDashboard() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col items-center">
-              <div className="text-2xl font-bold">{dailyPoints}</div>
+              <div className="text-2xl font-bold">{dailyPoints} pts</div>
               <div className="w-12 border-t border-current my-1"></div>
               <div className="text-lg">80</div>
-              <div className="text-xs text-muted-foreground mt-1">points</div>
+              <div className="text-xs text-muted-foreground mt-1">possible</div>
             </div>
           </CardContent>
         </Card>
@@ -208,10 +208,10 @@ export function StudentDashboard() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col items-center">
-              <div className="text-2xl font-bold">{assessmentPoints}</div>
+              <div className="text-2xl font-bold">{assessmentPoints} pts</div>
               <div className="w-12 border-t border-current my-1"></div>
               <div className="text-lg">20</div>
-              <div className="text-xs text-muted-foreground mt-1">points</div>
+              <div className="text-xs text-muted-foreground mt-1">possible</div>
             </div>
           </CardContent>
         </Card>
@@ -224,10 +224,10 @@ export function StudentDashboard() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col items-center">
-              <div className="text-2xl font-bold">{totalPoints}</div>
+              <div className="text-2xl font-bold">{totalPoints} pts</div>
               <div className="w-12 border-t border-current my-1"></div>
               <div className="text-lg">100</div>
-              <div className="text-xs text-muted-foreground mt-1">points</div>
+              <div className="text-xs text-muted-foreground mt-1">possible</div>
             </div>
           </CardContent>
         </Card>
@@ -281,10 +281,19 @@ export function StudentDashboard() {
                       </div>
                       {grade && (
                         <div className="text-right">
-                          <div className="text-2xl font-bold">{total}%</div>
-                          {extraPoint && (
-                            <div className="text-sm text-green-600">+{extraPoint}</div>
-                          )}
+                          <div className="text-2xl font-bold flex items-baseline justify-end gap-1">
+                            {extraPoint ? (
+                              <>
+                                <span className="text-lg text-muted-foreground">{grade}</span>
+                                <span className="text-sm text-muted-foreground">+</span>
+                                <span className="text-lg text-green-600">{extraPoint}</span>
+                                <span className="text-sm text-muted-foreground">=</span>
+                                <span>{total} pts</span>
+                              </>
+                            ) : (
+                              <span>{grade} pts</span>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
