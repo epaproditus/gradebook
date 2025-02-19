@@ -13,8 +13,9 @@ export interface Student {
   name: string;
   class_period: string;
   birthday?: string;
-  google_id?: string;  // Add this field
-  google_email?: string;  // Add this optional field too
+  google_id?: string;
+  google_email?: string;
+  subject: string; // Add this field
 }
 
 export interface AssignmentTag {

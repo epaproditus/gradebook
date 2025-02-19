@@ -35,6 +35,7 @@ import { LayoutGrid, Table } from 'lucide-react';
 import { STATUS_COLORS, TYPE_COLORS, SUBJECT_COLORS } from '@/lib/constants';
 import { SignOutButton } from './SignOutButton';
 import { calculateTotal, calculateWeightedAverage } from '@/lib/gradeCalculations';
+import { StudentGradeDetails } from './StudentGradeDetails';
 
 // Initialize Supabase client (this is fine outside component)
 const supabase = createClient(
@@ -716,6 +717,7 @@ const GradeBook: FC = () => {
   const [activeRow, setActiveRow] = useState<string | null>(null);
   const [localGrades, setLocalGrades] = useState<Record<string, string>>({});
   const [viewMode, setViewMode] = useState<'assignment' | 'roster'>('assignment');
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
 
   // Fetch students from Supabase
   useEffect(() => {
@@ -1936,7 +1938,10 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
                         activeRow === `${assignmentId}-${periodId}-${student.id}` && "bg-blue-100/50 shadow-sm" // Stronger highlight
                       )}
                     >
-                      <div className="flex items-center bg-secondary rounded px-2 py-1">
+                      <div 
+                        className="flex items-center bg-secondary rounded px-2 py-1 cursor-pointer hover:text-blue-600"
+                        onClick={() => setSelectedStudent(student)}
+                      >
                         <span className="text-sm text-muted-foreground mr-2">
                           {student.id}
                         </span>
@@ -2704,6 +2709,19 @@ return (
         )}
       </div>
     </div>
+    {selectedStudent && (
+      <StudentGradeDetails
+        isOpen={!!selectedStudent}
+        onClose={() => setSelectedStudent(null)}
+        studentName={selectedStudent.name}
+        period={activeTab}  // Add this
+        studentId={selectedStudent.id.toString()}  // Add this
+        assignments={Object.values(assignments)}
+        grades={grades[activeTab]?.[selectedStudent.id] || {}}
+        extraPoints={extraPoints}
+        subject={selectedStudent.subject || 'Math 8'}  // Add this
+      />
+    )}
   </div>
 );
 };
