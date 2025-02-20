@@ -1,29 +1,30 @@
-'use client';
-
 import { redirect } from 'next/navigation';
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import ClientHomeWrapper from '@/components/ClientHomeWrapper';
 
 export default async function Home() {
   const supabase = createServerComponentClient({ cookies });
+  const { data: { session }, error } = await supabase.auth.getSession();
 
-  // Get the current session
-  const { data: { session } } = await supabase.auth.getSession();
+  if (error) {
+    console.error('Auth error:', error);
+    return redirect('/auth/signin');
+  }
 
   if (!session) {
-    redirect('/login');
+    return redirect('/auth/signin');
   }
 
-  // Check user's role by their email domain
-  const userEmail = session.user?.email;
-  const isStudent = userEmail?.endsWith('@eeisd.org') && !userEmail?.includes('teacher');
+  // Get teacher status
+  const { data: teacher } = await supabase
+    .from('teachers')
+    .select('email')
+    .eq('email', session.user.email)
+    .maybeSingle();
 
-  if (isStudent) {
-    redirect('/students');
-  } else {
-    redirect('/gradebook');
-  }
+  // Check if user is a teacher
+  const isTeacher = !!teacher;
 
-  // This will never be reached but is needed for TypeScript
-  return null;
+  return <ClientHomeWrapper isTeacher={isTeacher} />;
 }
