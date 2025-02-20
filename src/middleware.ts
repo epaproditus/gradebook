@@ -74,6 +74,9 @@ export const config = {
     '/',
     '/gradebook/:path*', 
     '/classroom/:path*', 
-    '/student/:path*'
+    '/student/:path*',
+    '/students/:path*',
+    '/api/:path*',
+    '/login'
   ],
 };
