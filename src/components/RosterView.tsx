@@ -14,6 +14,9 @@ import { ColorSettings } from './ColorSettings'; // New import
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // New import
 import { calculateWeightedAverage, calculateTotal } from '@/lib/gradeCalculations';
 import { formatGradeDisplay, getGradeDisplayClass } from '@/lib/displayFormatters';
+import { MessagePanel } from './MessagePanel';
+import { MessageIndicator } from './MessageIndicator';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
 interface RosterViewProps {
   students: Record<string, Student[]>;
@@ -32,6 +35,9 @@ interface RosterViewProps {
   extraPoints: Record<string, string>;  // Make sure this prop is passed
   editingGrades: Record<string, boolean>;  // Add this prop
   onExtraPointsChange: (assignmentId: string, periodId: string, studentId: string, points: string) => void;
+  messages: Message[];
+  onMessageResolve: (messageId: string) => Promise<void>;
+  onMessageCreate: (studentId: number, assignmentId: string, message: string, type: 'grade_question' | 'general') => Promise<void>;
 }
 
 const RosterView: FC<RosterViewProps> = ({
@@ -51,7 +57,16 @@ const RosterView: FC<RosterViewProps> = ({
   extraPoints,  // Add this to the destructuring
   editingGrades,  // Add this to destructuring
   onExtraPointsChange,  // Add this to destructuring
+  messages,
+  onMessageResolve,
+  onMessageCreate,
 }) => {
+  // Add Supabase client initialization at the top with other state
+  const supabase = createClientComponentClient({
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  });
+
   // Initialize collapsedColumns with all assignment IDs
   const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(() => 
     new Set(Object.keys(assignments).filter(id => 
@@ -348,6 +363,9 @@ const RosterView: FC<RosterViewProps> = ({
     onGradeChange: (grade: string) => void;
     onExtraPointsChange: (points: string) => void;
     onSave: () => void;
+    messages: Message[];
+    onMessageResolve: (messageId: string) => Promise<void>;
+    onMessageCreate: (message: string) => Promise<void>;
   }> = ({ 
     assignmentId, 
     studentId, 
@@ -356,7 +374,10 @@ const RosterView: FC<RosterViewProps> = ({
     extraPoints, 
     onGradeChange,
     onExtraPointsChange,
-    onSave 
+    onSave,
+    messages,
+    onMessageResolve,
+    onMessageCreate,
   }) => {
     const [state, setState] = useState({
       grade: initialGrade || '0',
@@ -407,53 +428,100 @@ const RosterView: FC<RosterViewProps> = ({
     return (
       <Popover>
         <PopoverTrigger asChild>
-          <div className="w-full h-8 flex items-center justify-center cursor-pointer hover:bg-accent/50">
+          <div className="w-full h-8 flex items-center justify-center cursor-pointer hover:bg-accent/50 relative">
             <span className={getGradeDisplayClass(total)}>
               {formatGradeDisplay(total)} {/* <-- Let's debug this */}
             </span>
+            <MessageIndicator count={messages.filter(m => m.status === 'unread').length} />
           </div>
         </PopoverTrigger>
-        <PopoverContent className="w-60 p-2">
-          <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-2 items-center">
-              <span className="text-sm text-muted-foreground">Initial Grade:</span>
-              <Input
-                type="text"
-                className="h-7"
-                value={state.grade === null ? '' : state.grade}
-                onChange={(e) => setState(prev => ({ 
-                  ...prev, 
-                  grade: e.target.value.trim() === '' ? null : e.target.value 
-                }))}
-                placeholder="-"
+        <PopoverContent className="w-80">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2 items-center">
+                <span className="text-sm text-muted-foreground">Initial Grade:</span>
+                <Input
+                  type="text"
+                  className="h-7"
+                  value={state.grade === null ? '' : state.grade}
+                  onChange={(e) => setState(prev => ({ 
+                    ...prev, 
+                    grade: e.target.value.trim() === '' ? null : e.target.value 
+                  }))}
+                  placeholder="-"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2 items-center">
+                <span className="text-sm text-muted-foreground">Extra Points:</span>
+                <Input
+                  type="text"
+                  className="h-7"
+                  value={state.extra}
+                  onChange={(e) => setState(prev => ({ ...prev, extra: e.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2 items-center">
+                <span className="text-sm text-muted-foreground">Total:</span>
+                <span className="text-sm font-medium">{total}</span>
+              </div>
+              <Button 
+                className="w-full mt-2" 
+                size="sm"
+                onClick={handleSave}
+                disabled={!hasChanges}
+              >
+                Save Changes
+              </Button>
+            </div>
+            <div className="border-t pt-2">
+              <MessagePanel 
+                messages={messages}
+                onResolve={onMessageResolve}
               />
             </div>
-            <div className="grid grid-cols-2 gap-2 items-center">
-              <span className="text-sm text-muted-foreground">Extra Points:</span>
-              <Input
-                type="text"
-                className="h-7"
-                value={state.extra}
-                onChange={(e) => setState(prev => ({ ...prev, extra: e.target.value }))}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-2 items-center">
-              <span className="text-sm text-muted-foreground">Total:</span>
-              <span className="text-sm font-medium">{total}</span>
-            </div>
-            <Button 
-              className="w-full mt-2" 
-              size="sm"
-              onClick={handleSave}
-              disabled={!hasChanges}
-            >
-              Save Changes
-            </Button>
           </div>
         </PopoverContent>
       </Popover>
     );
   };
+
+  useEffect(() => {
+    const subscription = supabase
+      .channel('messages')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'messages'
+        },
+        (payload) => {
+          // Update message indicator counts
+          switch (payload.eventType) {
+            case 'INSERT':
+              if (payload.new.status === 'unread') {
+                const newMessage = payload.new as Message;
+                // Show visual feedback for new messages
+                const cell = document.querySelector(
+                  `[data-cell="${newMessage.assignment_id}-${newMessage.student_id}"]`
+                );
+                if (cell) {
+                  cell.classList.add('bg-red-50');
+                  setTimeout(() => {
+                    cell.classList.remove('bg-red-50');
+                  }, 2000);
+                }
+              }
+              break;
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -600,6 +668,9 @@ const RosterView: FC<RosterViewProps> = ({
                             value
                           )}
                           onSave={() => handleSaveGrade(assignment.id, activeTab, student.id.toString())}
+                          messages={messages.filter(m => m.assignmentId === assignment.id && m.studentId === student.id)}
+                          onMessageResolve={onMessageResolve}
+                          onMessageCreate={(message) => onMessageCreate(student.id, assignment.id, message, 'grade_question')}
                         />
                       ) : (
                         <div className="flex items-center justify-center h-8 text-sm font-medium">

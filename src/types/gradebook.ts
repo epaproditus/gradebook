@@ -33,3 +33,24 @@ export interface GradeData {
     };
   };
 }
+
+export interface Message {
+  id: string;
+  student_id: number;
+  assignment_id?: string;
+  type: 'grade_question' | 'general';
+  message: string;
+  status: 'unread' | 'read' | 'resolved';
+  created_at: string;
+  read_at?: string;
+  resolved_at?: string;
+}
+
+export interface Flag {
+  id: string;
+  student_id: number;
+  assignment_id: string;
+  created_at: string;
+  reviewed_at: string | null;
+  type: string;
+}

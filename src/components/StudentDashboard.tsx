@@ -12,10 +12,13 @@ import { ChevronRight } from 'lucide-react';
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Info } from 'lucide-react';
+import { Info, Flag } from 'lucide-react';
 import { calculateDailyPoints, calculateAssessmentPoints, calculateTotal, calculateWeightedAverage, calculateStudentAverage } from '@/lib/gradeCalculations';
 import { SignOutButton } from './SignOutButton';
 import { formatGradeDisplay, getGradeDisplayClass } from '@/lib/displayFormatters';
+import { Button } from '@/components/ui/button';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+import { toast } from '@/components/ui/toast';
 
 interface StudentData {
   id: number;
@@ -38,6 +41,8 @@ export function StudentDashboard() {
   const [expandedAssignments, setExpandedAssignments] = useState<Set<string>>(new Set());
   const [showColors, setShowColors] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [recentlyFlagged, setRecentlyFlagged] = useState<Set<string>>(new Set());
   const supabase = createClientComponentClient({
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
     supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -115,6 +120,16 @@ export function StudentDashboard() {
             if (tagData) {
               setTags(tagData);
             }
+
+            // Get messages for these assignments
+            const { data: messageData } = await supabase
+              .from('messages')
+              .select('*')
+              .eq('student_id', studentData.student_id);
+
+            if (messageData) {
+              setMessages(messageData);
+            }
           }
         }
       }
@@ -122,6 +137,46 @@ export function StudentDashboard() {
 
     loadStudentData();
   }, []);
+
+  const handleFlag = async (assignmentId: string) => {
+    try {
+      const { error } = await supabase
+        .from('assignment_flags')
+        .insert({
+          assignment_id: assignmentId,
+          student_id: student?.id,
+          type: 'needs_review',
+          created_at: new Date().toISOString()
+        });
+
+      if (error) throw error;
+
+      // Show temporary feedback
+      setRecentlyFlagged(prev => new Set(prev).add(assignmentId));
+      
+      toast({
+        title: "Assignment Flagged",
+        description: "Your teacher will review this assignment.",
+      });
+
+      // Remove the "recently flagged" status after 2 seconds
+      setTimeout(() => {
+        setRecentlyFlagged(prev => {
+          const next = new Set(prev);
+          next.delete(assignmentId);
+          return next;
+        });
+      }, 2000);
+
+    } catch (error) {
+      console.error('Error flagging assignment:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Couldn't flag assignment. Please try again."
+      });
+    }
+  };
 
   const getAssignmentStatus = (assignment: Assignment, grade?: string) => {
     if (!grade) return 'not_started';
@@ -316,7 +371,7 @@ export function StudentDashboard() {
                   </CardHeader>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <CardContent className="pt-0 space-y-4">
+                  <CardContent className="pt-0 space-y-4 relative">
                     {/* Assignment details */}
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
@@ -348,6 +403,28 @@ export function StudentDashboard() {
                         ))}
                       </div>
                     )}
+
+                    {/* Flag Button */}
+                    <div className="absolute bottom-4 right-4">
+                      {recentlyFlagged.has(assignment.id) ? (
+                        <span className="text-sm text-muted-foreground animate-fade-in">
+                          Teacher will review
+                        </span>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleFlag(assignment.id);
+                          }}
+                          className="text-muted-foreground hover:text-primary"
+                        >
+                          <Flag className="h-4 w-4 mr-2" />
+                          Flag for review
+                        </Button>
+                      )}
+                    </div>
                   </CardContent>
                 </CollapsibleContent>
               </Card>

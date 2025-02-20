@@ -2,7 +2,7 @@
 
 import type { FC } from 'react';
 import React, { useState, useEffect, useCallback } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, RealtimeChannel } from '@supabase/supabase-js';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -17,9 +17,9 @@ import { startOfWeek, addDays, isSameDay, format } from 'date-fns';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import { Calendar as CalendarIcon } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { toast } from "@/components/ui/use-toast";
+import { useToast } from "@/components/ui/use-toast";
 import CustomWeekView from './WeekView'; // Update import name to avoid confusion
-import { Assignment, Student, AssignmentTag, GradeData } from '@/types/gradebook';
+import { Assignment, Student, AssignmentTag, GradeData, Message } from '@/types/gradebook';
 import {
   Collapsible,
   CollapsibleContent,
@@ -35,6 +35,7 @@ import { LayoutGrid, Table } from 'lucide-react';
 import { STATUS_COLORS, TYPE_COLORS, SUBJECT_COLORS } from '@/lib/constants';
 import { SignOutButton } from './SignOutButton';
 import { calculateTotal, calculateWeightedAverage } from '@/lib/gradeCalculations';
+import { FlagInbox } from './FlagInbox';
 
 // Initialize Supabase client (this is fine outside component)
 const supabase = createClient(
@@ -656,6 +657,7 @@ const TodoList: FC<{
 type AssignmentStatus = 'in_progress' | 'completed' | 'not_started';
 
 const GradeBook: FC = () => {
+  const { toast } = useToast();
   // Replace the individual state declarations with the loaded config
   const [showColors, setShowColors] = useState(loadConfig().showColors);
   const [colorMode, setColorMode] = useState(loadConfig().colorMode);
@@ -716,6 +718,9 @@ const GradeBook: FC = () => {
   const [activeRow, setActiveRow] = useState<string | null>(null);
   const [localGrades, setLocalGrades] = useState<Record<string, string>>({});
   const [viewMode, setViewMode] = useState<'assignment' | 'roster'>('assignment');
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [messageSubscription, setMessageSubscription] = useState<RealtimeChannel | null>(null);
+  const [flags, setFlags] = useState<Flag[]>([]);
 
   // Fetch students from Supabase
   useEffect(() => {
@@ -2495,11 +2500,198 @@ const cloneAssignment = async (assignmentId: string) => {
   }
 };
 
+useEffect(() => {
+  const loadMessages = async () => {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error loading messages:', error);
+      return;
+    }
+
+    setMessages(data);
+  };
+
+  loadMessages();
+}, []);
+
+// Add message handlers
+const handleMessageCreate = async (
+  studentId: number, 
+  assignmentId: string, 
+  message: string, 
+  type: 'grade_question' | 'general'
+) => {
+  try {
+    const response = await fetch('/api/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studentId, assignmentId, message, type })
+    });
+
+    if (!response.ok) throw new Error('Failed to create message');
+    
+    const newMessage = await response.json();
+    setMessages(prev => [newMessage, ...prev]);
+
+    toast({
+      title: "Message Sent",
+      description: "Your message has been sent to the teacher."
+    });
+  } catch (error) {
+    console.error('Error creating message:', error);
+    toast({
+      variant: "destructive",
+      title: "Error",
+      description: "Failed to send message. Please try again."
+    });
+  }
+};
+
+const handleMessageResolve = async (messageId: string) => {
+  try {
+    const response = await fetch('/api/messages', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messageId, status: 'resolved' })
+    });
+
+    if (!response.ok) throw new Error('Failed to resolve message');
+    
+    const updatedMessage = await response.json();
+    setMessages(prev => prev.map(m => 
+      m.id === messageId ? updatedMessage : m
+    ));
+
+    toast({
+      title: "Message Resolved",
+      description: "Message has been marked as resolved."
+    });
+  } catch (error) {
+    console.error('Error resolving message:', error);
+    toast({
+      variant: "destructive",
+      title: "Error",
+      description: "Failed to resolve message. Please try again."
+    });
+  }
+};
+
+// Add subscription setup
+useEffect(() => {
+  const subscription = supabase
+    .channel('messages')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'messages'
+      },
+      (payload) => {
+        console.log('Message update:', payload);
+        
+        switch (payload.eventType) {
+          case 'INSERT':
+            setMessages(prev => [payload.new as Message, ...prev]);
+            // Show toast for new messages
+            if (payload.new.status === 'unread') {
+              toast({
+                title: "New Message",
+                description: "You have a new message from a student"
+              });
+            }
+            break;
+          
+          case 'UPDATE':
+            setMessages(prev => 
+              prev.map(msg => 
+                msg.id === payload.new.id ? (payload.new as Message) : msg
+              )
+            );
+            break;
+          
+          case 'DELETE':
+            setMessages(prev => 
+              prev.filter(msg => msg.id !== payload.old.id)
+            );
+            break;
+        }
+      }
+    )
+    .subscribe();
+
+  setMessageSubscription(subscription);
+
+  return () => {
+    subscription.unsubscribe();
+  };
+}, []);
+
+// Add handler for resolving flags
+const handleResolveFlag = async (flagId: string) => {
+  try {
+    const { error } = await supabase
+      .from('assignment_flags')
+      .update({ reviewed_at: new Date().toISOString() })
+      .eq('id', flagId);
+
+    if (error) throw error;
+
+    setFlags(prev => prev.map(flag => 
+      flag.id === flagId 
+        ? { ...flag, reviewed_at: new Date().toISOString() }
+        : flag
+    ));
+
+    toast({
+      title: "Flag Resolved",
+      description: "Assignment has been marked as reviewed"
+    });
+  } catch (error) {
+    console.error('Error resolving flag:', error);
+    toast({
+      variant: "destructive",
+      title: "Error",
+      description: "Couldn't resolve flag"
+    });
+  }
+};
+
+// Add this in your useEffect for initial data loading
+useEffect(() => {
+  const loadFlags = async () => {
+    const { data, error } = await supabase
+      .from('assignment_flags')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error loading flags:', error);
+      return;
+    }
+    setFlags(data);
+  };
+
+  loadFlags();
+}, []);
+
 return (
   <div className="p-6">
     <div className="flex justify-between items-center mb-4">
       <h1 className="text-2xl font-bold">Gradebook</h1>
-      <SignOutButton />
+      <div className="flex items-center gap-4">
+        <FlagInbox 
+          flags={flags}
+          students={students}
+          assignments={assignments}
+          onResolve={handleResolveFlag}
+        />
+        <SignOutButton />
+      </div>
     </div>
     <div className="flex gap-6">
       {/* Main content moved to left side */}
@@ -2722,6 +2914,9 @@ return (
                   extraPoints={extraPoints}
                   editingGrades={editingGrades}  // Add this prop
                   onExtraPointsChange={handleExtraPointsChange}
+                  messages={messages}
+                  onMessageResolve={handleMessageResolve}
+                  onMessageCreate={handleMessageCreate}
                 />
               </TabsContent>
             </Tabs>
