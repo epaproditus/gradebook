@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { STATUS_COLORS, TYPE_COLORS, SUBJECT_COLORS } from '@/lib/constants';
 import { Assignment } from '@/types/gradebook';
@@ -24,6 +24,11 @@ interface StudentData {
   google_email: string;
 }
 
+interface GradeWithTimestamp {
+  grade: string;
+  updated_at: string;
+}
+
 export function StudentDashboard() {
   const [student, setStudent] = useState<StudentData | null>(null);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -32,6 +37,7 @@ export function StudentDashboard() {
   const [tags, setTags] = useState<any[]>([]);
   const [expandedAssignments, setExpandedAssignments] = useState<Set<string>>(new Set());
   const [showColors, setShowColors] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const supabase = createClientComponentClient({
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
     supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -76,11 +82,18 @@ export function StudentDashboard() {
             const { data: gradeData } = await supabase
               .from('grades')
               .select('*')
-              .eq('student_id', studentData.student_id);
+              .eq('student_id', studentData.student_id)
+              .order('created_at', { ascending: false });
 
             if (gradeData) {
               const gradeMap: Record<string, string> = {};
               const extraPointsMap: Record<string, string> = {};
+              
+              // Get the most recent creation date
+              const mostRecent = gradeData[0]?.created_at;
+              if (mostRecent) {
+                setLastUpdated(new Date(mostRecent));
+              }
 
               gradeData.forEach(grade => {
                 gradeMap[grade.assignment_id] = grade.grade;
@@ -224,7 +237,7 @@ export function StudentDashboard() {
           </CardContent>
         </Card>
         <Card className={cn(
-          "transition-colors",
+          "transition-colors relative",
           showColors && "bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100 border-emerald-200 hover:shadow-md"
         )}>
           <CardHeader className="pb-2">
@@ -234,6 +247,13 @@ export function StudentDashboard() {
             <div className="flex flex-col items-center">
               <div className="text-4xl font-bold text-emerald-600">{totalGrade}%</div>
               <div className="text-sm text-muted-foreground mt-1">overall average</div>
+              {lastUpdated && (
+                <div className="text-xs text-muted-foreground/80 mt-2 pt-2 border-t border-emerald-200/50">
+                  Last updated: {format(lastUpdated, 'PPP')} 
+                  <br />
+                  ({formatDistanceToNow(lastUpdated, { addSuffix: true })})
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
