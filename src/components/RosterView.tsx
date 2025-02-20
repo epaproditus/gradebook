@@ -59,6 +59,9 @@ const RosterView: FC<RosterViewProps> = ({
   // Add temporary grade storage
   const [tempGrades, setTempGrades] = useState<Record<string, string>>({});
 
+  // Add new state at the top with other state declarations
+  const [assignmentSort, setAssignmentSort] = useState<'asc' | 'desc'>('desc');
+
   // Update debug logging to be more focused
   const debugLog = (context: string, data: any, studentId?: string) => {
     // Only log if it's a specific student interaction
@@ -73,7 +76,11 @@ const RosterView: FC<RosterViewProps> = ({
   // Convert assignments to array and sort by date
   const sortedAssignments = Object.entries(assignments)
     .filter(([, assignment]) => assignment.periods.includes(activeTab))
-    .sort(([, a], [, b]) => b.date.getTime() - a.date.getTime()) // Reverse sort: newest first
+    .sort(([, a], [, b]) => {
+      const dateA = a.date.getTime();
+      const dateB = b.date.getTime();
+      return assignmentSort === 'desc' ? dateB - dateA : dateA - dateB;
+    })
     .map(([id, assignment]) => ({ id, ...assignment }));
 
   // Get students for current period
@@ -468,6 +475,24 @@ const RosterView: FC<RosterViewProps> = ({
             onShowColorsChange={setShowColors}
             onColorModeChange={setColorMode}
           />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAssignmentSort(prev => prev === 'desc' ? 'asc' : 'desc')}
+            className="flex items-center gap-2"
+          >
+            {assignmentSort === 'desc' ? (
+              <>
+                Newest First
+                <ChevronDown className="h-4 w-4" />
+              </>
+            ) : (
+              <>
+                Oldest First
+                <ChevronUp className="h-4 w-4" />
+              </>
+            )}
+          </Button>
         </div>
         <Button 
           onClick={handleSaveAll}
