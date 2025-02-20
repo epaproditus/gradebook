@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { X, Save, ChevronDown, ChevronUp, Download, ChevronLeft, ChevronRight, PlusCircle, RefreshCw } from 'lucide-react';
+import { X, Save, ChevronDown, ChevronUp, Download, ChevronLeft, ChevronRight, PlusCircle, RefreshCw, Copy } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
@@ -1772,6 +1772,16 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
         </div>
       )}
       <div className="flex items-center gap-2 ml-4">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={(e) => {
+            e.stopPropagation();
+            cloneAssignment(assignmentId);
+          }}
+        >
+          <Copy className="h-4 w-4" />
+        </Button>
         <GradeExportDialog
           assignments={{ [assignmentId]: assignment }}
           students={students}
@@ -2389,6 +2399,100 @@ const calculateWeightedAverage = (grades: number[], types: ('Daily' | 'Assessmen
     : 0;
   
   return Math.round((dailyAvg * 0.8) + (assessmentAvg * 0.2));
+};
+
+const cloneAssignment = async (assignmentId: string) => {
+  try {
+    const sourceAssignment = assignments[assignmentId];
+    if (!sourceAssignment) return;
+
+    const newAssignmentId = crypto.randomUUID();
+
+    // Create new assignment data
+    const newAssignmentData = {
+      id: newAssignmentId,
+      name: `${sourceAssignment.name} (Copy)`,
+      date: new Date(),
+      type: sourceAssignment.type,
+      periods: sourceAssignment.periods,
+      subject: sourceAssignment.subject,
+      max_points: sourceAssignment.max_points,
+      created_at: new Date().toISOString()
+    };
+
+    // Insert new assignment
+    const { error: assignmentError } = await supabase
+      .from('assignments')
+      .insert([newAssignmentData]);
+
+    if (assignmentError) throw assignmentError;
+
+    // Clone grades
+    const gradesToClone = sourceAssignment.periods.flatMap(periodId => {
+      const periodGrades = grades[assignmentId]?.[periodId] || {};
+      
+      return Object.entries(periodGrades).map(([studentId, grade]) => ({
+        assignment_id: newAssignmentId,
+        student_id: studentId,
+        period: periodId,
+        grade: grade,
+        extra_points: extraPoints[`${assignmentId}-${periodId}-${studentId}`] || '0'
+      }));
+    }).filter(grade => grade.grade); // Only clone non-empty grades
+
+    if (gradesToClone.length > 0) {
+      const { error: gradesError } = await supabase
+        .from('grades')
+        .insert(gradesToClone);
+
+      if (gradesError) throw gradesError;
+
+      // Update local grades state
+      const newGrades = { ...grades };
+      const newExtraPoints = { ...extraPoints };
+
+      gradesToClone.forEach(({ assignment_id, period, student_id, grade, extra_points }) => {
+        if (!newGrades[assignment_id]) {
+          newGrades[assignment_id] = {};
+        }
+        if (!newGrades[assignment_id][period]) {
+          newGrades[assignment_id][period] = {};
+        }
+        newGrades[assignment_id][period][student_id] = grade;
+        if (extra_points && extra_points !== '0') {
+          newExtraPoints[`${assignment_id}-${period}-${student_id}`] = extra_points;
+        }
+      });
+
+      setGrades(newGrades);
+      setExtraPoints(newExtraPoints);
+    }
+
+    // Update local assignment state
+    setAssignments(prev => ({
+      ...prev,
+      [newAssignmentId]: {
+        ...newAssignmentData,
+        date: new Date()
+      }
+    }));
+
+    // Add to assignment order at the top
+    setAssignmentOrder(prev => [newAssignmentId, ...prev]);
+
+    toast({
+      title: "Success",
+      description: `Assignment cloned with ${gradesToClone.length} grades`
+    });
+
+  } catch (error) {
+    console.error('Error cloning assignment:', error);
+    toast({
+      variant: "destructive",
+      title: "Error",
+      description: "Failed to clone assignment"
+    });
+  }
 };
 
 return (
