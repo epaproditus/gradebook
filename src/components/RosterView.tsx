@@ -52,15 +52,20 @@ const RosterView: FC<RosterViewProps> = ({
   editingGrades,  // Add this to destructuring
   onExtraPointsChange,  // Add this to destructuring
 }) => {
-  const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(new Set());
-  // Add color state
-  const [showColors, setShowColors] = useState(false);
-  const [colorMode, setColorMode] = useState<'none' | 'subject' | 'type' | 'status'>('none');
+  // Initialize collapsedColumns with all assignment IDs
+  const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(() => 
+    new Set(Object.keys(assignments).filter(id => 
+      assignments[id].periods.includes(activeTab)
+    ))
+  );
+  // Initialize color settings to show type colors by default
+  const [showColors, setShowColors] = useState(true);
+  const [colorMode, setColorMode] = useState<'none' | 'subject' | 'type' | 'status'>('type');
   // Add temporary grade storage
   const [tempGrades, setTempGrades] = useState<Record<string, string>>({});
 
   // Add new state at the top with other state declarations
-  const [assignmentSort, setAssignmentSort] = useState<'asc' | 'desc'>('desc');
+  const [assignmentSort, setAssignmentSort] = useState<'asc' | 'desc'>('asc');
 
   // Update debug logging to be more focused
   const debugLog = (context: string, data: any, studentId?: string) => {
@@ -277,7 +282,6 @@ const RosterView: FC<RosterViewProps> = ({
   const handleExtraPointsChange = (assignmentId: string, periodId: string, studentId: string, points: string) => {
     const key = `${assignmentId}-${periodId}-${studentId}`;
     setTempGrades(prev => ({
-      ...prev,
       [`${key}_extra`]: points // Store extra points separately in tempGrades
     }));
 
@@ -483,12 +487,12 @@ const RosterView: FC<RosterViewProps> = ({
           >
             {assignmentSort === 'desc' ? (
               <>
-                Newest First
+                Latest First
                 <ChevronDown className="h-4 w-4" />
               </>
             ) : (
               <>
-                Oldest First
+                Earliest First
                 <ChevronUp className="h-4 w-4" />
               </>
             )}
