@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Info } from 'lucide-react';
-import { calculateDailyPoints, calculateAssessmentPoints, calculateTotal, calculateWeightedAverage } from '@/lib/gradeCalculations';
+import { calculateDailyPoints, calculateAssessmentPoints, calculateTotal, calculateWeightedAverage, calculateStudentAverage } from '@/lib/gradeCalculations';
 import { SignOutButton } from './SignOutButton';
 import { formatGradeDisplay, getGradeDisplayClass } from '@/lib/displayFormatters';
 
@@ -151,23 +151,26 @@ export function StudentDashboard() {
     );
   }
 
-  const validAssignments = assignments.map(assignment => {
-    // Add debug logging
-    console.log('Assignment:', assignment.name);
-    console.log('Grade:', grades[assignment.id]);
-    console.log('Extra:', extraPoints[assignment.id] || '0');
-    
-    return {
-      grade: grades[assignment.id],
-      extra: extraPoints[assignment.id] || '0',
-      type: assignment.type as 'Daily' | 'Assessment'
-    };
-  });
+  // Update the grade calculation section
+  const validAssignments = assignments.map(assignment => ({
+    grade: grades[assignment.id] || '0',
+    extra: extraPoints[assignment.id] || '0',
+    type: assignment.type
+  }));
 
+  // Use the standardized calculation
+  const totalGrade = calculateStudentAverage(validAssignments);
+
+  // For the cards display, we can still show the breakdown
   const dailyPoints = calculateDailyPoints(validAssignments);
   const assessmentPoints = calculateAssessmentPoints(validAssignments);
-  const totalPoints = calculateWeightedAverage(validAssignments);
-  console.log('Total Points:', totalPoints);
+
+  console.log('Grade breakdown:', {
+    dailyPoints,
+    assessmentPoints,
+    totalGrade,
+    assignments: validAssignments
+  });
 
   return (
     <div className="container mx-auto py-8 space-y-6">
@@ -229,7 +232,7 @@ export function StudentDashboard() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col items-center">
-              <div className="text-4xl font-bold text-emerald-600">{totalPoints}%</div>
+              <div className="text-4xl font-bold text-emerald-600">{totalGrade}%</div>
               <div className="text-sm text-muted-foreground mt-1">overall average</div>
             </div>
           </CardContent>
