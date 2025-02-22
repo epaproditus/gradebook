@@ -1942,16 +1942,16 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
       <div className="flex items-center justify-center">Total Grade</div>
       <div className="flex items-center justify-end">Tags</div>
     </div>
-                <div className="space-y-2">
+                <div className="divide-y divide-border"> {/* Changed from space-y-0 to divide-y for table-like appearance */}
                   {sortStudents(students[periodId] || [], assignmentId, periodId).map(student => (
                     <div 
                       key={student.id} 
                       className={cn(
-                        "grid grid-cols-[1fr_100px_100px_100px_auto] gap-2 items-center p-2 rounded transition-colors",
-                        activeRow === `${assignmentId}-${periodId}-${student.id}` && "bg-blue-100/50 shadow-sm" // Stronger highlight
+                        "grid grid-cols-[1fr_100px_100px_100px_auto] items-center h-8", // Removed gap, added fixed height
+                        activeRow === `${assignmentId}-${periodId}-${student.id}` && "bg-muted"  // Changed to bg-muted like RosterView
                       )}
                     >
-                      <div className="flex items-center bg-secondary rounded px-2 py-1">
+                      <div className="flex items-center px-2"> {/* Simplified student name cell */}
                         <span className="text-sm text-muted-foreground mr-2">
                           {student.id}
                         </span>
@@ -1960,9 +1960,9 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
                       
                       <Input
                         id={`grade-${assignmentId}-${periodId}-${student.id}`}
-                        type="text" // Changed from "number"
+                        type="text"
                         placeholder="0"
-                        className="text-center h-8 text-sm"
+                        className="text-center h-8 border-0 focus:ring-1" // Added border-0 and focus:ring-1 like RosterView
                         value={getGradeValue(assignmentId, periodId, String(student.id))}
                         onChange={(e) => handleGradeChange(assignmentId, periodId, String(student.id), e.target.value)}
                         onFocus={() => setActiveRow(`${assignmentId}-${periodId}-${student.id}`)}
@@ -1976,9 +1976,9 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
                       />
                       
                       <Input
-                        type="text" // Changed from "number"
+                        type="text"
                         placeholder="+0"
-                        className="text-center h-8 text-sm"
+                        className="text-center h-8 border-0 focus:ring-1" // Added border-0 and focus:ring-1 like RosterView
                         value={extraPoints[`${assignmentId}-${periodId}-${student.id}`] || ''}
                         onChange={(e) => {
                           handleExtraPointsChange(assignmentId, periodId, student.id, e.target.value);
@@ -1988,7 +1988,7 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
                         }}
                       />
                       
-                      <div className="flex items-center justify-center bg-secondary rounded px-2 h-8">
+                      <div className="flex items-center justify-center h-8 px-2">
                         <span className="text-sm font-medium">
                           {calculateTotal(
                             editingGrades[`${assignmentId}-${periodId}`]
@@ -1999,13 +1999,14 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-1 justify-end">
+                      <div className="flex items-center gap-0.5 justify-end px-2">
                         <Button
                           variant="outline"
                           size="sm"
+                          className="px-1.5 h-5 text-xs" // Changed px-2 to px-1.5
                           onClick={() => handleTagToggle(assignmentId, periodId, student.id, 'absent')}
                           className={cn(
-                            "px-2 h-6 text-xs",
+                            "px-2 h-5 text-xs", // Changed h-6 to h-5
                             hasTag(assignmentId, periodId, String(student.id), 'absent') && "bg-red-100"
                           )}
                         >
@@ -2014,9 +2015,10 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
                         <Button
                           variant="outline"
                           size="sm"
+                          className="px-1.5 h-5 text-xs" // Changed px-2 to px-1.5
                           onClick={() => handleTagToggle(assignmentId, periodId, student.id, 'late')}
                           className={cn(
-                            "px-2 h-6 text-xs",
+                            "px-2 h-5 text-xs", // Changed h-6 to h-5
                             hasTag(assignmentId, periodId, String(student.id), 'late') && "bg-yellow-100"
                           )}
                         >
@@ -2025,9 +2027,10 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
                         <Button
                           variant="outline"
                           size="sm"
+                          className="px-1.5 h-5 text-xs" // Changed px-2 to px-1.5
                           onClick={() => handleTagToggle(assignmentId, periodId, student.id, 'incomplete')}
                           className={cn(
-                            "px-2 h-6 text-xs",
+                            "px-2 h-5 text-xs", // Changed h-6 to h-5
                             hasTag(assignmentId, periodId, String(student.id), 'incomplete') && "bg-orange-100"
                           )}
                         >
@@ -2037,9 +2040,10 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
                           <Button
                             variant="outline"
                             size="sm"
+                            className="px-1.5 h-5 text-xs" // Changed px-2 to px-1.5
                             onClick={() => handleTagToggle(assignmentId, periodId, student.id, 'retest')}
                             className={cn(
-                              "px-2 h-6 text-xs",
+                              "px-2 h-5 text-xs", // Changed h-6 to h-5
                               hasTag(assignmentId, periodId, String(student.id), 'retest') && "bg-blue-100"
                             )}
                           >
