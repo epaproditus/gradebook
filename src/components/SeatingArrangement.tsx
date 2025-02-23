@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { type Database } from '@/types/supabase';
-import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
+import Draggable from 'react-draggable'; // remains the same
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import * as Card from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -19,6 +19,7 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 interface Student {
   id: string;
@@ -33,11 +34,38 @@ interface Props {
   selectedPeriod: string;
 }
 
+interface SeatPosition {
+  x: number;
+  y: number;
+}
+
 interface SeatItem {
   id: string;
   studentId: string | null;
-  position: number;
+  position: SeatPosition;  // Changed from number to x/y coordinates
 }
+
+const getGradeColor = (grade: number): string => {
+  if (grade >= 90) return 'bg-green-100';
+  if (grade >= 80) return 'bg-blue-100';
+  if (grade >= 70) return 'bg-yellow-100';
+  return 'bg-red-100';
+};
+
+const DraggableSeat: React.FC<DraggableSeatProps> = ({ seat, index, renderSeat, onStop }) => {
+  const nodeRef = useRef<HTMLDivElement>(null);
+  return (
+    <Draggable
+      nodeRef={nodeRef}
+      position={seat.position}
+      onStop={(e, data) => onStop(e, data, index)}
+    >
+      <div ref={nodeRef} style={{ position: 'absolute' }}>
+        {renderSeat(seat)}
+      </div>
+    </Draggable>
+  );
+};
 
 const SeatingArrangement: React.FC<Props> = ({ students, rows = 5, cols = 6, selectedPeriod }) => {
   const [seats, setSeats] = useState<SeatItem[]>([]);
@@ -47,11 +75,14 @@ const SeatingArrangement: React.FC<Props> = ({ students, rows = 5, cols = 6, sel
   const studentsMap = new Map(students.map(s => [s.id, s]));
 
   useEffect(() => {
-    // Initialize empty seats
+    // Initialize seats in a more spread out arrangement
     const initialSeats: SeatItem[] = Array(rows * cols).fill(null).map((_, index) => ({
-      id: `seat-${index}`,
+      id: crypto.randomUUID(),
       studentId: null,
-      position: index
+      position: {
+        x: (index % cols) * 150,  // Space seats out horizontally
+        y: Math.floor(index / cols) * 150  // Space seats out vertically
+      }
     }));
     setSeats(initialSeats);
   }, [rows, cols]);
@@ -95,7 +126,10 @@ const SeatingArrangement: React.FC<Props> = ({ students, rows = 5, cols = 6, sel
     const newSeats = Array(rows * cols).fill(null).map((_, index) => ({
       id: `seat-${index}`,
       studentId: index < sortedStudents.length ? sortedStudents[index].id : null,
-      position: index
+      position: {
+        x: (index % cols) * 150,  // Space seats out horizontally
+        y: Math.floor(index / cols) * 150  // Space seats out vertically
+      }
     }));
     setSeats(newSeats);
   };
@@ -120,47 +154,39 @@ const SeatingArrangement: React.FC<Props> = ({ students, rows = 5, cols = 6, sel
     }
   };
 
-  const onDragEnd = (result: DropResult) => {
-    if (!result.destination) return;
-
-    const { source, destination } = result;
-    const sourceIndex = parseInt(source.droppableId.replace('seat-', ''));
-    const destIndex = parseInt(destination.droppableId.replace('seat-', ''));
-
+  // onStop handler updates seat position in state
+  const handleDragStop = (e: any, data: { x: number; y: number }, index: number) => {
     const newSeats = [...seats];
-    const [removed] = newSeats.splice(sourceIndex, 1);
-    newSeats.splice(destIndex, 0, removed);
-
-    setSeats(newSeats.map((seat, index) => ({ ...seat, position: index })));
+    newSeats[index] = { ...newSeats[index], position: { x: data.x, y: data.y } };
+    setSeats(newSeats);
   };
 
   const renderSeat = (seat: SeatItem) => {
     const student = seat.studentId ? studentsMap.get(seat.studentId) : null;
 
     return (
-      <Card key={seat.id} className="h-24">
+      <Card.Card key={seat.id} className="h-24 w-24">
         <div className="w-full h-full flex items-center justify-center">
-          {student ? (
+            {student ? (
             <TooltipProvider>
               <Tooltip>
-                <TooltipTrigger className="w-full h-full">
-                  <div className={`w-full h-full p-2 rounded ${getGradeColor(student.averageGrade)}`}>
-                    <div className="text-sm font-medium">{student.name}</div>
-                    <div className="text-xs opacity-75">{student.averageGrade.toFixed(1)}%</div>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="font-semibold">Grade Details</p>
-                  <p className="text-sm">Average: {student.averageGrade.toFixed(1)}%</p>
-                  <p className="text-xs text-gray-500">Drag to move</p>
-                </TooltipContent>
+              <TooltipTrigger className="w-full h-full">
+                <div className={`w-full h-full p-2 rounded ${getGradeColor(student.averageGrade)}`}>
+                <div className="text-sm font-medium">{student.name}</div>
+                <div className="text-xs opacity-75">{student.averageGrade.toFixed(1)}%</div>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="font-semibold">{student.name}</p>
+                <p className="text-sm">Average: {student.averageGrade.toFixed(1)}%</p>
+              </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-          ) : (
-            <div className="text-gray-400">Empty</div>
-          )}
+            ) : (
+            <div className="text-gray-400 text-sm">Empty</div>
+            )}
         </div>
-      </Card>
+      </Card.Card>
     );
   };
 
@@ -198,56 +224,19 @@ const SeatingArrangement: React.FC<Props> = ({ students, rows = 5, cols = 6, sel
         </Button>
       </div>
 
-      <DragDropContext onDragEnd={onDragEnd}>
-        <Droppable
-          droppableId="seating-grid"
-          direction="horizontal"
-          type="GRID"
-        >
-          {(provided) => (
-            <div
-              ref={provided.innerRef}
-              {...provided.droppableProps}
-              className="grid gap-4"
-              style={{ gridTemplateColumns: `repeat(${cols}, minmax(120px, 1fr))` }}
-            >
-              {seats.map((seat, index) => (
-                <div
-                  key={seat.id}
-                  data-position={index}
-                  className="relative"
-                >
-                  <Draggable
-                    draggableId={seat.id}
-                    index={seat.position}
-                  >
-                    {(provided, snapshot) => (
-                      <div
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        {...provided.dragHandleProps}
-                        className={`w-full ${snapshot.isDragging ? 'z-50' : ''}`}
-                      >
-                        {renderSeat(seat)}
-                      </div>
-                    )}
-                  </Draggable>
-                </div>
-              ))}
-              {provided.placeholder}
-            </div>
-          )}
-        </Droppable>
-      </DragDropContext>
+      <div className="relative w-full h-[600px] border rounded-lg bg-secondary/20" style={{ minWidth: cols * 200 }}>
+        {seats.map((seat, index) => (
+          <DraggableSeat 
+            key={seat.id}
+            seat={seat}
+            index={index}
+            renderSeat={renderSeat}
+            onStop={handleDragStop}
+          />
+        ))}
+      </div>
     </div>
   );
-};
-
-const getGradeColor = (grade: number): string => {
-  if (grade >= 90) return 'bg-green-100';
-  if (grade >= 80) return 'bg-blue-100';
-  if (grade >= 70) return 'bg-yellow-100';
-  return 'bg-red-100';
 };
 
 export default SeatingArrangement;

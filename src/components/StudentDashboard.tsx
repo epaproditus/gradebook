@@ -18,7 +18,7 @@ import { SignOutButton } from './SignOutButton';
 import { formatGradeDisplay, getGradeDisplayClass } from '@/lib/displayFormatters';
 import { Button } from '@/components/ui/button';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
-import { toast } from '@/components/ui/toast';
+import { useToast } from "@/components/ui/use-toast";
 
 interface StudentData {
   id: number;
@@ -47,6 +47,8 @@ export function StudentDashboard() {
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
     supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   });
+
+  const { toast } = useToast();
 
   useEffect(() => {
     const loadStudentData = async () => {
