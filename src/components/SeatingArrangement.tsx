@@ -25,6 +25,7 @@ interface Student {
   id: string;
   name: string;
   averageGrade: number;
+  class_period: string;
 }
 
 interface Props {
@@ -68,6 +69,18 @@ const DraggableSeat: React.FC<DraggableSeatProps> = ({ seat, index, renderSeat, 
 };
 
 const SeatingArrangement: React.FC<Props> = ({ students, rows = 5, cols = 6, selectedPeriod }) => {
+  // Add this debug log at the start
+  console.log('Raw student data:', {
+    totalStudents: students.length,
+    firstFewStudents: students.slice(0, 3).map(s => ({
+      id: s.id,
+      name: s.name,
+      period: s.class_period,
+      allFields: Object.keys(s)
+    })),
+    allPeriods: [...new Set(students.map(s => s.class_period))].filter(Boolean)
+  });
+
   const [seats, setSeats] = useState<SeatItem[]>([]);
   const [arrangementType, setArrangementType] = useState<'homogeneous' | 'heterogeneous'>('homogeneous');
   const [isSaving, setIsSaving] = useState(false);
@@ -87,47 +100,136 @@ const SeatingArrangement: React.FC<Props> = ({ students, rows = 5, cols = 6, sel
     setSeats(initialSeats);
   }, [rows, cols]);
 
-  useEffect(() => {
-    const loadLayout = async () => {
-      try {
-        console.log('Loading layout for period:', selectedPeriod); // Debug log
-
-        // Sanitize the period value - remove spaces and special characters
-        const sanitizedPeriod = selectedPeriod.replace(/[^a-zA-Z0-9]/g, '_');
-        
-        const { data, error } = await supabase
-          .from('seating_layouts')
-          .select('layout')
-          .eq('period', sanitizedPeriod)
-          .maybeSingle();
-
-        console.log('Load response:', { data, error }); // Debug log
-
-        if (error) {
-          console.error('Error loading layout:', error);
-          return;
-        }
-
-        if (data?.layout) {
-          setSeats(data.layout.seats);
-          setArrangementType(data.layout.type);
-        }
-      } catch (error) {
-        console.error('Error in loadLayout:', error);
-      }
-    };
-
-    if (selectedPeriod) {
-      loadLayout();
+  // Update the period matching logic to be more lenient
+  const matchesPeriod = (studentPeriod: string | undefined, targetPeriod: string): boolean => {
+    if (!studentPeriod) {
+      console.log('No period for student', { studentPeriod, targetPeriod });
+      return false;
     }
-  }, [selectedPeriod, supabase]);
+    
+    // Normalize periods for comparison by taking just the number part
+    const extractNumber = (p: string) => p.replace(/[^0-9]/g, '');
+    
+    const studentNumber = extractNumber(studentPeriod);
+    const targetNumber = extractNumber(targetPeriod);
+    
+    console.log('Comparing periods:', {
+      studentPeriod,
+      targetPeriod,
+      studentNumber,
+      targetNumber,
+      matches: studentNumber === targetNumber
+    });
 
-  const calculateArrangement = (type: 'homogeneous' | 'heterogeneous') => {
-    const sortedStudents = [...students].sort((a, b) => {
+    return studentNumber === targetNumber;
+  };
+
+  // Update the loadLayoutOrArrangeStudents function
+  const loadLayoutOrArrangeStudents = async () => {
+    try {
+      console.log('Loading layout for period:', {
+        selectedPeriod,
+        allStudents: students.map(s => ({
+          name: s.name,
+          period: s.class_period,
+          fields: Object.keys(s)
+        })),
+        studentCount: students.length
+      });
+
+      // Get students for this period
+      const periodStudents = students.filter(student => 
+        matchesPeriod(student.class_period, selectedPeriod)
+      );
+
+      console.log('Filtered students:', {
+        periodStudents: periodStudents.map(s => ({
+          name: s.name,
+          period: s.class_period
+        })),
+        count: periodStudents.length,
+        matchCriteria: selectedPeriod
+      });
+
+      // Load template first
+      const { data: templateData } = await supabase
+        .from('seating_layouts')
+        .select('*')
+        .eq('period', 'template')
+        .single();
+
+      if (templateData?.layout?.seats) {
+        // Use template layout positions with current students
+        const templateSeats = templateData.layout.seats;
+        const sortedStudents = [...periodStudents].sort((a, b) => 
+          b.averageGrade - a.averageGrade
+        );
+
+        const newSeats = templateSeats.map((seat, index) => ({
+          ...seat,
+          studentId: index < sortedStudents.length ? sortedStudents[index].id : null
+        }));
+
+        setSeats(newSeats);
+        setArrangementType('homogeneous');
+      } else {
+        calculateArrangement('homogeneous', periodStudents);
+      }
+    } catch (error) {
+      console.error('Error in loadLayoutOrArrangeStudents:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (students.length > 0) {
+      loadLayoutOrArrangeStudents();
+    }
+  }, [students, selectedPeriod, rows, cols]);
+
+  // Add this helper function
+  const getCombinedStudents = (basePeriod: string): Student[] => {
+    const baseNumber = basePeriod.split(' ')[0];
+    
+    // Debug student data
+    console.log('Student check:', students.map(s => ({
+      name: s.name,
+      class_period: s.class_period,
+      period: s.period
+    })));
+
+    // Filter students using both period fields
+    const combinedStudents = students.filter(student => {
+      const studentPeriod = student.class_period || student.period;
+      const studentBasePeriod = studentPeriod?.split(' ')[0];
+      
+      console.log('Checking student:', {
+        name: student.name,
+        studentPeriod,
+        studentBasePeriod,
+        baseNumber,
+        matches: studentBasePeriod === baseNumber
+      });
+
+      return studentBasePeriod === baseNumber;
+    });
+
+    return combinedStudents;
+  };
+
+  const calculateArrangement = (type: 'homogeneous' | 'heterogeneous', studentList?: Student[]) => {
+    const studentsToArrange = studentList || getCombinedStudents(selectedPeriod.split(' ')[0]);
+    
+    console.log('Calculating arrangement:', {
+      type,
+      studentCount: studentsToArrange.length,
+      students: studentsToArrange.map(s => s.name)
+    });
+
+    const sortedStudents = [...studentsToArrange].sort((a, b) => {
       if (type === 'homogeneous') {
         return b.averageGrade - a.averageGrade;
       }
-      return students.indexOf(a) % 2 === 0 
+      return studentsToArrange.indexOf(a) % 2 === 0 
         ? b.averageGrade - a.averageGrade 
         : a.averageGrade - b.averageGrade;
     });
@@ -136,24 +238,26 @@ const SeatingArrangement: React.FC<Props> = ({ students, rows = 5, cols = 6, sel
       id: `seat-${index}`,
       studentId: index < sortedStudents.length ? sortedStudents[index].id : null,
       position: {
-        x: (index % cols) * 150,  // Space seats out horizontally
-        y: Math.floor(index / cols) * 150  // Space seats out vertically
+        x: (index % cols) * 150,
+        y: Math.floor(index / cols) * 150
       }
     }));
+
     setSeats(newSeats);
   };
 
   const saveLayout = async () => {
     try {
       setIsSaving(true);
+      const { basePeriod } = getPeriodInfo(selectedPeriod);
       
       const layoutData = {
-        period: selectedPeriod,
+        period: basePeriod, // Always save under base period
         layout: {
           type: arrangementType,
           seats: seats.map(seat => ({
             id: seat.id,
-            studentId: seat.studentId, // Preserve student assignments
+            studentId: seat.studentId,
             position: seat.position
           }))
         }
@@ -165,7 +269,7 @@ const SeatingArrangement: React.FC<Props> = ({ students, rows = 5, cols = 6, sel
         .from('seating_layouts')
         .upsert(layoutData, {
           onConflict: 'period',
-          target: ['period']  // Explicitly specify the conflict target
+          target: ['period']
         });
 
       if (error) {

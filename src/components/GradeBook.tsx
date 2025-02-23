@@ -736,15 +736,21 @@ const GradeBook: FC = () => {
           return;
         }
 
+        console.log('Fetched students:', data); // Debug log
+
         // Organize students by period
         const studentsByPeriod = data.reduce((acc: Record<string, Student[]>, student: Student) => {
           if (!acc[student.class_period]) {
             acc[student.class_period] = [];
           }
-          acc[student.class_period].push(student);
+          acc[student.class_period].push({
+            ...student,
+            period: student.class_period // Add this line to ensure period is set
+          });
           return acc;
         }, {});
 
+        console.log('Organized students:', studentsByPeriod); // Debug log
         setStudents(studentsByPeriod);
       } catch (error) {
         console.error('Error in fetchStudents:', error);
