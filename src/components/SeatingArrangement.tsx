@@ -90,21 +90,30 @@ const SeatingArrangement: React.FC<Props> = ({ students, rows = 5, cols = 6, sel
   useEffect(() => {
     const loadLayout = async () => {
       try {
-        const { data } = await supabase
+        console.log('Loading layout for period:', selectedPeriod); // Debug log
+
+        // Sanitize the period value - remove spaces and special characters
+        const sanitizedPeriod = selectedPeriod.replace(/[^a-zA-Z0-9]/g, '_');
+        
+        const { data, error } = await supabase
           .from('seating_layouts')
           .select('layout')
-          .eq('period', selectedPeriod)
-          .single();
+          .eq('period', sanitizedPeriod)
+          .maybeSingle();
+
+        console.log('Load response:', { data, error }); // Debug log
+
+        if (error) {
+          console.error('Error loading layout:', error);
+          return;
+        }
 
         if (data?.layout) {
-          const savedLayout = JSON.parse(data.layout);
-          if (savedLayout.seats) {
-            setSeats(savedLayout.seats);
-            setArrangementType(savedLayout.type);
-          }
+          setSeats(data.layout.seats);
+          setArrangementType(data.layout.type);
         }
       } catch (error) {
-        console.error('Error loading layout:', error);
+        console.error('Error in loadLayout:', error);
       }
     };
 
@@ -137,18 +146,38 @@ const SeatingArrangement: React.FC<Props> = ({ students, rows = 5, cols = 6, sel
   const saveLayout = async () => {
     try {
       setIsSaving(true);
-      await supabase
+      
+      const layoutData = {
+        period: selectedPeriod,
+        layout: {
+          type: arrangementType,
+          seats: seats.map(seat => ({
+            id: seat.id,
+            studentId: seat.studentId, // Preserve student assignments
+            position: seat.position
+          }))
+        }
+      };
+
+      console.log('Saving layout:', layoutData);
+
+      const { error } = await supabase
         .from('seating_layouts')
-        .upsert({
-          period: selectedPeriod,
-          layout: JSON.stringify({
-            seats,
-            type: arrangementType
-          }),
-          updated_at: new Date().toISOString(),
+        .upsert(layoutData, {
+          onConflict: 'period',
+          target: ['period']  // Explicitly specify the conflict target
         });
+
+      if (error) {
+        console.error('Save error:', error);
+        alert('Failed to save layout');
+        return;
+      }
+
+      alert('Layout saved successfully!');
     } catch (error) {
       console.error('Error saving layout:', error);
+      alert('Failed to save layout');
     } finally {
       setIsSaving(false);
     }

@@ -46,23 +46,50 @@ const DraggableSeat: React.FC<DraggableSeatProps> = ({ seat, index, onStop }) =>
 export const ClassTemplateForm: React.FC = () => {
   const [seats, setSeats] = useState<SeatItem[]>([]);
   const [isSaving, setIsSaving] = useState(false);
-  const supabase = createClientComponentClient<Database>();
+  const supabase = createClientComponentClient<Database>({
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  });
 
   // Define grid dimensions (can be adjustable as needed)
   const rows = 5, cols = 6;
 
-  // Initialize seats with labeled desk numbers
+  // Keep only this useEffect and remove the second one that was initializing seats
   useEffect(() => {
-    const initialSeats: SeatItem[] = Array(rows * cols).fill(null).map((_, index) => ({
-      id: crypto.randomUUID(),
-      label: `Desk ${index + 1}`,
-      position: {
-        x: (index % cols) * 150,   // space desks horizontally
-        y: Math.floor(index / cols) * 150  // space desks vertically
+    const loadTemplate = async () => {
+      try {
+        console.log('Loading template...'); // Debug log
+        const { data: templates, error } = await supabase
+          .from('seating_layouts')
+          .select('*')
+          .eq('period', 'template');
+
+        if (error) {
+          console.error('Error loading template:', error);
+          return;
+        }
+
+        const template = templates?.[0];
+        console.log('Loaded template:', template);
+
+        // Initialize seats either from template or default layout
+        const initialSeats = template?.layout?.seats || Array(rows * cols).fill(null).map((_, index) => ({
+          id: crypto.randomUUID(),
+          label: `Desk ${index + 1}`,
+          position: {
+            x: (index % cols) * 150,
+            y: Math.floor(index / cols) * 150
+          }
+        }));
+
+        setSeats(initialSeats);
+      } catch (error) {
+        console.error('Failed to load template:', error);
       }
-    }));
-    setSeats(initialSeats);
-  }, [rows, cols]);
+    };
+
+    loadTemplate();
+  }, []); // Run once on mount
 
   const handleDragStop = (e: any, data: { x: number; y: number }, index: number) => {
     const newSeats = [...seats];
@@ -70,21 +97,41 @@ export const ClassTemplateForm: React.FC = () => {
     setSeats(newSeats);
   };
 
-  // Save the template using a fixed period "template"
   const saveTemplate = async () => {
     try {
       setIsSaving(true);
-      await supabase
+      console.log('Current seats state:', seats);
+
+      const templateData = {
+        period: 'template',
+        layout: {
+          type: 'template', // Explicitly set type as template
+          seats: seats.map(seat => ({
+            id: seat.id,
+            label: seat.label,
+            position: seat.position
+          }))
+        }
+      };
+
+      // Use upsert instead of update to handle both cases
+      const { error } = await supabase
         .from('seating_layouts')
-        .upsert({
-          period: 'template',
-          layout: JSON.stringify({ seats, type: 'template' }),
-          updated_at: new Date().toISOString()
-        });
-      alert("Class template saved!");
+        .upsert(templateData)
+        .eq('period', 'template')
+        .select();
+
+      if (error) {
+        console.error('Save error:', error);
+        alert(`Failed to save template: ${error.message}`);
+        return;
+      }
+
+      console.log('Template saved successfully');
+      alert('Template saved successfully!');
     } catch (error) {
-      console.error('Error saving class template:', error);
-      alert("Error saving template");
+      console.error('Save error:', error);
+      alert('Failed to save template');
     } finally {
       setIsSaving(false);
     }
