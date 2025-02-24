@@ -17,6 +17,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { Save } from "lucide-react"; // Add Save icon
 import { teksCategories, getTeksCategory, getTeksDescription } from '@/lib/teksData';
+import { getStaarPerformanceLevel } from '@/lib/utils';
 
 const CIRCLE_PATH_LENGTH = 2 * Math.PI * 20; // For a circle with r=20
 
@@ -35,6 +36,7 @@ interface BenchmarkData {
   score: number;
   performance_level: string;
   standards: StandardScore[];
+  staar_score?: number;  // Add STAAR score
 }
 
 interface StandardWithDescription extends StandardScore {
@@ -122,12 +124,21 @@ export function BenchmarkScores({ studentId }: { studentId: number }) {
         .select('*')
         .eq('student_id', studentId);
 
+      // Load STAAR score
+      const { data: staarData } = await supabase
+        .from('staar_scores')
+        .select('score')
+        .eq('student_id', studentId)
+        .eq('grade', 7)
+        .single();
+
       if (scoreData && standardsData && studentData) {
         setBenchmarkData({
           score: scoreData.score,
           performance_level: scoreData.performance_level,
           standards: standardsData,
-          student_name: studentData.name // Add student name to the display data
+          student_name: studentData.name,
+          staar_score: staarData?.score
         });
       }
     };
@@ -250,45 +261,102 @@ export function BenchmarkScores({ studentId }: { studentId: number }) {
       <Dialog>
         <DialogTrigger asChild>
           <div className="relative w-48 h-48 mx-auto cursor-pointer hover:scale-105 transition-transform">
-            <svg className="w-full h-full transform -rotate-90">
-              <circle
-                cx="96"
-                cy="96"
-                r="88"
-                className="stroke-zinc-800 fill-none"
-                strokeWidth="8"
-              />
-              <circle
-                cx="96"
-                cy="96"
-                r="88"
-                className={cn(
-                  "stroke-current fill-none transition-all duration-1000",
-                  performanceLevel === 'Masters' ? "stroke-blue-500" :
-                  performanceLevel === 'Meets' ? "stroke-green-500" :
-                  performanceLevel === 'Approaches' ? "stroke-yellow-500" :
-                  "stroke-red-500"
-                )}
-                strokeWidth="8"
-                strokeDasharray={`${(score/100) * (2 * Math.PI * 88)} ${2 * Math.PI * 88}`}
-                strokeLinecap="round"
-              />
-            </svg>
-            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
-              <div className="text-4xl font-bold">{score}%</div>
-              <div className={cn(
-                "text-sm px-2 py-1 rounded-full",
-                getPerformanceLevelColor(performanceLevel)
-              )}>
-                {performanceLevel}
+            <div className="absolute inset-0">
+              <svg className="w-full h-full transform -rotate-90">
+                <circle
+                  cx="96"
+                  cy="96"
+                  r="88"
+                  className="stroke-zinc-800 fill-none"
+                  strokeWidth="8"
+                />
+                <circle
+                  cx="96"
+                  cy="96"
+                  r="88"
+                  className={cn(
+                    "stroke-current fill-none transition-all duration-1000",
+                    performanceLevel === 'Masters' ? "stroke-blue-500" :
+                    performanceLevel === 'Meets' ? "stroke-green-500" :
+                    performanceLevel === 'Approaches' ? "stroke-yellow-500" :
+                    "stroke-red-500"
+                  )}
+                  strokeWidth="8"
+                  strokeDasharray={`${(score/100) * (2 * Math.PI * 88)} ${2 * Math.PI * 88}`}
+                  strokeLinecap="round"
+                />
+              </svg>
+              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
+                <div className="text-4xl font-bold">{score}%</div>
+                <div className={cn(
+                  "text-sm px-2 py-1 rounded-full",
+                  getPerformanceLevelColor(performanceLevel)
+                )}>
+                  {performanceLevel}
+                </div>
               </div>
             </div>
+            {/* 7th Grade STAAR Circle - Slightly Smaller */}
+            {benchmarkData?.staar_score && (
+              <div className="absolute inset-0 scale-75 origin-center">
+                <svg className="w-full h-full transform -rotate-90">
+                  <circle
+                    cx="96"
+                    cy="96"
+                    r="88"
+                    className="stroke-zinc-800 fill-none"
+                    strokeWidth="8"
+                  />
+                  <circle
+                    cx="96"
+                    cy="96"
+                    r="88"
+                    className={cn(
+                      "stroke-current fill-none transition-all duration-1000",
+                      benchmarkData.staar_score >= 83 ? "stroke-blue-500" :
+                      benchmarkData.staar_score >= 59 ? "stroke-green-500" :
+                      benchmarkData.staar_score >= 50 ? "stroke-yellow-500" :
+                      benchmarkData.staar_score >= 43 ? "stroke-orange-500" :
+                      benchmarkData.staar_score >= 30 ? "stroke-red-400" :
+                      "stroke-red-500"
+                    )}
+                    strokeWidth="8"
+                    strokeDasharray={`${(benchmarkData.staar_score/100) * (2 * Math.PI * 88)} ${2 * Math.PI * 88}`}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
+                  <div className="text-2xl font-bold">{benchmarkData.staar_score}%</div>
+                  <div className="text-xs px-2 py-1 rounded-full bg-zinc-800 text-zinc-100">
+                    7th STAAR
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </DialogTrigger>
         
         <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto bg-zinc-950 text-zinc-100">
           <DialogHeader>
-            <DialogTitle className="text-zinc-100">Standards Mastery Breakdown</DialogTitle>
+            <DialogTitle className="text-zinc-100 flex items-center justify-between">
+              <span>Standards Mastery Breakdown</span>
+              {benchmarkData?.staar_score && (
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-zinc-400">7th Grade STAAR:</span>
+                  <span className={cn(
+                    "px-2 py-1 rounded-full",
+                    benchmarkData.staar_score >= 83 ? "bg-blue-500 text-blue-100" :
+                    benchmarkData.staar_score >= 59 ? "bg-green-500 text-green-100" :
+                    benchmarkData.staar_score >= 50 ? "bg-yellow-500 text-yellow-900" :
+                    benchmarkData.staar_score >= 43 ? "bg-orange-500 text-orange-100" :
+                    benchmarkData.staar_score >= 30 ? "bg-red-400 text-red-100" :
+                    "bg-red-500 text-red-100"
+                  )}>
+                    {benchmarkData.staar_score}% - {getStaarPerformanceLevel(benchmarkData.staar_score)}
+                  </span>
+                </div>
+              )}
+            </DialogTitle>
           </DialogHeader>
           
           <div className="grid grid-cols-2 gap-6">
