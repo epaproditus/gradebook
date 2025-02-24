@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Target, ChevronRight, Brain, TrendingUp, TrendingDown } from 'lucide-react';
+import { Target, ChevronRight, Brain, TrendingUp, TrendingDown, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Dialog,
@@ -37,37 +37,60 @@ interface BenchmarkData {
   standards: StandardScore[];
 }
 
-const CircleProgress = ({ percentage, size = 48, strokeWidth = 4 }) => {
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (percentage / 100) * circumference;
+interface StandardWithDescription extends StandardScore {
+  description?: string;
+  isExpanded?: boolean;
+}
 
+// Add interface for grouped standards
+interface StandardsGroup {
+  reporting: StandardWithDescription[];
+  supporting: StandardWithDescription[];
+}
+
+// Modify CircleProgress component to handle different sizes
+const CircleProgress = ({ percentage, size = 48, strokeWidth = 4 }) => {
   return (
-    <svg className="transform -rotate-90 w-full h-full">
-      <circle
-        cx={size/2}
-        cy={size/2}
-        r={radius}
-        className="stroke-zinc-800 fill-none"
-        strokeWidth={strokeWidth}
-      />
-      <circle
-        cx={size/2}
-        cy={size/2}
-        r={radius}
-        className={cn(
-          "fill-none transition-all duration-500",
-          percentage >= 70 ? "stroke-green-500" :
-          percentage >= 50 ? "stroke-yellow-500" : "stroke-red-500"
-        )}
-        strokeWidth={strokeWidth}
-        strokeDasharray={circumference}
-        strokeDashoffset={offset}
-        strokeLinecap="round"
-      />
-    </svg>
+    <div className="w-12 h-12"> {/* Fixed size container */}
+      <svg className="transform -rotate-90 w-full h-full">
+        <circle
+          cx="24"
+          cy="24"
+          r="20"
+          className="stroke-zinc-800 fill-none"
+          strokeWidth={strokeWidth}
+        />
+        <circle
+          cx="24"
+          cy="24"
+          r="20"
+          className={cn(
+            "fill-none transition-all duration-500",
+            percentage >= 70 ? "stroke-green-500" :
+            percentage >= 50 ? "stroke-yellow-500" : "stroke-red-500"
+          )}
+          strokeWidth={strokeWidth}
+          strokeDasharray={`${(percentage/100) * CIRCLE_PATH_LENGTH} ${CIRCLE_PATH_LENGTH}`}
+          strokeLinecap="round"
+        />
+      </svg>
+    </div>
   );
 };
+
+// Add helper function to sort TEKS standards
+function sortTeksStandards(a: StandardWithDescription, b: StandardWithDescription) {
+  // Extract numbers from standards (e.g., "8.2C" -> [8, 2, "C"])
+  const [aNum, aSub, aLetter] = a.standard.match(/(\d+)\.(\d+)([A-Z])/)?.slice(1) || [];
+  const [bNum, bSub, bLetter] = b.standard.match(/(\d+)\.(\d+)([A-Z])/)?.slice(1) || [];
+  
+  // Compare main numbers first
+  if (aNum !== bNum) return parseInt(aNum) - parseInt(bNum);
+  // Then sub-numbers
+  if (aSub !== bSub) return parseInt(aSub) - parseInt(bSub);
+  // Finally letters
+  return aLetter.localeCompare(bLetter);
+}
 
 export function BenchmarkScores({ studentId }: { studentId: number }) {
   const [benchmarkData, setBenchmarkData] = useState<BenchmarkData | null>(null);
@@ -75,6 +98,8 @@ export function BenchmarkScores({ studentId }: { studentId: number }) {
   const { toast } = useToast();
   const supabase = createClientComponentClient();
   const [isSaving, setIsSaving] = useState(false);
+  const [expandedSummary, setExpandedSummary] = useState<string | null>(null);
+  const [expandedDetail, setExpandedDetail] = useState<string | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -155,26 +180,51 @@ export function BenchmarkScores({ studentId }: { studentId: number }) {
   // Group standards by TEKS category
   const standardsByCategory = benchmarkData?.standards.reduce((acc, standard) => {
     const category = getTeksCategory(standard.standard);
-    if (!acc[category]) acc[category] = [];
-    acc[category].push({
+    if (!acc[category]) {
+      acc[category] = {
+        reporting: [],
+        supporting: []
+      };
+    }
+    
+    const standardWithDesc = {
+      ...standard,
+      description: getTeksDescription(standard.standard),
+      isExpanded: standard.standard === expandedDetail
+    };
+  
+    // Sort into reporting (tested=2) or supporting (tested=1) groups
+    if (standard.tested === 2) {
+      acc[category].reporting.push(standardWithDesc);
+    } else {
+      acc[category].supporting.push(standardWithDesc);
+    }
+  
+    // Sort each group separately
+    acc[category].reporting.sort(sortTeksStandards);
+    acc[category].supporting.sort(sortTeksStandards);
+    
+    return acc;
+  }, {} as Record<string, StandardsGroup>) || {};
+
+  // Modify the strongest/weakest calculation
+  const standardsList = Object.entries(standardsByCategory).flatMap(([category, groups]) => {
+    return [...groups.reporting, ...groups.supporting].map(standard => ({
+      category,
       ...standard,
       description: getTeksDescription(standard.standard)
-    });
-    return acc;
-  }, {} as Record<string, any[]>) || {};
+    }));
+  });
 
-  // Find strongest and weakest areas based on correct/tested ratio
-  const categoryAverages = Object.entries(standardsByCategory).map(([category, standards]) => {
-    const totalCorrect = standards.reduce((acc, s) => acc + (s.correct / 100) * s.tested, 0);
-    const totalTested = standards.reduce((acc, s) => acc + s.tested, 0);
-    return {
-      category,
-      average: Math.round((totalCorrect / totalTested) * 100) || 0
-    };
-  }).sort((a, b) => b.average - a.average);
+  const strongestStandards = standardsList
+    .filter(s => s.correct === 100)
+    .sort((a, b) => b.tested - a.tested)
+    .slice(0, 4);
 
-  const strongestAreas = categoryAverages.slice(0, 3);
-  const weakestAreas = categoryAverages.slice(-3).reverse();
+  const weakestStandards = standardsList
+    .filter(s => s.correct < 70)
+    .sort((a, b) => a.correct - b.correct)
+    .slice(0, 4);
 
   const getPerformanceLevelColor = (level: string) => {
     switch (level) {
@@ -188,6 +238,12 @@ export function BenchmarkScores({ studentId }: { studentId: number }) {
         return 'bg-red-500 text-red-100';
     }
   };
+
+  // Modify the summary standards mapping to use expandedSummary
+  const summaryStandards = standardsList.map(standard => ({
+    ...standard,
+    isExpanded: standard.standard === expandedSummary
+  }));
 
   return (
     <div className="flex gap-6 items-start">
@@ -241,43 +297,41 @@ export function BenchmarkScores({ studentId }: { studentId: number }) {
               <CardHeader>
                 <div className="flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-green-500" />
-                  <CardTitle className="text-lg text-zinc-100">Strongest Areas</CardTitle>
+                  <CardTitle className="text-lg text-zinc-100">Mastered Standards</CardTitle>
                 </div>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-4 gap-4">
-                  {strongestAreas.map(({ category, average }) => (
-                    <div key={category} className="flex flex-col items-center">
-                      <div className="relative w-16 h-16 mb-2">
-                        <svg className="w-full h-full transform -rotate-90">
-                          <circle
-                            cx="32"
-                            cy="32"
-                            r="28"
-                            className="stroke-zinc-800 fill-none"
-                            strokeWidth="6"
-                          />
-                          <circle
-                            cx="32"
-                            cy="32"
-                            r="28"
-                            className={cn(
-                              "fill-none transition-all duration-500",
-                              average >= 70 ? "stroke-green-500" :
-                              average >= 50 ? "stroke-yellow-500" : "stroke-red-500"
-                            )}
-                            strokeWidth="6"
-                            strokeDasharray={`${(average/100) * (2 * Math.PI * 28)} ${2 * Math.PI * 28}`}
-                            strokeLinecap="round"
-                          />
-                        </svg>
+                  {strongestStandards.map((standard) => (
+                    <div key={standard.standard} className="flex flex-col items-center">
+                      <div className="relative w-12 h-12 mb-1">
+                        <CircleProgress percentage={standard.correct} />
                         <span className="absolute inset-0 flex items-center justify-center text-sm font-medium text-zinc-100">
-                          {average}%
+                          {standard.correct}%
                         </span>
                       </div>
-                      <span className="text-xs text-zinc-300 text-center">{category}</span>
+                      <span className="text-xs text-zinc-300 text-center">{standard.standard}</span>
+                      <button
+                        onClick={() => setExpandedSummary(
+                          expandedSummary === standard.standard ? null : standard.standard
+                        )}
+                        className="mt-1"
+                      >
+                        <ChevronDown className={cn(
+                          "h-4 w-4 text-zinc-400 transition-transform",
+                          expandedSummary === standard.standard ? "rotate-180" : ""
+                        )} />
+                      </button>
                     </div>
                   ))}
+                  {/* Full-width description for summary */}
+                  {expandedSummary && (
+                    <div className="col-span-4 bg-zinc-800/95 p-4 rounded-md mt-2">
+                      <div className="text-sm text-zinc-300">
+                        {strongestStandards.find(s => s.standard === expandedSummary)?.description}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -292,79 +346,156 @@ export function BenchmarkScores({ studentId }: { studentId: number }) {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-4 gap-4">
-                  {weakestAreas.map(({ category, average }) => (
-                    <div key={category} className="flex flex-col items-center">
-                      <div className="relative w-16 h-16 mb-2">
-                        <svg className="w-full h-full transform -rotate-90">
-                          <circle
-                            cx="32"
-                            cy="32"
-                            r="28"
-                            className="stroke-zinc-800 fill-none"
-                            strokeWidth="6"
-                          />
-                          <circle
-                            cx="32"
-                            cy="32"
-                            r="28"
-                            className={cn(
-                              "fill-none transition-all duration-500",
-                              average >= 70 ? "stroke-green-500" :
-                              average >= 50 ? "stroke-yellow-500" : "stroke-red-500"
-                            )}
-                            strokeWidth="6"
-                            strokeDasharray={`${(average/100) * (2 * Math.PI * 28)} ${2 * Math.PI * 28}`}
-                            strokeLinecap="round"
-                          />
-                        </svg>
+                  {weakestStandards.map((standard) => (
+                    <div key={standard.standard} className="flex flex-col items-center">
+                      <div className="relative w-12 h-12 mb-1">
+                        <CircleProgress percentage={standard.correct} />
                         <span className="absolute inset-0 flex items-center justify-center text-sm font-medium text-zinc-100">
-                          {average}%
+                          {standard.correct}%
                         </span>
                       </div>
-                      <span className="text-xs text-zinc-300 text-center">{category}</span>
+                      <span className="text-xs text-zinc-300 text-center">{standard.standard}</span>
+                      <button
+                        onClick={() => setExpandedSummary(
+                          expandedSummary === standard.standard ? null : standard.standard
+                        )}
+                        className="mt-1"
+                      >
+                        <ChevronDown className={cn(
+                          "h-4 w-4 text-zinc-400 transition-transform",
+                          expandedSummary === standard.standard ? "rotate-180" : ""
+                        )} />
+                      </button>
                     </div>
                   ))}
+                  {/* Full-width description for summary */}
+                  {expandedSummary && (
+                    <div className="col-span-4 bg-zinc-800/95 p-4 rounded-md mt-2">
+                      <div className="text-sm text-zinc-300">
+                        {weakestStandards.find(s => s.standard === expandedSummary)?.description}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
 
             {/* Detailed Standards Breakdown */}
             <div className="col-span-2 space-y-6">
-              {Object.entries(standardsByCategory).map(([category, standards]) => (
+              {Object.entries(standardsByCategory).map(([category, groups]) => (
                 <Card key={category} className="bg-zinc-900">
                   <CardHeader>
                     <CardTitle className="text-lg text-zinc-100">
                       {teksCategories[category]}
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-6 gap-4">
-                      {standards.map((standard) => (
-                        <div 
-                          key={standard.standard} 
-                          className="flex flex-col items-center group"
-                          title={standard.description} // Show description on hover
-                        >
-                          <div className="relative w-12 h-12 mb-1">
-                            <CircleProgress percentage={standard.correct} />
-                            <span className="absolute inset-0 flex items-center justify-center text-sm font-medium text-zinc-100">
-                              {standard.correct}%
-                            </span>
-                            {/* Add hover ratio display */}
-                            <span className="absolute inset-0 flex items-center justify-center text-sm font-medium bg-zinc-900/80 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                              {Math.round((standard.correct/100) * standard.tested)}/{standard.tested}
-                            </span>
-                          </div>
-                          <span className="text-xs text-zinc-300 text-center">
-                            {standard.standard}
-                          </span>
-                          {/* Add tooltip with description */}
-                          <div className="hidden group-hover:block absolute z-50 p-2 bg-zinc-800 rounded-md shadow-lg max-w-xs mt-16">
-                            {standard.description}
-                          </div>
+                  <CardContent className="space-y-6">
+                    {/* Reporting Standards */}
+                    {groups.reporting.length > 0 && (
+                      <div>
+                        <h3 className="text-sm font-medium text-zinc-400 mb-3">Reporting Standards</h3>
+                        <div className="grid grid-cols-6 gap-4 relative">
+                          {groups.reporting.map((standard) => (
+                            <div key={standard.standard} className="relative flex flex-col items-center">
+                              <button 
+                                onClick={() => setExpandedDetail(
+                                  expandedDetail === standard.standard ? null : standard.standard
+                                )}
+                                className="group flex flex-col items-center hover:scale-105 transition-transform"
+                              >
+                                <div className="relative w-12 h-12">
+                                  <CircleProgress percentage={standard.correct} />
+                                  <span className="absolute inset-0 flex items-center justify-center text-sm font-medium text-zinc-100 group-hover:opacity-0 transition-opacity">
+                                    {standard.correct}%
+                                  </span>
+                                  <span className="absolute inset-0 flex items-center justify-center text-sm font-medium text-zinc-100 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    {standard.tested}/{standard.tested === 2 ? '2' : '1'}
+                                  </span>
+                                </div>
+                                <span className="text-xs text-zinc-300 mt-1">
+                                  {standard.standard}
+                                </span>
+                                <ChevronDown 
+                                  className={cn(
+                                    "w-4 h-4 mt-1 text-zinc-400 transition-transform",
+                                    expandedDetail === standard.standard ? "rotate-180" : ""
+                                  )}
+                                />
+                              </button>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                        {/* Move description outside of the grid */}
+                        {expandedDetail && (
+                          <div className="mt-4 bg-zinc-800 p-4 rounded-md">
+                            <div className="text-sm text-zinc-300">
+                              {groups.reporting.find(s => s.standard === expandedDetail)?.description}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Supporting Standards */}
+                    {groups.supporting.length > 0 && (
+                      <div>
+                        <h3 className="text-sm font-medium text-zinc-400 mb-3">Supporting Standards</h3>
+                        <div className="grid grid-cols-6 gap-4">
+                          {groups.supporting.map((standard) => (
+                            <div 
+                              key={standard.standard} 
+                              className="flex flex-col items-center group"
+                              title={standard.description} // Show description on hover
+                            >
+                              {/* Add fixed height container to prevent layout shifts */}
+                              <div className="h-24 flex items-center justify-center"> {/* Height accommodates largest circle */}
+                                <div 
+                                  className={cn(
+                                    "flex flex-col items-center transition-all",
+                                    standard.isExpanded ? "pb-4" : ""
+                                  )}
+                                >
+                                  <button 
+                                    onClick={() => setExpandedDetail(
+                                      expandedDetail === standard.standard ? null : standard.standard
+                                    )}
+                                    className="group flex flex-col items-center hover:scale-105 transition-transform"
+                                  >
+                                    <div className={cn(
+                                      "relative",
+                                      standard.tested === 2 ? "w-18 h-18" : "w-12 h-12"
+                                    )}>
+                                      <CircleProgress 
+                                        percentage={standard.correct} 
+                                        tested={standard.tested}
+                                      />
+                                      <span className="absolute inset-0 flex items-center justify-center text-sm font-medium text-zinc-100">
+                                        {standard.correct}%
+                                      </span>
+                                      <span className="absolute inset-0 flex items-center justify-center text-sm font-medium bg-zinc-900/80 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                                        {Math.round((standard.correct/100) * standard.tested)}/{standard.tested}
+                                      </span>
+                                    </div>
+                                  </button>
+                                </div>
+                              </div>
+                              <span className="text-xs text-zinc-300 mt-1">
+                                {standard.standard}
+                              </span>
+                              {/* Description dropdown */}
+                              <div 
+                                className={cn(
+                                  "overflow-hidden transition-all duration-200 text-sm text-zinc-300 text-center px-2",
+                                  standard.isExpanded ? "max-h-40 opacity-100 mt-2" : "max-h-0 opacity-0"
+                                )}
+                              >
+                                {standard.description}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}
