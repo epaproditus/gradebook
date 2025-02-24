@@ -21,23 +21,48 @@ async function importStandardScores() {
   try {
     console.log('Starting standards import...');
     
+    // First, delete all existing records
+    console.log('Deleting existing records...');
+    const { error: deleteError } = await supabase
+      .from('benchmark_standards')
+      .delete()
+      .neq('student_id', 0); // Delete all records (using neq as a trick since student_id can't be 0)
+
+    if (deleteError) {
+      throw new Error(`Failed to delete existing records: ${deleteError.message}`);
+    }
+
     const csvFilePath = path.join(process.cwd(), 'src', 'app', 'bench_by_se.csv');
     console.log('Reading CSV:', csvFilePath);
 
     // Read file line by line to handle raw data
     const fileContent = fs.readFileSync(csvFilePath, 'utf-8');
-    const lines = fileContent.split('\n');
-    
-    const headerRow = lines[0].split(',');
-    const subHeaderRow = lines[1].split(',');
-    const dataRows = lines.slice(2); // Skip header rows
+
+    // Use a proper CSV parser that handles quoted fields
+    const parser = parse(fileContent, {
+      skip_empty_lines: true,
+      columns: false,
+      quote: '"',
+      ltrim: true,
+      rtrim: true
+    });
+
+    const rows = await new Promise<string[][]>((resolve) => {
+      const results: string[][] = [];
+      parser.on('data', (row) => results.push(row));
+      parser.on('end', () => resolve(results));
+    });
+
+    const headerRow = rows[0];
+    const subHeaderRow = rows[1];
+    const dataRows = rows.slice(2);
 
     // Map standards to their column indices
     const standardsMap = new Map<string, { correct: number, tested: number, mastery: number }>();
 
-    // Skip the first 3 columns (name, id, testcount)
-    const SKIP_COLUMNS = 3;
-    
+    const SKIP_COLUMNS = 2; // Changed from 3 to 2 (just name and id now)
+    const COLUMNS_PER_STANDARD = 3; // correct, tested, mastery
+
     headerRow.forEach((header, index) => {
       if (header.includes('(2012)')) {
         const standard = header.split(' (2012)')[0].trim();
@@ -52,10 +77,10 @@ async function importStandardScores() {
         }
         
         const indices = standardsMap.get(standard)!;
-        // Adjust indices to account for skipped columns
-        if (subHeader === 'Correct') indices.correct = index - SKIP_COLUMNS;
-        if (subHeader === 'Tested') indices.tested = index - SKIP_COLUMNS;
-        if (subHeader === 'Mastery') indices.mastery = index - SKIP_COLUMNS;
+        // Calculate correct indices based on the pattern in the CSV
+        if (subHeader === 'Correct') indices.correct = index;
+        if (subHeader === 'Tested') indices.tested = index;
+        if (subHeader === 'Mastery') indices.mastery = index;
       }
     });
 
@@ -63,9 +88,7 @@ async function importStandardScores() {
     let rowCount = 0;
 
     // Process each data row manually
-    for (const line of dataRows) {
-      if (!line.trim()) continue;
-      const columns = line.split(',');
+    for (const columns of dataRows) {
       const match = columns[1]?.match(/\d+/);
       if (!match) {
         console.log(`Skipping row with invalid student ID: ${columns[1]}`);
@@ -87,44 +110,40 @@ async function importStandardScores() {
 
       console.log(`Processing student ${studentId}...`);
 
-      // Process each standard using the column indices
+      // Process each standard
       for (const [standard, indices] of standardsMap) {
         const rawCorrect = columns[indices.correct]?.trim() || '0';
         const rawTested = columns[indices.tested]?.trim() || '0';
+        const rawMastery = columns[indices.mastery]?.trim() || '0';
         
-        // First get the tested count
-        const tested = parseInt(rawTested, 10);
-        
-        // Get the percentage from rawCorrect
-        const percentageCorrect = parseInt(rawCorrect, 10);
-        
-        // Calculate actual correct answers based on tested count
-        let correct: number;
-        if (tested === 1) {
-          // If only 1 question, 100% = 1 correct, 50% = 0.5 correct, 0% = 0 correct
-          correct = percentageCorrect / 100;
-        } else if (tested === 2) {
-          // If 2 questions, 100% = 2 correct, 50% = 1 correct, 0% = 0 correct
-          correct = (percentageCorrect / 100) * 2;
-        } else {
-          // For other cases, calculate proportionally
-          correct = Math.round((percentageCorrect / 100) * tested);
-        }
+        // Parse the raw values
+        const numCorrect = parseInt(rawCorrect, 10);
+        const numTested = parseInt(rawTested, 10);
+        const mastery = parseInt(rawMastery, 10);
 
-        if (tested > 0) {
-          console.log(`Standard ${standard}:`, { 
-            percentageCorrect,
-            correct, 
-            tested,
-            calculatedPercentage: Math.round((correct/tested) * 100)
-          });
+        if (numTested > 0) {
+          // Calculate percentage based on correct vs tested
+          const percentage = Math.round((numCorrect / numTested) * 100);
+
+          // Debug log for Leila
+          if (studentId === 423306) {
+            console.log(`${standard}:`, {
+              raw: [rawCorrect, rawTested, rawMastery],
+              calculated: { 
+                numCorrect, 
+                numTested, 
+                percentage,
+                mastery 
+              }
+            });
+          }
           
           records.push({
             student_id: studentId,
             standard,
-            correct,
-            tested,
-            mastery: parseInt(columns[indices.mastery] || '0'),
+            correct: percentage,  // Store calculated percentage
+            tested: numTested,
+            mastery: mastery,
             test_date: new Date().toISOString().split('T')[0]
           });
         }
@@ -143,10 +162,7 @@ async function importStandardScores() {
       const batch = records.slice(i, i + 100);
       const { error } = await supabase
         .from('benchmark_standards')
-        .upsert(batch, {
-          onConflict: 'student_id,standard,test_date', // Use column names instead of constraint name
-          ignoreDuplicates: true
-        });
+        .insert(batch); // Changed from upsert to insert since we cleared the table
 
       if (error) {
         console.error('Error importing batch:', error);

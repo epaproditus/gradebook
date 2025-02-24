@@ -110,17 +110,6 @@ A Next.js application that manages teacher gradebooks with Google Classroom inte
   - Both draft and assigned grade updates
   - Batch processing multiple submissions
 
-## Authentication Flow
-- Initial Google OAuth authentication includes all required scopes
-- Scopes include:
-  - classroom.courses.readonly
-  - classroom.coursework.students
-  - classroom.rosters.readonly
-  - classroom.student-submissions.students.readonly
-- Access token persisted in NextAuth.js session
-- Scope verification on Google Classroom access
-- Automatic re-authentication if scopes are missing
-
 ## Database Structure
 
 ### Primary Tables
@@ -340,7 +329,4 @@ A Next.js application that manages teacher gradebooks with Google Classroom inte
   2. Pull with rebase to preserve commit history
   3. Resolve any conflicts
   4. Push to remote branch
-
-## CSV Parsing Update
-We've enhanced the CSV parsing in import-benchmark-standards.ts to use a regex approach for extracting numeric student IDs, preventing rows from being skipped due to inline text or quotes.
 

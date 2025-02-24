@@ -297,8 +297,15 @@ export function BenchmarkScores({ studentId }: { studentId: number }) {
               <h2 className="text-lg font-semibold text-zinc-100 mb-4">All Standards</h2>
               <div className="grid grid-cols-8 gap-4"> {/* Changed to 8 columns, reduced gap */}
                 {benchmarkData?.standards.map((standard) => {
-                  const percentage = standard.correct;
-                  const ratio = `${Math.round((percentage/100) * standard.tested)}/${standard.tested}`;
+                  // Add debugging logs
+                  console.log('Standard data:', {
+                    standard: standard.standard,
+                    correct: standard.correct,
+                    tested: standard.tested,
+                    raw_percentage: (standard.correct / standard.tested) * 100
+                  });
+
+                  const percentage = standard.correct; // Use the stored percentage directly
                   
                   return (
                     <div key={standard.standard} className="flex flex-col items-center group">
@@ -317,11 +324,11 @@ export function BenchmarkScores({ studentId }: { studentId: number }) {
                             r="20"
                             className={cn(
                               "fill-none transition-all duration-500",
-                              percentage >= 70 ? "stroke-green-500" :
-                              percentage >= 50 ? "stroke-yellow-500" : "stroke-red-500"
+                              standard.correct >= 70 ? "stroke-green-500" :
+                              standard.correct >= 50 ? "stroke-yellow-500" : "stroke-red-500"
                             )}
                             strokeWidth="4"
-                            strokeDasharray={`${(percentage/100) * (2 * Math.PI * 20)} ${2 * Math.PI * 20}`}
+                            strokeDasharray={`${(standard.correct/100) * (2 * Math.PI * 20)} ${2 * Math.PI * 20}`}
                             strokeLinecap="round"
                           />
                         </svg>
@@ -330,7 +337,7 @@ export function BenchmarkScores({ studentId }: { studentId: number }) {
                         </span>
                         {/* Add hover ratio display */}
                         <span className="absolute inset-0 flex items-center justify-center text-sm font-medium bg-zinc-900/80 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                          {ratio}
+                          {Math.round((percentage/100) * standard.tested)}/{standard.tested}
                         </span>
                       </div>
                       <span className="text-xs text-zinc-300 text-center">{standard.standard}</span>
