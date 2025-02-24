@@ -98,32 +98,6 @@ export default function SignIn() {
           >
             Sign in with Google
           </Button>
-          {process.env.NODE_ENV === 'development' && (
-            <Button
-              variant="outline"
-              className="mt-4"
-              onClick={async () => {
-                try {
-                  const res = await fetch('/api/dev/reset-auth', { 
-                    method: 'POST',
-                    credentials: 'include'
-                  });
-                  if (!res.ok) throw new Error('Reset failed');
-                  
-                  // Clear local storage as well
-                  localStorage.clear();
-                  sessionStorage.clear();
-                  
-                  // Force reload from server
-                  window.location.href = '/auth/signin';
-                } catch (error) {
-                  console.error('Reset failed:', error);
-                }
-              }}
-            >
-              Hard Reset Auth
-            </Button>
-          )}
           <p className="text-xs text-muted-foreground text-center">
             Only @eeisd.org accounts are allowed
           </p>
