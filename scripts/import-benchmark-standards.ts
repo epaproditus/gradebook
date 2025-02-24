@@ -34,6 +34,9 @@ async function importStandardScores() {
 
     // Map standards to their column indices
     const standardsMap = new Map<string, { correct: number, tested: number, mastery: number }>();
+
+    // Skip the first 3 columns (name, id, testcount)
+    const SKIP_COLUMNS = 3;
     
     headerRow.forEach((header, index) => {
       if (header.includes('(2012)')) {
@@ -41,13 +44,18 @@ async function importStandardScores() {
         const subHeader = subHeaderRow[index].trim();
         
         if (!standardsMap.has(standard)) {
-          standardsMap.set(standard, { correct: -1, tested: -1, mastery: -1 });
+          standardsMap.set(standard, { 
+            correct: -1, 
+            tested: -1, 
+            mastery: -1 
+          });
         }
         
         const indices = standardsMap.get(standard)!;
-        if (subHeader === 'Correct') indices.correct = index;
-        if (subHeader === 'Tested') indices.tested = index;
-        if (subHeader === 'Mastery') indices.mastery = index;
+        // Adjust indices to account for skipped columns
+        if (subHeader === 'Correct') indices.correct = index - SKIP_COLUMNS;
+        if (subHeader === 'Tested') indices.tested = index - SKIP_COLUMNS;
+        if (subHeader === 'Mastery') indices.mastery = index - SKIP_COLUMNS;
       }
     });
 
@@ -84,21 +92,31 @@ async function importStandardScores() {
         const rawCorrect = columns[indices.correct]?.trim() || '0';
         const rawTested = columns[indices.tested]?.trim() || '0';
         
-        // Convert to numbers
+        // First get the tested count
         const tested = parseInt(rawTested, 10);
         
-        // If rawCorrect is 100, it means 1 correct out of 1 tested
-        // If it's 50, it means 1 correct out of 2 tested, etc.
-        let correct = parseInt(rawCorrect, 10);
-        if (correct > 1) { // If value is greater than 1, treat as percentage
-          correct = Math.round((correct / 100) * tested);
+        // Get the percentage from rawCorrect
+        const percentageCorrect = parseInt(rawCorrect, 10);
+        
+        // Calculate actual correct answers based on tested count
+        let correct: number;
+        if (tested === 1) {
+          // If only 1 question, 100% = 1 correct, 50% = 0.5 correct, 0% = 0 correct
+          correct = percentageCorrect / 100;
+        } else if (tested === 2) {
+          // If 2 questions, 100% = 2 correct, 50% = 1 correct, 0% = 0 correct
+          correct = (percentageCorrect / 100) * 2;
+        } else {
+          // For other cases, calculate proportionally
+          correct = Math.round((percentageCorrect / 100) * tested);
         }
 
         if (tested > 0) {
           console.log(`Standard ${standard}:`, { 
+            percentageCorrect,
             correct, 
             tested,
-            percentage: Math.round((correct/tested) * 100)
+            calculatedPercentage: Math.round((correct/tested) * 100)
           });
           
           records.push({

@@ -43,12 +43,10 @@ async function importScores() {
         continue;
       }
 
-      const [lastName, firstName] = row.Student.split(',').map(s => s.trim());
-
-      // Check if student exists instead of upserting
+      // Skip any student creation/update, just check if they exist
       const { data: existingStudent } = await supabase
         .from('students')
-        .select('id')
+        .select('id, name')
         .eq('id', parseInt(row.LocalID))
         .single();
 
@@ -57,18 +55,9 @@ async function importScores() {
         continue;
       }
 
-      console.log(`Processing row ${rowCount}:`, {
-        Student: row.Student,
-        LocalID: row.LocalID,
-        Score: row.Score,
-        PerformanceLevel: determinePerformanceLevel(row)
-      });
+      console.log(`Processing ${existingStudent.name} (${row.LocalID}) - Score: ${row.Score}`);
 
-      if (!row.LocalID || !row.Score) {
-        console.log('Skipping row due to missing data');
-        continue;
-      }
-
+      // Add score record only
       records.push({
         student_id: parseInt(row.LocalID),
         test_date: new Date().toISOString().split('T')[0],

@@ -30,24 +30,22 @@ export default function SignIn() {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,  // Updated this line
+          redirectTo: `${window.location.origin}/auth/callback`,
           queryParams: {
-            prompt: 'select_account',
             access_type: 'offline',
+            prompt: 'consent',
             hd: 'eeisd.org'
-          },
-          skipBrowserRedirect: false
+          }
         }
       });
 
       if (error) throw error;
-      
     } catch (error) {
       console.error('Sign in error:', error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to initialize sign in"
+        description: "Failed to sign in. Please try again."
       });
     }
   };
@@ -100,6 +98,32 @@ export default function SignIn() {
           >
             Sign in with Google
           </Button>
+          {process.env.NODE_ENV === 'development' && (
+            <Button
+              variant="outline"
+              className="mt-4"
+              onClick={async () => {
+                try {
+                  const res = await fetch('/api/dev/reset-auth', { 
+                    method: 'POST',
+                    credentials: 'include'
+                  });
+                  if (!res.ok) throw new Error('Reset failed');
+                  
+                  // Clear local storage as well
+                  localStorage.clear();
+                  sessionStorage.clear();
+                  
+                  // Force reload from server
+                  window.location.href = '/auth/signin';
+                } catch (error) {
+                  console.error('Reset failed:', error);
+                }
+              }}
+            >
+              Hard Reset Auth
+            </Button>
+          )}
           <p className="text-xs text-muted-foreground text-center">
             Only @eeisd.org accounts are allowed
           </p>
