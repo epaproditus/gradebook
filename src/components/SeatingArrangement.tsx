@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { type Database } from '@/types/supabase';
-import Draggable from 'react-draggable'; // remains the same
+import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import { Button } from "@/components/ui/button";
-import * as Card from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -25,7 +25,6 @@ interface Student {
   id: string;
   name: string;
   averageGrade: number;
-  class_period: string;
 }
 
 interface Props {
@@ -43,44 +42,10 @@ interface SeatPosition {
 interface SeatItem {
   id: string;
   studentId: string | null;
-  position: SeatPosition;  // Changed from number to x/y coordinates
+  position: SeatPosition;
 }
 
-const getGradeColor = (grade: number): string => {
-  if (grade >= 90) return 'bg-green-100';
-  if (grade >= 80) return 'bg-blue-100';
-  if (grade >= 70) return 'bg-yellow-100';
-  return 'bg-red-100';
-};
-
-const DraggableSeat: React.FC<DraggableSeatProps> = ({ seat, index, renderSeat, onStop }) => {
-  const nodeRef = useRef<HTMLDivElement>(null);
-  return (
-    <Draggable
-      nodeRef={nodeRef}
-      position={seat.position}
-      onStop={(e, data) => onStop(e, data, index)}
-    >
-      <div ref={nodeRef} style={{ position: 'absolute' }}>
-        {renderSeat(seat)}
-      </div>
-    </Draggable>
-  );
-};
-
 const SeatingArrangement: React.FC<Props> = ({ students, rows = 5, cols = 6, selectedPeriod }) => {
-  // Add this debug log at the start
-  console.log('Raw student data:', {
-    totalStudents: students.length,
-    firstFewStudents: students.slice(0, 3).map(s => ({
-      id: s.id,
-      name: s.name,
-      period: s.class_period,
-      allFields: Object.keys(s)
-    })),
-    allPeriods: [...new Set(students.map(s => s.class_period))].filter(Boolean)
-  });
-
   const [seats, setSeats] = useState<SeatItem[]>([]);
   const [arrangementType, setArrangementType] = useState<'homogeneous' | 'heterogeneous'>('homogeneous');
   const [isSaving, setIsSaving] = useState(false);
@@ -100,136 +65,38 @@ const SeatingArrangement: React.FC<Props> = ({ students, rows = 5, cols = 6, sel
     setSeats(initialSeats);
   }, [rows, cols]);
 
-  // Update the period matching logic to be more lenient
-  const matchesPeriod = (studentPeriod: string | undefined, targetPeriod: string): boolean => {
-    if (!studentPeriod) {
-      console.log('No period for student', { studentPeriod, targetPeriod });
-      return false;
-    }
-    
-    // Normalize periods for comparison by taking just the number part
-    const extractNumber = (p: string) => p.replace(/[^0-9]/g, '');
-    
-    const studentNumber = extractNumber(studentPeriod);
-    const targetNumber = extractNumber(targetPeriod);
-    
-    console.log('Comparing periods:', {
-      studentPeriod,
-      targetPeriod,
-      studentNumber,
-      targetNumber,
-      matches: studentNumber === targetNumber
-    });
-
-    return studentNumber === targetNumber;
-  };
-
-  // Update the loadLayoutOrArrangeStudents function
-  const loadLayoutOrArrangeStudents = async () => {
-    try {
-      console.log('Loading layout for period:', {
-        selectedPeriod,
-        allStudents: students.map(s => ({
-          name: s.name,
-          period: s.class_period,
-          fields: Object.keys(s)
-        })),
-        studentCount: students.length
-      });
-
-      // Get students for this period
-      const periodStudents = students.filter(student => 
-        matchesPeriod(student.class_period, selectedPeriod)
-      );
-
-      console.log('Filtered students:', {
-        periodStudents: periodStudents.map(s => ({
-          name: s.name,
-          period: s.class_period
-        })),
-        count: periodStudents.length,
-        matchCriteria: selectedPeriod
-      });
-
-      // Load template first
-      const { data: templateData } = await supabase
-        .from('seating_layouts')
-        .select('*')
-        .eq('period', 'template')
-        .single();
-
-      if (templateData?.layout?.seats) {
-        // Use template layout positions with current students
-        const templateSeats = templateData.layout.seats;
-        const sortedStudents = [...periodStudents].sort((a, b) => 
-          b.averageGrade - a.averageGrade
-        );
-
-        const newSeats = templateSeats.map((seat, index) => ({
-          ...seat,
-          studentId: index < sortedStudents.length ? sortedStudents[index].id : null
-        }));
-
-        setSeats(newSeats);
-        setArrangementType('homogeneous');
-      } else {
-        calculateArrangement('homogeneous', periodStudents);
-      }
-    } catch (error) {
-      console.error('Error in loadLayoutOrArrangeStudents:', error);
-    }
-  };
-
   useEffect(() => {
-    if (students.length > 0) {
-      loadLayoutOrArrangeStudents();
+    const loadLayout = async () => {
+      try {
+        const { data } = await supabase
+          .from('seating_layouts')
+          .select('layout')
+          .eq('period', selectedPeriod)
+          .single();
+
+        if (data?.layout) {
+          const savedLayout = JSON.parse(data.layout);
+          if (savedLayout.seats) {
+            setSeats(savedLayout.seats);
+            setArrangementType(savedLayout.type);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading layout:', error);
+      }
+    };
+
+    if (selectedPeriod) {
+      loadLayout();
     }
-  }, [students, selectedPeriod, rows, cols]);
+  }, [selectedPeriod, supabase]);
 
-  // Add this helper function
-  const getCombinedStudents = (basePeriod: string): Student[] => {
-    const baseNumber = basePeriod.split(' ')[0];
-    
-    // Debug student data
-    console.log('Student check:', students.map(s => ({
-      name: s.name,
-      class_period: s.class_period,
-      period: s.period
-    })));
-
-    // Filter students using both period fields
-    const combinedStudents = students.filter(student => {
-      const studentPeriod = student.class_period || student.period;
-      const studentBasePeriod = studentPeriod?.split(' ')[0];
-      
-      console.log('Checking student:', {
-        name: student.name,
-        studentPeriod,
-        studentBasePeriod,
-        baseNumber,
-        matches: studentBasePeriod === baseNumber
-      });
-
-      return studentBasePeriod === baseNumber;
-    });
-
-    return combinedStudents;
-  };
-
-  const calculateArrangement = (type: 'homogeneous' | 'heterogeneous', studentList?: Student[]) => {
-    const studentsToArrange = studentList || getCombinedStudents(selectedPeriod.split(' ')[0]);
-    
-    console.log('Calculating arrangement:', {
-      type,
-      studentCount: studentsToArrange.length,
-      students: studentsToArrange.map(s => s.name)
-    });
-
-    const sortedStudents = [...studentsToArrange].sort((a, b) => {
+  const calculateArrangement = (type: 'homogeneous' | 'heterogeneous') => {
+    const sortedStudents = [...students].sort((a, b) => {
       if (type === 'homogeneous') {
         return b.averageGrade - a.averageGrade;
       }
-      return studentsToArrange.indexOf(a) % 2 === 0 
+      return students.indexOf(a) % 2 === 0 
         ? b.averageGrade - a.averageGrade 
         : a.averageGrade - b.averageGrade;
     });
@@ -238,59 +105,53 @@ const SeatingArrangement: React.FC<Props> = ({ students, rows = 5, cols = 6, sel
       id: `seat-${index}`,
       studentId: index < sortedStudents.length ? sortedStudents[index].id : null,
       position: {
-        x: (index % cols) * 150,
-        y: Math.floor(index / cols) * 150
+        x: (index % cols) * 150,  // Space seats out horizontally
+        y: Math.floor(index / cols) * 150  // Space seats out vertically
       }
     }));
-
     setSeats(newSeats);
   };
 
   const saveLayout = async () => {
     try {
       setIsSaving(true);
-      const { basePeriod } = getPeriodInfo(selectedPeriod);
-      
-      const layoutData = {
-        period: basePeriod, // Always save under base period
-        layout: {
-          type: arrangementType,
-          seats: seats.map(seat => ({
-            id: seat.id,
-            studentId: seat.studentId,
-            position: seat.position
-          }))
-        }
-      };
-
-      console.log('Saving layout:', layoutData);
-
-      const { error } = await supabase
+      await supabase
         .from('seating_layouts')
-        .upsert(layoutData, {
-          onConflict: 'period',
-          target: ['period']
+        .upsert({
+          period: selectedPeriod,
+          layout: JSON.stringify({
+            seats,
+            type: arrangementType
+          }),
+          updated_at: new Date().toISOString(),
         });
-
-      if (error) {
-        console.error('Save error:', error);
-        alert('Failed to save layout');
-        return;
-      }
-
-      alert('Layout saved successfully!');
     } catch (error) {
       console.error('Error saving layout:', error);
-      alert('Failed to save layout');
     } finally {
       setIsSaving(false);
     }
   };
 
-  // onStop handler updates seat position in state
-  const handleDragStop = (e: any, data: { x: number; y: number }, index: number) => {
+  const onDragEnd = (result: DropResult) => {
+    if (!result.destination) return;
+
+    const { source, destination } = result;
+    const sourceIndex = parseInt(source.droppableId.replace('droppable-', ''));
+    const destIndex = parseInt(destination.droppableId.replace('droppable-', ''));
+    
     const newSeats = [...seats];
-    newSeats[index] = { ...newSeats[index], position: { x: data.x, y: data.y } };
+    
+    // Update positions based on drop location
+    const updatedPosition = {
+      x: destIndex % cols * 150,
+      y: Math.floor(destIndex / cols) * 150
+    };
+    
+    // Swap students between seats
+    const tempStudentId = newSeats[sourceIndex].studentId;
+    newSeats[sourceIndex].studentId = newSeats[destIndex].studentId;
+    newSeats[destIndex].studentId = tempStudentId;
+    
     setSeats(newSeats);
   };
 
@@ -298,28 +159,28 @@ const SeatingArrangement: React.FC<Props> = ({ students, rows = 5, cols = 6, sel
     const student = seat.studentId ? studentsMap.get(seat.studentId) : null;
 
     return (
-      <Card.Card key={seat.id} className="h-24 w-24">
+      <Card key={seat.id} className="h-24 w-24">
         <div className="w-full h-full flex items-center justify-center">
-            {student ? (
+          {student ? (
             <TooltipProvider>
               <Tooltip>
-              <TooltipTrigger className="w-full h-full">
-                <div className={`w-full h-full p-2 rounded ${getGradeColor(student.averageGrade)}`}>
-                <div className="text-sm font-medium">{student.name}</div>
-                <div className="text-xs opacity-75">{student.averageGrade.toFixed(1)}%</div>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="font-semibold">{student.name}</p>
-                <p className="text-sm">Average: {student.averageGrade.toFixed(1)}%</p>
-              </TooltipContent>
+                <TooltipTrigger>
+                  <div className="text-center">
+                    <div>{student.name}</div>
+                    <div>{student.averageGrade.toFixed(1)}%</div>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{student.name}</p>
+                  <p>Average: {student.averageGrade.toFixed(1)}%</p>
+                </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            ) : (
-            <div className="text-gray-400 text-sm">Empty</div>
-            )}
+          ) : (
+            <span className="text-gray-400">Empty</span>
+          )}
         </div>
-      </Card.Card>
+      </Card>
     );
   };
 
@@ -357,19 +218,69 @@ const SeatingArrangement: React.FC<Props> = ({ students, rows = 5, cols = 6, sel
         </Button>
       </div>
 
-      <div className="relative w-full h-[600px] border rounded-lg bg-secondary/20" style={{ minWidth: cols * 200 }}>
-        {seats.map((seat, index) => (
-          <DraggableSeat 
-            key={seat.id}
-            seat={seat}
-            index={index}
-            renderSeat={renderSeat}
-            onStop={handleDragStop}
-          />
-        ))}
-      </div>
+      <DragDropContext onDragEnd={onDragEnd}>
+        <div 
+          className="relative w-full h-[600px] border rounded-lg bg-secondary/20" // Made container fixed height
+          style={{ minWidth: cols * 200 }} // Increased from 150 to 200 to account for larger cards
+        >
+          {seats.map((seat, index) => (
+            <Droppable 
+              key={seat.id} 
+              droppableId={`droppable-${index}`}
+              isDropDisabled={false}
+            >
+              {(provided, snapshot) => (
+                <div
+                  ref={provided.innerRef}
+                  {...provided.droppableProps}
+                  style={{
+                    position: 'absolute',
+                    left: seat.position.x,
+                    top: seat.position.y,
+                    transition: 'all 0.2s ease',
+                    padding: '8px' // Add some padding between cards
+                  }}
+                  className={cn(
+                    "rounded border-2",
+                    snapshot.isDraggingOver ? "border-primary" : "border-transparent"
+                  )}
+                >
+                  {seat.studentId && (
+                    <Draggable
+                      draggableId={`draggable-${seat.id}`}
+                      index={index}
+                    >
+                      {(provided, snapshot) => (
+                        <div
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          {...provided.dragHandleProps}
+                          className={cn(
+                            snapshot.isDragging ? "z-50" : ""
+                          )}
+                        >
+                          {renderSeat(seat)}
+                        </div>
+                      )}
+                    </Draggable>
+                  )}
+                  {!seat.studentId && renderSeat(seat)}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
+          ))}
+        </div>
+      </DragDropContext>
     </div>
   );
+};
+
+const getGradeColor = (grade: number): string => {
+  if (grade >= 90) return 'bg-green-100';
+  if (grade >= 80) return 'bg-blue-100';
+  if (grade >= 70) return 'bg-yellow-100';
+  return 'bg-red-100';
 };
 
 export default SeatingArrangement;

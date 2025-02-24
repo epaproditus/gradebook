@@ -41,7 +41,7 @@ interface Course {
 }
 
 const GoogleClassroom: FC = () => {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<string | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<string>('');  // Add this
@@ -162,9 +162,44 @@ const GoogleClassroom: FC = () => {
     }
   };
 
+  // Add this new function to check scopes
+  const checkRequiredScopes = (accessToken: string): Promise<boolean> => {
+    return fetch('/api/classroom/verify-scopes', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    })
+    .then(res => res.json())
+    .then(data => data.hasRequiredScopes)
+    .catch(() => false);
+  };
+
+  useEffect(() => {
+    const initializeClassroom = async () => {
+      if (status === "authenticated" && session?.accessToken) {
+        const hasScopes = await checkRequiredScopes(session.accessToken as string);
+        if (!hasScopes) {
+          toast({
+            variant: "destructive",
+            title: "Access Error",
+            description: "Additional Google Classroom permissions are required. Please sign out and sign in again."
+          });
+          return;
+        }
+        fetchCourses();
+      }
+    };
+
+    initializeClassroom();
+  }, [status, session]);
+
+  // Replace the handleAuth function with this:
   const handleAuth = async () => {
     if (!session) {
-      await signIn('google');
+      // Use the signIn function with specific scopes if needed
+      await signIn('google', {
+        callbackUrl: window.location.href,
+      });
     }
   };
 
@@ -180,6 +215,11 @@ const GoogleClassroom: FC = () => {
       fetchClasswork(selectedCourse);
     }
   }, [session, selectedCourse]);
+
+  // Update the render logic
+  if (status === "loading") {
+    return <div className="p-6">Loading...</div>;
+  }
 
   return (
     <div className="p-6">
