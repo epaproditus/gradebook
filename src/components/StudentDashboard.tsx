@@ -2,36 +2,48 @@
 
 import { useEffect, useState } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { format, formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Assignment } from '@/types/gradebook';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { motion } from 'framer-motion';
 import { 
-  ChevronRight, 
-  BookOpen, 
-  Brain, 
-  GraduationCap, 
-  Info, 
-  Flag, 
   Calendar, 
-  BookmarkCheck 
+  Flag, 
+  Clock, 
+  Award, 
+  Target, 
+  Zap, 
+  ChevronRight,
+  BookOpen,
+  Brain,
+  GraduationCap,
+  Info
 } from 'lucide-react';
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { calculateDailyPoints, calculateAssessmentPoints, calculateTotal, calculateWeightedAverage, calculateStudentAverage } from '@/lib/gradeCalculations';
+import { 
+  calculateDailyPoints, 
+  calculateAssessmentPoints, 
+  calculateTotal, 
+  calculateStudentAverage 
+} from '@/lib/gradeCalculations';
 import { SignOutButton } from './SignOutButton';
-import { formatGradeDisplay, getGradeDisplayClass } from '@/lib/displayFormatters';
-import { Button } from '@/components/ui/button';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { useToast } from "@/components/ui/use-toast";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { formatGradeDisplay, getGradeDisplayClass } from '@/lib/displayFormatters';
+import { Button } from "@/components/ui/button";  // Add this
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";  // Add this
+import { GradeBar } from './GradeBar';
+import { AvatarPicker } from './AvatarPicker';
 
 interface StudentData {
   id: number;
   name: string;
   period: string;
   google_email: string;
+  avatar_options?: string;
 }
 
 interface GradeWithTimestamp {
@@ -195,34 +207,100 @@ export function StudentDashboard() {
   };
 
   const getAssignmentDisplay = (assignment: Assignment) => {
-    const grade = grades[assignment.id];
-    const extra = extraPoints[assignment.id];
-    const total = calculateTotal(grade, extra);
-
-    if (total === null) {
+    const grade = parseInt(grades[assignment.id] || '0');
+    const extra = parseInt(extraPoints[assignment.id] || '0'); // Simplified key for student view
+    
+    if (grade === 0 && extra === 0) {
       return <span className="text-muted-foreground italic">-</span>;
     }
 
-    if (extra && parseInt(extra) > 0) {
-      return (
-        <>
-          <span className={getGradeDisplayClass(parseInt(grade || '0'))}>
-            {grade}
-          </span>
-          <span className="text-sm text-muted-foreground">+</span>
-          <span className="text-lg text-green-600">{extra}</span>
-          <span className="text-sm text-muted-foreground">=</span>
-          <span className={getGradeDisplayClass(total)}>{total} pts</span>
-        </>
-      );
-    }
+    return (
+      <div className="w-full">
+        <GradeBar 
+          initialGrade={grade} 
+          extraPoints={extra}
+        />
+      </div>
+    );
+  };
+
+  const calculatePercentage = (value: number, total: number) => {
+    return (value / total) * 100;
+  };
+
+  const getProgressColor = (score: number, type: 'overall' | 'daily' | 'test' = 'overall') => {
+    if (score >= 90) return 'stroke-emerald-500';
+    if (score >= 70) return 'stroke-yellow-500';
+    if (score >= 50) return 'stroke-orange-500';
+    return 'stroke-red-500';
+  };
+
+  // Update the circle calculations for proper stroke length
+  const calculateCircleStroke = (percentage: number, radius: number) => {
+    const normalizedPercentage = Math.min(100, Math.max(0, percentage));
+    const circumference = 2 * Math.PI * radius;
+    const strokeLength = (normalizedPercentage / 100) * circumference;
+    return `${strokeLength} ${circumference}`;
+  };
+
+  // Add assignment toggle function
+  const toggleAssignment = (assignmentId: string) => {
+    setExpandedAssignments(prev => {
+      const next = new Set(prev);
+      if (next.has(assignmentId)) {
+        next.delete(assignmentId);
+      } else {
+        next.add(assignmentId);
+      }
+      return next;
+    });
+  };
+
+  // Update circle calculations to show both background and progress circles
+  const getCircleStyles = (percentage: number, radius: number) => {
+    const circumference = 2 * Math.PI * radius;
+    const strokeDashoffset = ((100 - percentage) / 100) * circumference;
+    return {
+      strokeDasharray: `${circumference} ${circumference}`,
+      strokeDashoffset: strokeDashoffset
+    };
+  };
+
+  const handleAvatarSave = async (avatarOptions: any) => {
+    if (!student) return;
     
-    return <span className={getGradeDisplayClass(total)}>{total} pts</span>;
+    try {
+      const { error } = await supabase
+        .from('students')
+        .update({ 
+          avatar_options: JSON.stringify(avatarOptions) 
+        })
+        .eq('id', student.id);
+
+      if (error) throw error;
+
+      setStudent(prev => prev ? {
+        ...prev,
+        avatar_options: JSON.stringify(avatarOptions)
+      } : null);
+
+      toast({
+        title: "Avatar Updated",
+        description: "Your avatar has been saved!"
+      });
+    } catch (error) {
+      console.error('Error updating avatar:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to update avatar"
+      });
+    }
   };
 
   if (!student) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-black text-white">
         Loading...
       </div>
     );
@@ -250,207 +328,213 @@ export function StudentDashboard() {
   });
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
-      <div className="container mx-auto py-8 px-4 space-y-8">
-        {/* Header */}
-        <div className="flex justify-between items-center">
-          <div className="flex-1">
-            <h1 className="text-3xl font-bold text-slate-900">
-              {student?.name}'s Dashboard
-            </h1>
-            <p className="text-slate-500 mt-1">Period {student?.period}</p>
-          </div>
-          <SignOutButton />
+    // Update the outer container to be truly full-screen
+    <div className="fixed inset-0 bg-black">
+      <div className="min-h-screen bg-black text-white pt-20"> {/* Added top padding */}
+        {/* Floating Navigation */}
+        <div className="fixed top-6 right-6 z-50 flex gap-4">
+          <SignOutButton className="bg-zinc-900 text-white hover:bg-zinc-800" />
         </div>
 
-        {/* Notice Banner */}
-        <Alert className="bg-amber-50 border-amber-200 shadow-sm">
-          <Info className="h-5 w-5 text-amber-600" />
-          <AlertDescription className="text-base font-medium text-amber-800">
-            Beta version - Please verify grades with your teacher.
-          </AlertDescription>
-        </Alert>
+        {/* Update the main container to remove default margins */}
+        <div className="grid grid-cols-12 gap-4 p-6">
+          {/* Side Stats Panel - remove container margins */}
+          <div className="col-span-3 bg-zinc-900 p-6 relative h-fit sticky top-6"> {/* Added sticky positioning */}
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500" />
+            
+            <div className="space-y-8">
+              <div className="flex items-center gap-6">
+                <AvatarPicker
+                  currentAvatar={student?.avatar_options || ''}
+                  onSave={handleAvatarSave}
+                />
+                <div>
+                  <h1 className="text-4xl font-bold tracking-tight">{student?.name}</h1>
+                  <p className="text-zinc-400">Period {student?.period}</p>
+                </div>
+              </div>
 
-        {/* Grade Overview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Daily Work Card */}
-          <Card className="bg-white shadow-lg border-0 overflow-hidden">
-            <div className="absolute top-0 left-0 w-1 h-full bg-blue-500" />
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <BookOpen className="h-5 w-5 text-blue-500" />
-                <CardTitle className="text-lg font-semibold">Daily Work</CardTitle>
+              {/* Update the Overall Grade Circle */}
+              <div className="relative w-48 h-48 mx-auto">
+                <svg className="w-full h-full transform -rotate-90">
+                  <circle
+                    cx="96"
+                    cy="96"
+                    r="88"
+                    className="stroke-zinc-800 fill-none"
+                    strokeWidth="8"
+                  />
+                  <circle
+                    cx="96"
+                    cy="96"
+                    r="88"
+                    className={`${getProgressColor(totalGrade)} stroke-current fill-none transition-all duration-1000`}
+                    strokeWidth="8"
+                    {...getCircleStyles(totalGrade, 88)}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
+                  <span className="text-5xl font-bold">{totalGrade}%</span>
+                  <p className="text-sm text-zinc-400 mt-1">Overall Grade</p>
+                </div>
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="mt-2">
-                <span className="text-3xl font-bold text-slate-900">{dailyPoints}</span>
-                <span className="text-lg text-slate-500">/80</span>
-              </div>
-            </CardContent>
-          </Card>
 
-          {/* Tests Card */}
-          <Card className="bg-white shadow-lg border-0 overflow-hidden">
-            <div className="absolute top-0 left-0 w-1 h-full bg-purple-500" />
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <Brain className="h-5 w-5 text-purple-500" />
-                <CardTitle className="text-lg font-semibold">Tests</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="mt-2">
-                <span className="text-3xl font-bold text-slate-900">{assessmentPoints}</span>
-                <span className="text-lg text-slate-500">/20</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Overall Grade Card */}
-          <Card className="bg-white shadow-lg border-0 overflow-hidden">
-            <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500" />
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <GraduationCap className="h-5 w-5 text-emerald-500" />
-                <CardTitle className="text-lg font-semibold">Current Grade</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="mt-2">
-                <span className="text-4xl font-bold text-emerald-600">{totalGrade}%</span>
-                <span className="text-sm text-slate-500">overall average</span>
-                {lastUpdated && (
-                  <div className="text-xs text-slate-400 mt-2 pt-2 border-t border-emerald-200/50">
-                    Last updated: {format(lastUpdated, 'PPP')} 
-                    <br />
-                    ({formatDistanceToNow(lastUpdated, { addSuffix: true })})
+              {/* Quick Stats with Percentage Circles */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Daily Work Circle */}
+                <div className="bg-zinc-800 rounded-xl p-4">
+                  <div className="relative w-24 h-24 mx-auto mb-2">
+                    <svg className="w-full h-full transform -rotate-90">
+                      <circle
+                        cx="48"
+                        cy="48"
+                        r="44"
+                        className="stroke-zinc-700 fill-none"
+                        strokeWidth="6"
+                      />
+                      <circle
+                        cx="48"
+                        cy="48"
+                        r="44"
+                        className={`${getProgressColor(calculatePercentage(dailyPoints, 80), 'daily')} stroke-current fill-none transition-all duration-1000`}
+                        strokeWidth="6"
+                        {...getCircleStyles(calculatePercentage(dailyPoints, 80), 44)}
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
+                      <span className="text-2xl font-bold">{Math.round(calculatePercentage(dailyPoints, 80))}%</span>
+                    </div>
                   </div>
-                )}
+                  <div className="text-center">
+                    <div className="text-sm text-zinc-400">Daily Work</div>
+                    <div className="text-sm font-medium">{dailyPoints}/80</div>
+                  </div>
+                </div>
+
+                {/* Tests Circle */}
+                <div className="bg-zinc-800 rounded-xl p-4">
+                  <div className="relative w-24 h-24 mx-auto mb-2">
+                    <svg className="w-full h-full transform -rotate-90">
+                      <circle
+                        cx="48"
+                        cy="48"
+                        r="44"
+                        className="stroke-zinc-700 fill-none"
+                        strokeWidth="6"
+                      />
+                      <circle
+                        cx="48"
+                        cy="48"
+                        r="44"
+                        className={`${getProgressColor(calculatePercentage(assessmentPoints, 20), 'test')} stroke-current fill-none transition-all duration-1000`}
+                        strokeWidth="6"
+                        {...getCircleStyles(calculatePercentage(assessmentPoints, 20), 44)}
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
+                      <span className="text-2xl font-bold">{Math.round(calculatePercentage(assessmentPoints, 20))}%</span>
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-sm text-zinc-400">Tests</div>
+                    <div className="text-sm font-medium">{assessmentPoints}/20</div>
+                  </div>
+                </div>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </div>
 
-        {/* Assignment List */}
-        <div className="space-y-4">
-          {assignments.map(assignment => {
-            const grade = grades[assignment.id];
-            const status = getAssignmentStatus(assignment, grade);
-            const extraPoint = extraPoints[assignment.id];
-            const total = calculateTotal(grades[assignment.id], extraPoints[assignment.id] || '0');
-            const assignmentTags = tags.filter(t => t.assignment_id === assignment.id);
-            const isExpanded = expandedAssignments.has(assignment.id);
-
-            return (
-              <Collapsible
-                key={assignment.id}
-                open={isExpanded}
-                onOpenChange={(open) => {
-                  setExpandedAssignments(prev => {
-                    const next = new Set(prev);
-                    if (open) {
-                      next.add(assignment.id);
-                    } else {
-                      next.delete(assignment.id);
-                    }
-                    return next;
-                  });
-                }}
-              >
-                <Card className={cn(
-                  "transition-colors",
-                  showColors && assignment.type === 'Daily' && "bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-100 border-blue-200 hover:shadow-md",
-                  showColors && assignment.type === 'Assessment' && "bg-gradient-to-r from-purple-50 via-pink-50 to-purple-100 border-purple-200 hover:shadow-md"
-                )}>
-                  <CollapsibleTrigger className="w-full">
-                    <CardHeader className="pb-2">
-                      <div className="flex justify-between items-start">
-                        <div className="flex items-center gap-2">
-                          <ChevronRight className={cn(
-                            "h-4 w-4 transition-transform",
-                            isExpanded && "transform rotate-90"
-                          )} />
+          {/* Main Content Area with Timeline */}
+          <div className="col-span-9 space-y-6">
+            <div className="grid grid-cols-2 gap-4"> {/* Changed to grid */}
+              {assignments.map((assignment, index) => (
+                <motion.div
+                  key={assignment.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                  className="group h-full" // Added h-full
+                >
+                  <div 
+                    className="bg-zinc-900 rounded-2xl p-6 hover:bg-zinc-800 transition-all duration-300 cursor-pointer h-full flex flex-col"
+                    onClick={() => toggleAssignment(assignment.id)}
+                  >
+                    <div className="flex flex-col h-full">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center">
+                            {assignment.type === 'Daily' ? (
+                              <Zap className="w-5 h-5 text-blue-500" />
+                            ) : (
+                              <Target className="w-5 h-5 text-purple-500" />
+                            )}
+                          </div>
                           <div>
-                            <CardTitle className="text-lg">{assignment.name}</CardTitle>
-                            <div className="text-sm text-muted-foreground">
-                              {format(assignment.date, 'PPP')} · {assignment.type}
+                            <h3 className="text-lg font-semibold">{assignment.name}</h3>
+                            <div className="flex items-center gap-2 text-zinc-400 text-sm">
+                              <Calendar className="w-3 h-3" />
+                              <span>{format(assignment.date, 'MMM d')}</span>
                             </div>
                           </div>
                         </div>
-                        {grade && (
-                          <div className="text-right">
-                            <div className="text-2xl font-bold flex items-baseline justify-end gap-1">
-                              {getAssignmentDisplay(assignment)}
-                            </div>
+                      </div>
+
+                      <div className="flex items-center justify-between mt-auto">
+                        {grades[assignment.id] && (
+                          <div className="flex-1 mr-4"> {/* Added flex-1 and margin */}
+                            {getAssignmentDisplay(assignment)}
                           </div>
                         )}
-                      </div>
-                    </CardHeader>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <CardContent className="pt-0 space-y-4 relative">
-                      {/* Assignment details */}
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <p className="text-muted-foreground">Due Date</p>
-                          <p className="font-medium">{format(assignment.date, 'PPP')}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Subject</p>
-                          <p className="font-medium">{assignment.subject}</p>
-                        </div>
+                        <ChevronRight className={cn(
+                          "w-4 h-4 shrink-0 transition-transform", // Added shrink-0
+                          expandedAssignments.has(assignment.id) && "transform rotate-90"
+                        )} />
                       </div>
 
-                      {/* Tags */}
-                      {assignmentTags.length > 0 && (
-                        <div className="flex gap-2">
-                          {assignmentTags.map(tag => (
-                            <span 
-                              key={tag.id}
-                              className={cn(
-                                "text-xs px-2 py-1 rounded-full",
-                                tag.tag_type === 'absent' && "bg-red-100 text-red-700",
-                                tag.tag_type === 'late' && "bg-yellow-100 text-yellow-700",
-                                tag.tag_type === 'incomplete' && "bg-orange-100 text-orange-700",
-                                tag.tag_type === 'retest' && "bg-blue-100 text-blue-700"
-                              )}
-                            >
-                              {tag.tag_type.charAt(0).toUpperCase() + tag.tag_type.slice(1)}
-                            </span>
-                          ))}
+                      {expandedAssignments.has(assignment.id) && (
+                        <div className="mt-4 pt-4 border-t border-zinc-800">
+                          <div className="flex justify-end">
+                            {recentlyFlagged.has(assignment.id) ? (
+                              <span className="text-sm text-zinc-400">
+                                Flagged for review
+                              </span>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleFlag(assignment.id);
+                                }}
+                                className="text-zinc-400 hover:text-white"
+                              >
+                                <Flag className="h-4 w-4 mr-2" />
+                                Flag for review
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       )}
-
-                      {/* Flag Button */}
-                      <div className="absolute bottom-4 right-4">
-                        {recentlyFlagged.has(assignment.id) ? (
-                          <span className="text-sm text-muted-foreground animate-fade-in">
-                            Teacher will review
-                          </span>
-                        ) : (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleFlag(assignment.id);
-                            }}
-                            className="text-muted-foreground hover:text-primary"
-                          >
-                            <Flag className="h-4 w-4 mr-2" />
-                            Flag for review
-                          </Button>
-                        )}
-                      </div>
-                    </CardContent>
-                  </CollapsibleContent>
-                </Card>
-              </Collapsible>
-            );
-          })}
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
         </div>
+
+        {/* Last Updated Indicator */}
+        {lastUpdated && (
+          <div className="fixed bottom-6 left-6 flex items-center gap-2 text-zinc-500 text-sm">
+            <Clock className="w-4 h-4" />
+            <span>Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}</span>
+          </div>
+        )}
       </div>
     </div>
   );
 }
+
