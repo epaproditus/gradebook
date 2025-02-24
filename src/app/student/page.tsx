@@ -1,13 +1,26 @@
 import { StudentDashboard } from '@/components/StudentDashboard';
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
 
-// Add debug logging to see student data as it's loaded:
+export default async function StudentPage() {
+  // Initialize Supabase client
+  const supabase = createServerComponentClient({ cookies });
 
-console.log('Loading student data:', {
-  students,
-  selectedPeriod,
-  rawStudentsData 
-});
+  // Get session first
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    return {
+      redirect: {
+        destination: '/auth/signin',
+        permanent: false,
+      },
+    };
+  }
 
-export default function StudentPage() {
-  return <StudentDashboard />;
+  // Now that we know we have a session, render the dashboard
+  return (
+    <div>
+      <StudentDashboard />
+    </div>
+  );
 }

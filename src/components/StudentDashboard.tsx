@@ -5,14 +5,21 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { format, formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { STATUS_COLORS, TYPE_COLORS, SUBJECT_COLORS } from '@/lib/constants';
 import { Assignment } from '@/types/gradebook';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronRight } from 'lucide-react';
+import { 
+  ChevronRight, 
+  BookOpen, 
+  Brain, 
+  GraduationCap, 
+  Info, 
+  Flag, 
+  Calendar, 
+  BookmarkCheck 
+} from 'lucide-react';
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Info, Flag } from 'lucide-react';
 import { calculateDailyPoints, calculateAssessmentPoints, calculateTotal, calculateWeightedAverage, calculateStudentAverage } from '@/lib/gradeCalculations';
 import { SignOutButton } from './SignOutButton';
 import { formatGradeDisplay, getGradeDisplayClass } from '@/lib/displayFormatters';
@@ -243,196 +250,206 @@ export function StudentDashboard() {
   });
 
   return (
-    <div className="container mx-auto py-8 space-y-6">
-      <div className="flex justify-between items-center">
-        <Alert className="flex-1 bg-yellow-50 border-yellow-200">
-          <Info className="h-5 w-5 text-yellow-600" />
-          <AlertDescription className="text-base font-medium text-yellow-800">
-            👋 Welcome! This dashboard is in development. Please verify your grades with me as features are being added.
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+      <div className="container mx-auto py-8 px-4 space-y-8">
+        {/* Header */}
+        <div className="flex justify-between items-center">
+          <div className="flex-1">
+            <h1 className="text-3xl font-bold text-slate-900">
+              {student?.name}'s Dashboard
+            </h1>
+            <p className="text-slate-500 mt-1">Period {student?.period}</p>
+          </div>
+          <SignOutButton />
+        </div>
+
+        {/* Notice Banner */}
+        <Alert className="bg-amber-50 border-amber-200 shadow-sm">
+          <Info className="h-5 w-5 text-amber-600" />
+          <AlertDescription className="text-base font-medium text-amber-800">
+            Beta version - Please verify grades with your teacher.
           </AlertDescription>
         </Alert>
-        <SignOutButton />
-      </div>
-      {/* Color Toggle */}
-      <div className="flex items-center space-x-2">
-        <Switch
-          id="color-mode"
-          checked={showColors}
-          onCheckedChange={setShowColors}
-        />
-        <Label htmlFor="color-mode">Show Assignment Type Colors</Label>
-      </div>
 
-      {/* Updated Header Cards with bigger total grade */}
-      <div className="grid grid-cols-3 gap-4">
-        <Card className={cn(
-          "transition-colors",
-          showColors && "bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 border-blue-200 hover:shadow-md"
-        )}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Daily Work</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col items-center">
-              <div className="text-2xl font-bold">{dailyPoints} / 80</div>
-              <div className="text-xs text-muted-foreground mt-1">points possible</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className={cn(
-          "transition-colors",
-          showColors && "bg-gradient-to-br from-purple-50 via-pink-50 to-purple-100 border-purple-200 hover:shadow-md"
-        )}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Tests</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col items-center">
-              <div className="text-2xl font-bold">{assessmentPoints} / 20</div>
-              <div className="text-xs text-muted-foreground mt-1">points possible</div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className={cn(
-          "transition-colors relative",
-          showColors && "bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100 border-emerald-200 hover:shadow-md"
-        )}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Current Grade</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col items-center">
-              <div className="text-4xl font-bold text-emerald-600">{totalGrade}%</div>
-              <div className="text-sm text-muted-foreground mt-1">overall average</div>
-              {lastUpdated && (
-                <div className="text-xs text-muted-foreground/80 mt-2 pt-2 border-t border-emerald-200/50">
-                  Last updated: {format(lastUpdated, 'PPP')} 
-                  <br />
-                  ({formatDistanceToNow(lastUpdated, { addSuffix: true })})
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+        {/* Grade Overview Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Daily Work Card */}
+          <Card className="bg-white shadow-lg border-0 overflow-hidden">
+            <div className="absolute top-0 left-0 w-1 h-full bg-blue-500" />
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <BookOpen className="h-5 w-5 text-blue-500" />
+                <CardTitle className="text-lg font-semibold">Daily Work</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="mt-2">
+                <span className="text-3xl font-bold text-slate-900">{dailyPoints}</span>
+                <span className="text-lg text-slate-500">/80</span>
+              </div>
+            </CardContent>
+          </Card>
 
-      {/* Assignment List */}
-      <div className="space-y-4">
-        {assignments.map(assignment => {
-          const grade = grades[assignment.id];
-          const status = getAssignmentStatus(assignment, grade);
-          const extraPoint = extraPoints[assignment.id];
-          const total = calculateTotal(grades[assignment.id], extraPoints[assignment.id] || '0');
-          const assignmentTags = tags.filter(t => t.assignment_id === assignment.id);
-          const isExpanded = expandedAssignments.has(assignment.id);
+          {/* Tests Card */}
+          <Card className="bg-white shadow-lg border-0 overflow-hidden">
+            <div className="absolute top-0 left-0 w-1 h-full bg-purple-500" />
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <Brain className="h-5 w-5 text-purple-500" />
+                <CardTitle className="text-lg font-semibold">Tests</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="mt-2">
+                <span className="text-3xl font-bold text-slate-900">{assessmentPoints}</span>
+                <span className="text-lg text-slate-500">/20</span>
+              </div>
+            </CardContent>
+          </Card>
 
-          return (
-            <Collapsible
-              key={assignment.id}
-              open={isExpanded}
-              onOpenChange={(open) => {
-                setExpandedAssignments(prev => {
-                  const next = new Set(prev);
-                  if (open) {
-                    next.add(assignment.id);
-                  } else {
-                    next.delete(assignment.id);
-                  }
-                  return next;
-                });
-              }}
-            >
-              <Card className={cn(
-                "transition-colors",
-                showColors && assignment.type === 'Daily' && "bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-100 border-blue-200 hover:shadow-md",
-                showColors && assignment.type === 'Assessment' && "bg-gradient-to-r from-purple-50 via-pink-50 to-purple-100 border-purple-200 hover:shadow-md"
-              )}>
-                <CollapsibleTrigger className="w-full">
-                  <CardHeader className="pb-2">
-                    <div className="flex justify-between items-start">
-                      <div className="flex items-center gap-2">
-                        <ChevronRight className={cn(
-                          "h-4 w-4 transition-transform",
-                          isExpanded && "transform rotate-90"
-                        )} />
+          {/* Overall Grade Card */}
+          <Card className="bg-white shadow-lg border-0 overflow-hidden">
+            <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500" />
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <GraduationCap className="h-5 w-5 text-emerald-500" />
+                <CardTitle className="text-lg font-semibold">Current Grade</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="mt-2">
+                <span className="text-4xl font-bold text-emerald-600">{totalGrade}%</span>
+                <span className="text-sm text-slate-500">overall average</span>
+                {lastUpdated && (
+                  <div className="text-xs text-slate-400 mt-2 pt-2 border-t border-emerald-200/50">
+                    Last updated: {format(lastUpdated, 'PPP')} 
+                    <br />
+                    ({formatDistanceToNow(lastUpdated, { addSuffix: true })})
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Assignment List */}
+        <div className="space-y-4">
+          {assignments.map(assignment => {
+            const grade = grades[assignment.id];
+            const status = getAssignmentStatus(assignment, grade);
+            const extraPoint = extraPoints[assignment.id];
+            const total = calculateTotal(grades[assignment.id], extraPoints[assignment.id] || '0');
+            const assignmentTags = tags.filter(t => t.assignment_id === assignment.id);
+            const isExpanded = expandedAssignments.has(assignment.id);
+
+            return (
+              <Collapsible
+                key={assignment.id}
+                open={isExpanded}
+                onOpenChange={(open) => {
+                  setExpandedAssignments(prev => {
+                    const next = new Set(prev);
+                    if (open) {
+                      next.add(assignment.id);
+                    } else {
+                      next.delete(assignment.id);
+                    }
+                    return next;
+                  });
+                }}
+              >
+                <Card className={cn(
+                  "transition-colors",
+                  showColors && assignment.type === 'Daily' && "bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-100 border-blue-200 hover:shadow-md",
+                  showColors && assignment.type === 'Assessment' && "bg-gradient-to-r from-purple-50 via-pink-50 to-purple-100 border-purple-200 hover:shadow-md"
+                )}>
+                  <CollapsibleTrigger className="w-full">
+                    <CardHeader className="pb-2">
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center gap-2">
+                          <ChevronRight className={cn(
+                            "h-4 w-4 transition-transform",
+                            isExpanded && "transform rotate-90"
+                          )} />
+                          <div>
+                            <CardTitle className="text-lg">{assignment.name}</CardTitle>
+                            <div className="text-sm text-muted-foreground">
+                              {format(assignment.date, 'PPP')} · {assignment.type}
+                            </div>
+                          </div>
+                        </div>
+                        {grade && (
+                          <div className="text-right">
+                            <div className="text-2xl font-bold flex items-baseline justify-end gap-1">
+                              {getAssignmentDisplay(assignment)}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </CardHeader>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <CardContent className="pt-0 space-y-4 relative">
+                      {/* Assignment details */}
+                      <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
-                          <CardTitle className="text-lg">{assignment.name}</CardTitle>
-                          <div className="text-sm text-muted-foreground">
-                            {format(assignment.date, 'PPP')} · {assignment.type}
-                          </div>
+                          <p className="text-muted-foreground">Due Date</p>
+                          <p className="font-medium">{format(assignment.date, 'PPP')}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Subject</p>
+                          <p className="font-medium">{assignment.subject}</p>
                         </div>
                       </div>
-                      {grade && (
-                        <div className="text-right">
-                          <div className="text-2xl font-bold flex items-baseline justify-end gap-1">
-                            {getAssignmentDisplay(assignment)}
-                          </div>
+
+                      {/* Tags */}
+                      {assignmentTags.length > 0 && (
+                        <div className="flex gap-2">
+                          {assignmentTags.map(tag => (
+                            <span 
+                              key={tag.id}
+                              className={cn(
+                                "text-xs px-2 py-1 rounded-full",
+                                tag.tag_type === 'absent' && "bg-red-100 text-red-700",
+                                tag.tag_type === 'late' && "bg-yellow-100 text-yellow-700",
+                                tag.tag_type === 'incomplete' && "bg-orange-100 text-orange-700",
+                                tag.tag_type === 'retest' && "bg-blue-100 text-blue-700"
+                              )}
+                            >
+                              {tag.tag_type.charAt(0).toUpperCase() + tag.tag_type.slice(1)}
+                            </span>
+                          ))}
                         </div>
                       )}
-                    </div>
-                  </CardHeader>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <CardContent className="pt-0 space-y-4 relative">
-                    {/* Assignment details */}
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <p className="text-muted-foreground">Due Date</p>
-                        <p className="font-medium">{format(assignment.date, 'PPP')}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Subject</p>
-                        <p className="font-medium">{assignment.subject}</p>
-                      </div>
-                    </div>
 
-                    {/* Tags */}
-                    {assignmentTags.length > 0 && (
-                      <div className="flex gap-2">
-                        {assignmentTags.map(tag => (
-                          <span 
-                            key={tag.id}
-                            className={cn(
-                              "text-xs px-2 py-1 rounded-full",
-                              tag.tag_type === 'absent' && "bg-red-100 text-red-700",
-                              tag.tag_type === 'late' && "bg-yellow-100 text-yellow-700",
-                              tag.tag_type === 'incomplete' && "bg-orange-100 text-orange-700",
-                              tag.tag_type === 'retest' && "bg-blue-100 text-blue-700"
-                            )}
-                          >
-                            {tag.tag_type.charAt(0).toUpperCase() + tag.tag_type.slice(1)}
+                      {/* Flag Button */}
+                      <div className="absolute bottom-4 right-4">
+                        {recentlyFlagged.has(assignment.id) ? (
+                          <span className="text-sm text-muted-foreground animate-fade-in">
+                            Teacher will review
                           </span>
-                        ))}
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleFlag(assignment.id);
+                            }}
+                            className="text-muted-foreground hover:text-primary"
+                          >
+                            <Flag className="h-4 w-4 mr-2" />
+                            Flag for review
+                          </Button>
+                        )}
                       </div>
-                    )}
-
-                    {/* Flag Button */}
-                    <div className="absolute bottom-4 right-4">
-                      {recentlyFlagged.has(assignment.id) ? (
-                        <span className="text-sm text-muted-foreground animate-fade-in">
-                          Teacher will review
-                        </span>
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleFlag(assignment.id);
-                          }}
-                          className="text-muted-foreground hover:text-primary"
-                        >
-                          <Flag className="h-4 w-4 mr-2" />
-                          Flag for review
-                        </Button>
-                      )}
-                    </div>
-                  </CardContent>
-                </CollapsibleContent>
-              </Card>
-            </Collapsible>
-          );
-        })}
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
