@@ -43,6 +43,20 @@ async function importScores() {
         continue;
       }
 
+      const [lastName, firstName] = row.Student.split(',').map(s => s.trim());
+
+      // Check if student exists instead of upserting
+      const { data: existingStudent } = await supabase
+        .from('students')
+        .select('id')
+        .eq('id', parseInt(row.LocalID))
+        .single();
+
+      if (!existingStudent) {
+        console.log(`Skipping unknown student: ${row.Student} (ID: ${row.LocalID})`);
+        continue;
+      }
+
       console.log(`Processing row ${rowCount}:`, {
         Student: row.Student,
         LocalID: row.LocalID,

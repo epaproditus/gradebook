@@ -341,3 +341,6 @@ A Next.js application that manages teacher gradebooks with Google Classroom inte
   3. Resolve any conflicts
   4. Push to remote branch
 
+## CSV Parsing Update
+We've enhanced the CSV parsing in import-benchmark-standards.ts to use a regex approach for extracting numeric student IDs, preventing rows from being skipped due to inline text or quotes.
+

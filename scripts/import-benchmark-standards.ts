@@ -21,63 +21,104 @@ async function importStandardScores() {
   try {
     console.log('Starting standards import...');
     
-    const parser = fs
-      .createReadStream(path.join(process.cwd(), 'src', 'app', 'bench_by_se.csv'))
-      .pipe(parse({ 
-        columns: true,
-        skip_empty_lines: true,
-        from_line: 3, // Skip both header rows
-        delimiter: ','
-      }));
+    const csvFilePath = path.join(process.cwd(), 'src', 'app', 'bench_by_se.csv');
+    console.log('Reading CSV:', csvFilePath);
+
+    // Read file line by line to handle raw data
+    const fileContent = fs.readFileSync(csvFilePath, 'utf-8');
+    const lines = fileContent.split('\n');
+    
+    const headerRow = lines[0].split(',');
+    const subHeaderRow = lines[1].split(',');
+    const dataRows = lines.slice(2); // Skip header rows
+
+    // Map standards to their column indices
+    const standardsMap = new Map<string, { correct: number, tested: number, mastery: number }>();
+    
+    headerRow.forEach((header, index) => {
+      if (header.includes('(2012)')) {
+        const standard = header.split(' (2012)')[0].trim();
+        const subHeader = subHeaderRow[index].trim();
+        
+        if (!standardsMap.has(standard)) {
+          standardsMap.set(standard, { correct: -1, tested: -1, mastery: -1 });
+        }
+        
+        const indices = standardsMap.get(standard)!;
+        if (subHeader === 'Correct') indices.correct = index;
+        if (subHeader === 'Tested') indices.tested = index;
+        if (subHeader === 'Mastery') indices.mastery = index;
+      }
+    });
 
     const records: StandardScore[] = [];
     let rowCount = 0;
 
-    // Standards we want to process (in order they appear in CSV)
-    const standards = [
-      '8.2C', '8.2D', '8.3A', '8.3C', '8.4A', '8.4B', '8.4C',
-      '8.5A', '8.5C', '8.5D', '8.5E', '8.5F', '8.5G', '8.5H',
-      '8.5I', '8.6A', '8.7A', '8.7B', '8.7C', '8.7D', '8.8A',
-      '8.8C', '8.8D', '8.10B', '8.10C', '8.12C', '8.12D'
-    ];
+    // Process each data row manually
+    for (const line of dataRows) {
+      if (!line.trim()) continue;
+      const columns = line.split(',');
+      const match = columns[1]?.match(/\d+/);
+      if (!match) {
+        console.log(`Skipping row with invalid student ID: ${columns[1]}`);
+        continue;
+      }
+      const studentId = parseInt(match[0], 10);
 
-    for await (const row of parser) {
-      rowCount++;
-      const studentId = row.Id;
-      if (!studentId || studentId === '426869') continue;
+      // Before processing standards, just check if student exists
+      const { data: existingStudent } = await supabase
+        .from('students')
+        .select('id')
+        .eq('id', studentId)
+        .single();
 
-      // Process each standard
-      for (const standard of standards) {
-        // Each standard has three columns in CSV: standard (2012),Correct/Tested/Mastery
-        const correct = parseInt(row[`${standard} (2012)`] || '0');
-        const tested = parseInt(row[`${standard} (2012)`] || '0');
-        const mastery = parseInt(row[`${standard} (2012)`] || '0');
+      if (!existingStudent) {
+        console.log(`Skipping unknown student ID: ${studentId}`);
+        continue;
+      }
 
-        console.log(`Processing ${studentId} - ${standard}:`, {
-          rawData: row[`${standard} (2012)`],
-          correct,
-          tested,
-          mastery
-        });
+      console.log(`Processing student ${studentId}...`);
+
+      // Process each standard using the column indices
+      for (const [standard, indices] of standardsMap) {
+        const rawCorrect = columns[indices.correct]?.trim() || '0';
+        const rawTested = columns[indices.tested]?.trim() || '0';
+        
+        // Convert to numbers
+        const tested = parseInt(rawTested, 10);
+        
+        // If rawCorrect is 100, it means 1 correct out of 1 tested
+        // If it's 50, it means 1 correct out of 2 tested, etc.
+        let correct = parseInt(rawCorrect, 10);
+        if (correct > 1) { // If value is greater than 1, treat as percentage
+          correct = Math.round((correct / 100) * tested);
+        }
 
         if (tested > 0) {
+          console.log(`Standard ${standard}:`, { 
+            correct, 
+            tested,
+            percentage: Math.round((correct/tested) * 100)
+          });
+          
           records.push({
-            student_id: parseInt(studentId),
+            student_id: studentId,
             standard,
             correct,
             tested,
-            mastery,
+            mastery: parseInt(columns[indices.mastery] || '0'),
             test_date: new Date().toISOString().split('T')[0]
           });
         }
       }
 
+      rowCount++; // Increment counter after processing
       if (rowCount % 10 === 0) {
         console.log(`Processed ${rowCount} students...`);
       }
     }
 
-    console.log(`Importing ${records.length} standard scores...`);
+    console.log(`Found ${records.length} valid standard scores to import...`);
 
     // Import in batches of 100
     for (let i = 0; i < records.length; i += 100) {

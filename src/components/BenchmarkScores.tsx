@@ -17,6 +17,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { Save } from "lucide-react"; // Add Save icon
 
+const CIRCLE_PATH_LENGTH = 2 * Math.PI * 20; // For a circle with r=20
+
 interface StandardScore {
   standard: string;
   correct: number;
@@ -43,24 +45,31 @@ export function BenchmarkScores({ studentId }: { studentId: number }) {
 
   useEffect(() => {
     const loadData = async () => {
-      // Get the overall score first
+      // Get the student data first
+      const { data: studentData } = await supabase
+        .from('students')
+        .select('*')
+        .eq('id', studentId)
+        .single();
+
+      // Then get the benchmark data
       const { data: scoreData, error: scoreError } = await supabase
         .from('benchmark_scores')
         .select('*')
         .eq('student_id', studentId)
         .single();
 
-      // Then get the standards breakdown
       const { data: standardsData, error: standardsError } = await supabase
         .from('benchmark_standards')
         .select('*')
         .eq('student_id', studentId);
 
-      if (scoreData && standardsData) {
+      if (scoreData && standardsData && studentData) {
         setBenchmarkData({
           score: scoreData.score,
           performance_level: scoreData.performance_level,
-          standards: standardsData
+          standards: standardsData,
+          student_name: studentData.name // Add student name to the display data
         });
       }
     };
@@ -118,10 +127,13 @@ export function BenchmarkScores({ studentId }: { studentId: number }) {
     return acc;
   }, {}) || {};
 
-  // Find strongest and weakest areas
+  // Find strongest and weakest areas based on correct/tested ratio
   const categoryAverages = Object.entries(groupedStandards).map(([category, standards]) => ({
     category,
-    average: Math.round(standards.reduce((acc, s) => acc + s.mastery, 0) / standards.length)
+    average: Math.round(
+      (standards.reduce((acc, s) => acc + s.correct, 0) / 
+       standards.reduce((acc, s) => acc + s.tested, 0)) * 100
+    ) || 0
   })).sort((a, b) => b.average - a.average);
 
   const strongestAreas = categoryAverages.slice(0, 3);
@@ -181,9 +193,9 @@ export function BenchmarkScores({ studentId }: { studentId: number }) {
           </div>
         </DialogTrigger>
         
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto bg-zinc-950 text-zinc-100">
           <DialogHeader>
-            <DialogTitle>Standards Mastery Breakdown</DialogTitle>
+            <DialogTitle className="text-zinc-100">Standards Mastery Breakdown</DialogTitle>
           </DialogHeader>
           
           <div className="grid grid-cols-2 gap-6">
@@ -244,29 +256,52 @@ export function BenchmarkScores({ studentId }: { studentId: number }) {
               {Object.entries(groupedStandards).map(([category, standards]) => (
                 <Card key={category} className="bg-zinc-900">
                   <CardHeader>
-                    <CardTitle className="text-lg">Standard {category}</CardTitle>
+                    <CardTitle className="text-lg text-zinc-100">
+                      Standard {category}
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    {standards.map((standard) => (
-                      <div key={standard.standard}>
-                        <div className="flex justify-between mb-1">
-                          <span>{standard.standard}</span>
-                          <span>
-                            {standard.correct}/{standard.tested} ({standard.mastery}%)
-                          </span>
+                    {standards.map((standard) => {
+                      const percentage = Math.round((standard.correct/standard.tested) * 100);
+                      return (
+                        <div key={standard.standard}>
+                          <div className="flex justify-between items-center mb-1 text-zinc-200">
+                            <span>{standard.standard}</span>
+                            <div className="flex items-center gap-4">
+                              <span>{standard.correct}/{standard.tested} ({percentage}%)</span>
+                              <div className="relative w-12 h-12">
+                                <svg className="w-full h-full transform -rotate-90">
+                                  <circle
+                                    cx="24"
+                                    cy="24"
+                                    r="20"
+                                    className="stroke-zinc-800 fill-none"
+                                    strokeWidth="4"
+                                  />
+                                  <circle
+                                    cx="24"
+                                    cy="24"
+                                    r="20"
+                                    className={cn(
+                                      "fill-none transition-all duration-500",
+                                      percentage >= 70 ? "stroke-green-500" :
+                                      percentage >= 50 ? "stroke-yellow-500" : "stroke-red-500"
+                                    )}
+                                    strokeWidth="4"
+                                    strokeDasharray={CIRCLE_PATH_LENGTH}
+                                    strokeDashoffset={CIRCLE_PATH_LENGTH * (1 - percentage/100)}
+                                    strokeLinecap="round"
+                                  />
+                                </svg>
+                                <span className="absolute inset-0 flex items-center justify-center text-sm">
+                                  {percentage}%
+                                </span>
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                        <div className="w-full bg-zinc-800 rounded-full h-2">
-                          <div
-                            className={cn(
-                              "h-full rounded-full transition-all duration-500",
-                              standard.mastery >= 70 ? "bg-green-500" :
-                              standard.mastery >= 50 ? "bg-yellow-500" : "bg-red-500"
-                            )}
-                            style={{ width: `${standard.mastery}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </CardContent>
                 </Card>
               ))}
