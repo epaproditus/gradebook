@@ -12,6 +12,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/components/ui/use-toast";
+import { Button } from "@/components/ui/button";
+import { Save } from "lucide-react"; // Add Save icon
 
 interface StandardScore {
   standard: string;
@@ -32,7 +36,10 @@ interface BenchmarkData {
 
 export function BenchmarkScores({ studentId }: { studentId: number }) {
   const [benchmarkData, setBenchmarkData] = useState<BenchmarkData | null>(null);
+  const [goal, setGoal] = useState("");
+  const { toast } = useToast();
   const supabase = createClientComponentClient();
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -58,8 +65,46 @@ export function BenchmarkScores({ studentId }: { studentId: number }) {
       }
     };
 
+    const loadGoal = async () => {
+      const { data, error } = await supabase
+        .from('student_goals')
+        .select('goal_text')
+        .eq('student_id', studentId)
+        .single();
+
+      if (data) setGoal(data.goal_text);
+    };
+
     loadData();
+    loadGoal();
   }, [studentId]);
+
+  const saveGoal = async () => {
+    setIsSaving(true);
+    const { error } = await supabase
+      .from('student_goals')
+      .upsert({
+        student_id: studentId,
+        goal_text: goal,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'student_id'
+      });
+
+    if (error) {
+      toast({
+        variant: "destructive",
+        title: "Could not save goal",
+        description: "Please try again"
+      });
+    } else {
+      toast({
+        title: "Goal saved!",
+        description: "Your goal has been updated"
+      });
+    }
+    setIsSaving(false);
+  };
 
   // Use the actual score instead of calculated average
   const score = benchmarkData?.score || 0;
@@ -96,7 +141,7 @@ export function BenchmarkScores({ studentId }: { studentId: number }) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex gap-6 items-start">
       <Dialog>
         <DialogTrigger asChild>
           <div className="relative w-48 h-48 mx-auto cursor-pointer hover:scale-105 transition-transform">
@@ -229,6 +274,39 @@ export function BenchmarkScores({ studentId }: { studentId: number }) {
           </div>
         </DialogContent>
       </Dialog>
+
+      <div className="flex-1 bg-zinc-900 rounded-xl p-4 min-h-[12rem]">
+        <div className="flex justify-between items-center mb-2">
+          <label 
+            htmlFor="goal" 
+            className="block text-sm font-medium text-zinc-400"
+          >
+            My Goal
+          </label>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={saveGoal}
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              "Saving..."
+            ) : (
+              <>
+                <Save className="w-4 h-4 mr-2" />
+                Save Goal
+              </>
+            )}
+          </Button>
+        </div>
+        <Textarea
+          id="goal"
+          value={goal}
+          onChange={(e) => setGoal(e.target.value)}
+          placeholder="Write your goal here..."
+          className="min-h-[120px] bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500"
+        />
+      </div>
     </div>
   );
 }

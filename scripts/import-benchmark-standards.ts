@@ -26,31 +26,38 @@ async function importStandardScores() {
       .pipe(parse({ 
         columns: true,
         skip_empty_lines: true,
-        delimiter: ',',
+        from_line: 3, // Skip both header rows
+        delimiter: ','
       }));
 
     const records: StandardScore[] = [];
     let rowCount = 0;
+
+    // Standards we want to process (in order they appear in CSV)
+    const standards = [
+      '8.2C', '8.2D', '8.3A', '8.3C', '8.4A', '8.4B', '8.4C',
+      '8.5A', '8.5C', '8.5D', '8.5E', '8.5F', '8.5G', '8.5H',
+      '8.5I', '8.6A', '8.7A', '8.7B', '8.7C', '8.7D', '8.8A',
+      '8.8C', '8.8D', '8.10B', '8.10C', '8.12C', '8.12D'
+    ];
 
     for await (const row of parser) {
       rowCount++;
       const studentId = row.Id;
       if (!studentId || studentId === '426869') continue;
 
-      // Find all standard columns
-      const standardColumns = Object.keys(row).filter(key => key.includes('(2012)'));
-      const standards = new Set(standardColumns.map(col => col.split(' (2012)')[0].trim()));
-
+      // Process each standard
       for (const standard of standards) {
-        // Get values for this standard
-        const correct = parseInt(row[`${standard} (2012) Correct`] || '0');
-        const tested = parseInt(row[`${standard} (2012) Tested`] || '0');
-        const mastery = (tested > 0) ? Math.round((correct / tested) * 100) : 0;
+        // Each standard has three columns in CSV: standard (2012),Correct/Tested/Mastery
+        const correct = parseInt(row[`${standard} (2012)`] || '0');
+        const tested = parseInt(row[`${standard} (2012)`] || '0');
+        const mastery = parseInt(row[`${standard} (2012)`] || '0');
 
-        console.log(`Student ${studentId} - ${standard}:`, {
+        console.log(`Processing ${studentId} - ${standard}:`, {
+          rawData: row[`${standard} (2012)`],
           correct,
           tested,
-          calculated_mastery: mastery
+          mastery
         });
 
         if (tested > 0) {
