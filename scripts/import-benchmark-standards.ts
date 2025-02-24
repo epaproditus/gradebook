@@ -112,28 +112,19 @@ async function importStandardScores() {
 
       // Process each standard
       for (const [standard, indices] of standardsMap) {
-        const rawCorrect = columns[indices.correct]?.trim() || '0';
-        const rawTested = columns[indices.tested]?.trim() || '0';
-        const rawMastery = columns[indices.mastery]?.trim() || '0';
-        
-        // Parse the raw values
-        const numCorrect = parseInt(rawCorrect, 10);
-        const numTested = parseInt(rawTested, 10);
-        const mastery = parseInt(rawMastery, 10);
+        const numCorrect = parseInt(columns[indices.correct]?.trim() || '0', 10);
+        const numTested = parseInt(columns[indices.tested]?.trim() || '0', 10);
+        const percentage = parseInt(columns[indices.mastery]?.trim() || '0', 10);
 
         if (numTested > 0) {
-          // Calculate percentage based on correct vs tested
-          const percentage = Math.round((numCorrect / numTested) * 100);
-
           // Debug log for Leila
           if (studentId === 423306) {
             console.log(`${standard}:`, {
-              raw: [rawCorrect, rawTested, rawMastery],
-              calculated: { 
-                numCorrect, 
-                numTested, 
-                percentage,
-                mastery 
+              raw: [numCorrect, numTested, percentage],
+              stored: {
+                correct: percentage,  // Store mastery percentage as correct
+                tested: numTested,   // Store actual number tested
+                mastery: percentage  // Store mastery percentage
               }
             });
           }
@@ -141,9 +132,9 @@ async function importStandardScores() {
           records.push({
             student_id: studentId,
             standard,
-            correct: percentage,  // Store calculated percentage
-            tested: numTested,
-            mastery: mastery,
+            correct: percentage,  // Store mastery percentage as correct
+            tested: numTested,    // Store actual number tested
+            mastery: percentage,  // Store mastery percentage
             test_date: new Date().toISOString().split('T')[0]
           });
         }

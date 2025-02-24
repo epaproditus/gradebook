@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { Save } from "lucide-react"; // Add Save icon
+import { teksCategories, getTeksCategory, getTeksDescription } from '@/lib/teksData';
 
 const CIRCLE_PATH_LENGTH = 2 * Math.PI * 20; // For a circle with r=20
 
@@ -35,6 +36,38 @@ interface BenchmarkData {
   performance_level: string;
   standards: StandardScore[];
 }
+
+const CircleProgress = ({ percentage, size = 48, strokeWidth = 4 }) => {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (percentage / 100) * circumference;
+
+  return (
+    <svg className="transform -rotate-90 w-full h-full">
+      <circle
+        cx={size/2}
+        cy={size/2}
+        r={radius}
+        className="stroke-zinc-800 fill-none"
+        strokeWidth={strokeWidth}
+      />
+      <circle
+        cx={size/2}
+        cy={size/2}
+        r={radius}
+        className={cn(
+          "fill-none transition-all duration-500",
+          percentage >= 70 ? "stroke-green-500" :
+          percentage >= 50 ? "stroke-yellow-500" : "stroke-red-500"
+        )}
+        strokeWidth={strokeWidth}
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+};
 
 export function BenchmarkScores({ studentId }: { studentId: number }) {
   const [benchmarkData, setBenchmarkData] = useState<BenchmarkData | null>(null);
@@ -119,16 +152,19 @@ export function BenchmarkScores({ studentId }: { studentId: number }) {
   const score = benchmarkData?.score || 0;
   const performanceLevel = benchmarkData?.performance_level || 'Did Not Meet';
 
-  // Group standards by category (e.g., 8.2, 8.3, etc.)
-  const groupedStandards = benchmarkData?.standards.reduce((acc: GroupedStandards, standard) => {
-    const category = standard.standard.split('.').slice(0, 2).join('.');
+  // Group standards by TEKS category
+  const standardsByCategory = benchmarkData?.standards.reduce((acc, standard) => {
+    const category = getTeksCategory(standard.standard);
     if (!acc[category]) acc[category] = [];
-    acc[category].push(standard);
+    acc[category].push({
+      ...standard,
+      description: getTeksDescription(standard.standard)
+    });
     return acc;
-  }, {}) || {};
+  }, {} as Record<string, any[]>) || {};
 
   // Find strongest and weakest areas based on correct/tested ratio
-  const categoryAverages = Object.entries(groupedStandards).map(([category, standards]) => {
+  const categoryAverages = Object.entries(standardsByCategory).map(([category, standards]) => {
     const totalCorrect = standards.reduce((acc, s) => acc + (s.correct / 100) * s.tested, 0);
     const totalTested = standards.reduce((acc, s) => acc + s.tested, 0);
     return {
@@ -293,58 +329,45 @@ export function BenchmarkScores({ studentId }: { studentId: number }) {
             </Card>
 
             {/* Detailed Standards Breakdown */}
-            <div className="col-span-2 mt-6">
-              <h2 className="text-lg font-semibold text-zinc-100 mb-4">All Standards</h2>
-              <div className="grid grid-cols-8 gap-4"> {/* Changed to 8 columns, reduced gap */}
-                {benchmarkData?.standards.map((standard) => {
-                  // Add debugging logs
-                  console.log('Standard data:', {
-                    standard: standard.standard,
-                    correct: standard.correct,
-                    tested: standard.tested,
-                    raw_percentage: (standard.correct / standard.tested) * 100
-                  });
-
-                  const percentage = standard.correct; // Use the stored percentage directly
-                  
-                  return (
-                    <div key={standard.standard} className="flex flex-col items-center group">
-                      <div className="relative w-12 h-12 mb-1"> {/* Reduced size */}
-                        <svg className="w-full h-full transform -rotate-90">
-                          <circle
-                            cx="24"
-                            cy="24"
-                            r="20"
-                            className="stroke-zinc-800 fill-none"
-                            strokeWidth="4"
-                          />
-                          <circle
-                            cx="24"
-                            cy="24"
-                            r="20"
-                            className={cn(
-                              "fill-none transition-all duration-500",
-                              standard.correct >= 70 ? "stroke-green-500" :
-                              standard.correct >= 50 ? "stroke-yellow-500" : "stroke-red-500"
-                            )}
-                            strokeWidth="4"
-                            strokeDasharray={`${(standard.correct/100) * (2 * Math.PI * 20)} ${2 * Math.PI * 20}`}
-                            strokeLinecap="round"
-                          />
-                        </svg>
-                        <span className="absolute inset-0 flex items-center justify-center text-sm font-medium text-zinc-100">
-                          {percentage}%
-                        </span>
-                        {/* Add hover ratio display */}
-                        <span className="absolute inset-0 flex items-center justify-center text-sm font-medium bg-zinc-900/80 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                          {Math.round((percentage/100) * standard.tested)}/{standard.tested}
-                        </span>
-                      </div>
-                      <span className="text-xs text-zinc-300 text-center">{standard.standard}</span>
+            <div className="col-span-2 space-y-6">
+              {Object.entries(standardsByCategory).map(([category, standards]) => (
+                <Card key={category} className="bg-zinc-900">
+                  <CardHeader>
+                    <CardTitle className="text-lg text-zinc-100">
+                      {teksCategories[category]}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-6 gap-4">
+                      {standards.map((standard) => (
+                        <div 
+                          key={standard.standard} 
+                          className="flex flex-col items-center group"
+                          title={standard.description} // Show description on hover
+                        >
+                          <div className="relative w-12 h-12 mb-1">
+                            <CircleProgress percentage={standard.correct} />
+                            <span className="absolute inset-0 flex items-center justify-center text-sm font-medium text-zinc-100">
+                              {standard.correct}%
+                            </span>
+                            {/* Add hover ratio display */}
+                            <span className="absolute inset-0 flex items-center justify-center text-sm font-medium bg-zinc-900/80 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                              {Math.round((standard.correct/100) * standard.tested)}/{standard.tested}
+                            </span>
+                          </div>
+                          <span className="text-xs text-zinc-300 text-center">
+                            {standard.standard}
+                          </span>
+                          {/* Add tooltip with description */}
+                          <div className="hidden group-hover:block absolute z-50 p-2 bg-zinc-800 rounded-md shadow-lg max-w-xs mt-16">
+                            {standard.description}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  );
-                })}
-              </div>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           </div>
         </DialogContent>
