@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createAvatar } from '@dicebear/core';
-import { adventurer } from '@dicebear/collection';
+import { pixelArt } from '@dicebear/collection'; // Changed from adventurer to pixelArt
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -12,12 +12,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-// Predefined set of seeds to create consistent but varied avatars
+// Updated seeds with fun character names that work well with pixel art
 const AVATAR_SEEDS = [
-  'Felix', 'Luna', 'Nova', 'Atlas', 'Sage',
-  'Echo', 'Milo', 'Cleo', 'Zeus', 'Iris',
-  'Leo', 'Maya', 'Finn', 'Zara', 'Kai',
-  'Aria', 'Rex', 'Nora', 'Axel', 'Vera'
+  'Knight', 'Wizard', 'Archer', 'Rogue', 'Healer',
+  'Dragon', 'Phoenix', 'Griffin', 'Unicorn', 'Mage',
+  'Warrior', 'Ranger', 'Paladin', 'Bard', 'Druid',
+  'Ninja', 'Samurai', 'Viking', 'Pirate', 'Monk'
 ];
 
 interface AvatarPickerProps {
@@ -30,21 +30,29 @@ export function AvatarPicker({ currentAvatar, onSave }: AvatarPickerProps) {
   const [avatarUri, setAvatarUri] = useState<string>('');
   const [selectedAvatarUris, setSelectedAvatarUris] = useState<Record<string, string>>({});
 
-  // Generate avatar URI when selected changes
+  // Update avatar generation to use pixelArt
   useEffect(() => {
     const generateAvatar = async () => {
-      const uri = await createAvatar(adventurer, { seed: selected }).toDataUri();
+      const uri = await createAvatar(pixelArt, {
+        seed: selected,
+        backgroundType: ['solid'], // Optional: solid background
+        backgroundColor: ['b6e3f4'], // Optional: light blue background
+      }).toDataUri();
       setAvatarUri(uri);
     };
     generateAvatar();
   }, [selected]);
 
-  // Generate URIs for all avatar options
+  // Update all avatars generation
   useEffect(() => {
     const generateAvatars = async () => {
       const uris: Record<string, string> = {};
       for (const seed of AVATAR_SEEDS) {
-        uris[seed] = await createAvatar(adventurer, { seed }).toDataUri();
+        uris[seed] = await createAvatar(pixelArt, {
+          seed,
+          backgroundType: ['solid'],
+          backgroundColor: ['b6e3f4'],
+        }).toDataUri();
       }
       setSelectedAvatarUris(uris);
     };

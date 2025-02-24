@@ -3,11 +3,16 @@ import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 
 export default async function StudentPage() {
-  // Initialize Supabase client
-  const supabase = createServerComponentClient({ cookies });
+  // Initialize Supabase client with awaited cookies
+  const cookieStore = cookies();
+  const supabase = createServerComponentClient({ 
+    cookies: () => cookieStore 
+  });
 
-  // Get session first
+  // Get session
   const { data: { session } } = await supabase.auth.getSession();
+  
+  // Protect route
   if (!session) {
     return {
       redirect: {
@@ -17,7 +22,6 @@ export default async function StudentPage() {
     };
   }
 
-  // Now that we know we have a session, render the dashboard
   return (
     <div>
       <StudentDashboard />

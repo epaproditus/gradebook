@@ -69,6 +69,18 @@ export function StudentDashboard() {
 
   const { toast } = useToast();
 
+  const formatName = (name: string) => {
+    // Assuming name comes as "Last, First"
+    const [last, first] = name.split(',').map(part => part.trim());
+    return `${first} ${last}`;
+  };
+
+  const formatPeriod = (period: string) => {
+    const num = parseInt(period);
+    const suffix = num === 1 ? 'st' : num === 2 ? 'nd' : num === 3 ? 'rd' : 'th';
+    return `${num}${suffix} Period`;
+  };
+
   useEffect(() => {
     const loadStudentData = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -349,8 +361,12 @@ export function StudentDashboard() {
                   onSave={handleAvatarSave}
                 />
                 <div>
-                  <h1 className="text-4xl font-bold tracking-tight">{student?.name}</h1>
-                  <p className="text-zinc-400">Period {student?.period}</p>
+                  <h1 className="text-4xl font-bold tracking-tight">
+                    {student?.name ? formatName(student.name) : ''}
+                  </h1>
+                  <p className="text-zinc-400">
+                    {student?.period ? formatPeriod(student.period) : ''}
+                  </p>
                 </div>
               </div>
 
