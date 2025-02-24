@@ -1,0 +1,62 @@
+Student,LocalID,Ethnicity,Passed,Did Not Approach Low,Did Not Approach High,Approaches Low,Approaches High,Meets,Masters,Score,Raw Score,
+Aguirre  Albert,423739,Hispanic,No,Yes,Yes,No,No,No,No,35,18
+Almaguer  Zoejane,423390,Hispanic,No,Yes,Yes,No,No,No,No,35,18
+Amaya  Devin,423534,Hispanic,No,Yes,Yes,No,No,No,No,37,19
+Arguelles  Joshua,423322,Hispanic,No,Yes,No,No,No,No,No,22,11
+Benally  Bryan,427303,Hispanic,No,No,No,Yes,No,No,No,41,21
+Burnias  Elijah,424104,Hispanic,No,No,No,Yes,Yes,No,No,47,24
+Camacho  Franni,437237,Hispanic,No,Yes,Yes,No,No,No,No,35,18
+Cantu  Luke Ryan,423506,Hispanic,No,Yes,Yes,No,No,No,No,33,17
+Castillo  Leila,423306,Hispanic,No,No,No,Yes,Yes,No,No,49,25
+Cruz  Serena,423343,Hispanic,No,No,No,Yes,Yes,Yes,No,63,32
+Espinoza  John,424275,Hispanic,No,Yes,Yes,No,No,No,No,37,19
+Flores  Valentin,424320,Hispanic,No,Yes,Yes,No,No,No,No,31,16
+Galindo  Yasmin,427090,Hispanic,No,No,No,Yes,No,No,No,39,20
+Gamez  Luciano,423405,Hispanic,No,No,No,Yes,No,No,No,43,22
+Garate  Ryan,423313,Hispanic,No,No,No,Yes,Yes,No,No,47,24
+Garcia  Maite,434851,Hispanic,No,Yes,Yes,No,No,No,No,29,15
+Garza  Ayiana,424073,Hispanic,No,Yes,Yes,No,No,No,No,35,18
+Gonzales  Matthew,423371,Hispanic,No,No,No,Yes,Yes,Yes,No,59,30
+Gutierrez  Steven,424848,Hispanic,No,No,No,Yes,No,No,No,43,22
+Hernandez Covarrubias  Krisel,434536,Hispanic,No,Yes,No,No,No,No,No,25,13
+Hernandez  Jasmine,425786,Hispanic,No,No,No,Yes,No,No,No,43,22
+Hernandez  Jayce,424777,Hispanic,No,No,No,Yes,No,No,No,45,23
+Longoria  Leroy,423381,Hispanic,No,No,No,Yes,No,No,No,41,21
+Lopez  Enede,423293,Hispanic,No,No,No,Yes,No,No,No,39,20
+Lopez  Giselle,423432,Hispanic,No,Yes,Yes,No,No,No,No,31,16
+Love  Edward,423385,Hispanic,No,Yes,Yes,No,No,No,No,29,15
+Lucero  Sostenez,432746,Hispanic,No,Yes,No,No,No,No,No,24,12
+Martinez  Imelda,424086,Hispanic,No,Yes,Yes,No,No,No,No,35,18
+Martinez  Stacey,423738,Hispanic,No,Yes,No,No,No,No,No,18,9
+Martinez  Tyler,426694,Hispanic,Yes,No,No,Yes,Yes,Yes,No,73,37
+Mendoza  Jeremy,423368,Hispanic,No,No,No,Yes,Yes,Yes,No,61,31
+Mendoza  Mike,422688,Hispanic,No,Yes,Yes,No,No,No,No,35,18
+Molina  Sophia,424114,Hispanic,No,Yes,Yes,No,No,No,No,27,14
+Noriega  Alexzander,424992,Hispanic,No,Yes,Yes,No,No,No,No,27,14
+Oranday  Jayson,423386,Hispanic,No,No,No,Yes,No,No,No,39,20
+Ortega  Mayra,424299,Hispanic,No,No,No,Yes,Yes,No,No,47,24
+Perez  Aaliah,425831,Hispanic,No,No,No,Yes,Yes,No,No,49,25
+Perez  Angel,424235,Hispanic,No,Yes,Yes,No,No,No,No,35,18
+Perez  Juan,424393,Hispanic,No,Yes,Yes,No,No,No,No,33,17
+Perez  Krissy Jo,423451,Hispanic,No,No,No,Yes,Yes,No,No,51,26
+Reyes  Diana,424375,Hispanic,No,No,No,Yes,Yes,No,No,47,24
+Reyes  Juan,432346,Hispanic,No,No,No,Yes,Yes,Yes,No,63,32
+Reyna  Jose,423699,Hispanic,No,Yes,No,No,No,No,No,22,11
+Reynero  Lilian,423394,Hispanic,No,No,No,Yes,Yes,No,No,49,25
+Rodriguez  Elina,424195,Hispanic,No,No,No,Yes,No,No,No,45,23
+Rodriguez  Jody,424057,Hispanic,No,No,No,Yes,No,No,No,43,22
+Rodriguez  Kendra,428329,Hispanic,No,No,No,Yes,No,No,No,39,20
+Rojo  Alexa,426869,Hispanic,No,Yes,Yes,No,No,No,No,35,18
+Ross  Bianca,424616,Hispanic,No,Yes,Yes,No,No,No,No,33,17
+Sandoval Hernandez  Valentina,428480,Hispanic,No,No,No,Yes,Yes,No,No,49,25
+Selvera Cantu  Juan,423444,Hispanic,No,No,No,Yes,Yes,Yes,No,57,29
+Serna  Juan,424176,Hispanic,No,No,No,Yes,No,No,No,45,23
+Soto  Jackalyn,423446,Hispanic,No,Yes,Yes,No,No,No,No,31,16
+Torres  Angel,424333,Hispanic,No,Yes,No,No,No,No,No,20,10
+Trujillo  Miguel,423305,Hispanic,No,No,No,Yes,No,No,No,41,21
+Vallejo  Adrian,424304,Hispanic,No,No,No,Yes,No,No,No,39,20
+Vasquez Cobos  Miranda,427396,Hispanic,No,No,No,Yes,Yes,Yes,No,57,29
+Vela  Lyric,423542,Hispanic,No,No,No,Yes,No,No,No,43,22
+Villarreal  Kailey,423457,Hispanic,No,No,No,Yes,No,No,No,41,21
+Williams  Ciara,423364,Hispanic,No,No,No,Yes,No,No,No,39,20
+Zurita  Rebeca,423292,Hispanic,No,Yes,Yes,No,No,No,No,33,17

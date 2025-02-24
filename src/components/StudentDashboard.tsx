@@ -37,6 +37,8 @@ import {
 } from "@/components/ui/collapsible";  // Add this
 import { GradeBar } from './GradeBar';
 import { AvatarPicker } from './AvatarPicker';
+import { BenchmarkScores } from './BenchmarkScores';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
 interface StudentData {
   id: number;
@@ -340,9 +342,8 @@ export function StudentDashboard() {
   });
 
   return (
-    // Update the outer container to be truly full-screen
-    <div className="fixed inset-0 bg-black">
-      <div className="min-h-screen bg-black text-white pt-20"> {/* Added top padding */}
+    <div className="fixed inset-0 bg-black overflow-auto"> {/* Added overflow-auto */}
+      <div className="min-h-screen bg-black text-white pt-20 pb-20"> {/* Added pb-20 for bottom padding */}
         {/* Floating Navigation */}
         <div className="fixed top-6 right-6 z-50 flex gap-4">
           <SignOutButton className="bg-zinc-900 text-white hover:bg-zinc-800" />
@@ -351,7 +352,7 @@ export function StudentDashboard() {
         {/* Update the main container to remove default margins */}
         <div className="grid grid-cols-12 gap-4 p-6">
           {/* Side Stats Panel - remove container margins */}
-          <div className="col-span-3 bg-zinc-900 p-6 relative h-fit sticky top-6"> {/* Added sticky positioning */}
+          <div className="col-span-3 bg-zinc-900 p-6 relative h-fit sticky top-24"> {/* Adjusted top value */}
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500" />
             
             <div className="space-y-8">
@@ -464,81 +465,104 @@ export function StudentDashboard() {
           </div>
 
           {/* Main Content Area with Timeline */}
-          <div className="col-span-9 space-y-6">
-            <div className="grid grid-cols-2 gap-4"> {/* Changed to grid */}
-              {assignments.map((assignment, index) => (
-                <motion.div
-                  key={assignment.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="group h-full" // Added h-full
+          <div className="col-span-9 space-y-6 overflow-auto"> {/* Added overflow-auto */}
+            <Tabs defaultValue="assignments" className="space-y-4">
+              <TabsList className="bg-zinc-900 border-zinc-800">
+                <TabsTrigger 
+                  value="assignments"
+                  className="data-[state=active]:bg-zinc-800 data-[state=active]:text-white"
                 >
-                  <div 
-                    className="bg-zinc-900 rounded-2xl p-6 hover:bg-zinc-800 transition-all duration-300 cursor-pointer h-full flex flex-col"
-                    onClick={() => toggleAssignment(assignment.id)}
-                  >
-                    <div className="flex flex-col h-full">
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center">
-                            {assignment.type === 'Daily' ? (
-                              <Zap className="w-5 h-5 text-blue-500" />
-                            ) : (
-                              <Target className="w-5 h-5 text-purple-500" />
-                            )}
-                          </div>
-                          <div>
-                            <h3 className="text-lg font-semibold">{assignment.name}</h3>
-                            <div className="flex items-center gap-2 text-zinc-400 text-sm">
-                              <Calendar className="w-3 h-3" />
-                              <span>{format(assignment.date, 'MMM d')}</span>
+                  Assignments
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="benchmarks"
+                  className="data-[state=active]:bg-zinc-800 data-[state=active]:text-white"
+                >
+                  Benchmark Scores
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="assignments" className="space-y-4">
+                {/* Existing assignments grid */}
+                <div className="grid grid-cols-2 gap-4">
+                  {assignments.map((assignment, index) => (
+                    <motion.div
+                      key={assignment.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      className="group h-full" // Added h-full
+                    >
+                      <div 
+                        className="bg-zinc-900 rounded-2xl p-6 hover:bg-zinc-800 transition-all duration-300 cursor-pointer h-full flex flex-col"
+                        onClick={() => toggleAssignment(assignment.id)}
+                      >
+                        <div className="flex flex-col h-full">
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex items-center gap-4">
+                              <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center">
+                                {assignment.type === 'Daily' ? (
+                                  <Zap className="w-5 h-5 text-blue-500" />
+                                ) : (
+                                  <Target className="w-5 h-5 text-purple-500" />
+                                )}
+                              </div>
+                              <div>
+                                <h3 className="text-lg font-semibold">{assignment.name}</h3>
+                                <div className="flex items-center gap-2 text-zinc-400 text-sm">
+                                  <Calendar className="w-3 h-3" />
+                                  <span>{format(assignment.date, 'MMM d')}</span>
+                                </div>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </div>
 
-                      <div className="flex items-center justify-between mt-auto">
-                        {grades[assignment.id] && (
-                          <div className="flex-1 mr-4"> {/* Added flex-1 and margin */}
-                            {getAssignmentDisplay(assignment)}
-                          </div>
-                        )}
-                        <ChevronRight className={cn(
-                          "w-4 h-4 shrink-0 transition-transform", // Added shrink-0
-                          expandedAssignments.has(assignment.id) && "transform rotate-90"
-                        )} />
-                      </div>
-
-                      {expandedAssignments.has(assignment.id) && (
-                        <div className="mt-4 pt-4 border-t border-zinc-800">
-                          <div className="flex justify-end">
-                            {recentlyFlagged.has(assignment.id) ? (
-                              <span className="text-sm text-zinc-400">
-                                Flagged for review
-                              </span>
-                            ) : (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleFlag(assignment.id);
-                                }}
-                                className="text-zinc-400 hover:text-white"
-                              >
-                                <Flag className="h-4 w-4 mr-2" />
-                                Flag for review
-                              </Button>
+                          <div className="flex items-center justify-between mt-auto">
+                            {grades[assignment.id] && (
+                              <div className="flex-1 mr-4"> {/* Added flex-1 and margin */}
+                                {getAssignmentDisplay(assignment)}
+                              </div>
                             )}
+                            <ChevronRight className={cn(
+                              "w-4 h-4 shrink-0 transition-transform", // Added shrink-0
+                              expandedAssignments.has(assignment.id) && "transform rotate-90"
+                            )} />
                           </div>
+
+                          {expandedAssignments.has(assignment.id) && (
+                            <div className="mt-4 pt-4 border-t border-zinc-800">
+                              <div className="flex justify-end">
+                                {recentlyFlagged.has(assignment.id) ? (
+                                  <span className="text-sm text-zinc-400">
+                                    Flagged for review
+                                  </span>
+                                ) : (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleFlag(assignment.id);
+                                    }}
+                                    className="text-zinc-400 hover:text-white"
+                                  >
+                                    <Flag className="h-4 w-4 mr-2" />
+                                    Flag for review
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="benchmarks">
+                <BenchmarkScores studentId={student?.id || 0} />
+              </TabsContent>
+            </Tabs>
           </div>
         </div>
 
