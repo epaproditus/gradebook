@@ -674,7 +674,7 @@ const TodoList: FC<{
 };
 
 // Add new interface for assignment status options
-type AssignmentStatus = 'in_progress' | 'completed' | 'not_started';
+type AssignmentStatus = 'in_progress' | 'completed' | 'not_started' | 'not_graded';
 
 const GradeBook: FC = () => {
   const { toast } = useToast();
@@ -1815,12 +1815,18 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
         <div className="flex items-center gap-4" onClick={() => setEditingAssignment(assignmentId)}>
           <div className={cn(
             "h-2 w-2 rounded-full",
-            STATUS_COLORS[assignment.status || 'not_started'].dot
+            assignment.status === 'completed' ? "bg-green-500" :
+            assignment.status === 'in_progress' ? "bg-blue-500" :
+            assignment.status === 'not_graded' ? "bg-orange-500" :
+            "bg-slate-500" // Default for not_started
           )} />
           <div>
             <CardTitle>{assignment.name}</CardTitle>
             <div className="text-sm text-muted-foreground">
               {format(assignment.date, 'PPP')} - {assignment.subject}
+              {assignment.status === 'not_graded' && (
+                <span className="ml-2 text-orange-500">(Not Yet Graded)</span>
+              )}
             </div>
           </div>
         </div>
@@ -1887,13 +1893,17 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
               <div className="flex items-center gap-2">
                 <div className={cn(
                   "h-3 w-3 rounded-full",
-                  STATUS_COLORS[assignment.status || 'not_started'].dot
+                  assignment.status === 'completed' ? "bg-green-500" :
+                  assignment.status === 'in_progress' ? "bg-blue-500" :
+                  assignment.status === 'not_graded' ? "bg-orange-500" :
+                  "bg-slate-500"
                 )} />
                 <SelectValue />
               </div>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="not_started">Not Started</SelectItem>
+              <SelectItem value="not_graded">Not Graded</SelectItem>
               <SelectItem value="in_progress">In Progress</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
             </SelectContent>
@@ -2184,7 +2194,12 @@ const renderAssignmentsSection = () => {
                   ref={provided.innerRef}
                   className="relative grid grid-cols-1 gap-4"
                 >
-                  {/* ...rest of Daily column... */}
+                  {(grouped.Daily || []).map(([id, assignment], index) => (
+                    <Draggable key={id} draggableId={id} index={index}>
+                      {(provided) => renderAssignmentCard(id, assignment, provided)}
+                    </Draggable>
+                  ))}
+                  {provided.placeholder}
                 </div>
               )}
             </Droppable>
@@ -2200,7 +2215,12 @@ const renderAssignmentsSection = () => {
                   ref={provided.innerRef}
                   className="relative grid grid-cols-1 gap-4"
                 >
-                  {/* ...rest of Assessment column... */}
+                  {(grouped.Assessment || []).map(([id, assignment], index) => (
+                    <Draggable key={id} draggableId={id} index={index}>
+                      {(provided) => renderAssignmentCard(id, assignment, provided)}
+                    </Draggable>
+                  ))}
+                  {provided.placeholder}
                 </div>
               )}
             </Droppable>

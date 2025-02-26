@@ -7,6 +7,7 @@ export interface Assignment {
   google_classroom_id?: string;
   google_course_id?: string;
   six_weeks_period: '1SW' | '2SW' | '3SW' | '4SW' | '5SW' | '6SW' | null;
+  status?: 'not_started' | 'not_graded' | 'in_progress' | 'completed';
 }
 
 export interface Student {

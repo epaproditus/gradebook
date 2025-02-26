@@ -622,15 +622,21 @@ const RosterView: FC<RosterViewProps> = ({
                       className={getColumnHeaderClass(assignment, collapsedColumns.has(assignment.id))}
                       style={{ zIndex: 40 - index }}
                     >
-                      <div 
-                        className={cn(
-                          "absolute inset-x-0 bottom-0 flex flex-col items-center justify-end pb-2 px-1",
-                          "transition-all duration-200",
-                          collapsedColumns.has(assignment.id) ? "opacity-0" : "opacity-100"
-                        )}
-                      >
-                        <div className="line-clamp-2 text-center text-sm font-medium w-full">
-                          {assignment.name}
+                      <div className={cn(
+                        "absolute inset-x-0 bottom-0 flex flex-col items-center justify-end pb-2 px-1",
+                        "transition-all duration-200",
+                        collapsedColumns.has(assignment.id) ? "opacity-0" : "opacity-100"
+                      )}>
+                        <div className="flex items-center gap-2 w-full">
+                          <div className={cn(
+                            "h-2 w-2 rounded-full",
+                            assignment.status === 'completed' ? "bg-green-500" :
+                            assignment.status === 'in_progress' ? "bg-blue-500" :
+                            "bg-orange-500"  // Default to orange for not started/graded
+                          )} />
+                          <div className="line-clamp-2 text-center text-sm font-medium w-full">
+                            {assignment.name}
+                          </div>
                         </div>
                         <div className="text-xs text-muted-foreground whitespace-nowrap">
                           {format(assignment.date, 'MM/dd')} - {assignment.type}

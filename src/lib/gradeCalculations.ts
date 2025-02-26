@@ -12,28 +12,31 @@ interface GradeInfo {
   grade: string | null;
   extra: string;
   type: 'Daily' | 'Assessment';
+  status?: string;
 }
 
-export const calculateDailyPoints = (assignments: GradeInfo[]): number => {
-  const dailyGrades = assignments
-    .filter(a => a.type === 'Daily')
-    .map(a => calculateTotal(a.grade || '0', a.extra || '0'));
-
-  if (dailyGrades.length === 0) return 0;
+export const calculateDailyPoints = (assignments: { grade: string; extra: string; type: string }[]) => {
+  const dailyAssignments = assignments.filter(a => a.type === 'Daily');
+  if (dailyAssignments.length === 0) return 0;
   
-  const dailyAvg = dailyGrades.reduce((sum, grade) => sum + grade, 0) / dailyGrades.length;
-  return Math.round(dailyAvg * 0.8); // 80% weight for daily work
+  const total = dailyAssignments.reduce((sum, assignment) => {
+    return sum + calculateTotal(assignment.grade, assignment.extra);
+  }, 0);
+  
+  // Calculate percentage out of 80 points (80% weight)
+  return Math.round((total / dailyAssignments.length) * 0.8);
 };
 
-export const calculateAssessmentPoints = (assignments: GradeInfo[]): number => {
-  const assessmentGrades = assignments
-    .filter(a => a.type === 'Assessment')
-    .map(a => calculateTotal(a.grade || '0', a.extra || '0'));
-
-  if (assessmentGrades.length === 0) return 0;
+export const calculateAssessmentPoints = (assignments: { grade: string; extra: string; type: string }[]) => {
+  const assessmentAssignments = assignments.filter(a => a.type === 'Assessment');
+  if (assessmentAssignments.length === 0) return 20; // Return full points if no assessments yet
   
-  const assessmentAvg = assessmentGrades.reduce((sum, grade) => sum + grade, 0) / assessmentGrades.length;
-  return Math.round(assessmentAvg * 0.2); // 20% weight for assessments
+  const total = assessmentAssignments.reduce((sum, assignment) => {
+    return sum + calculateTotal(assignment.grade, assignment.extra);
+  }, 0);
+  
+  // Calculate percentage out of 20 points (20% weight)
+  return Math.round((total / assessmentAssignments.length) * 0.2);
 };
 
 export const totalPoints = (assignments: GradeInfo[]): number => {
@@ -94,31 +97,33 @@ export const calculateWeightedAverage = (
 };
 
 // Add this new helper to standardize calculations
-export const calculateStudentAverage = (assignments: GradeInfo[]): number => {
-  if (assignments.length === 0) return 0;
+export const calculateStudentAverage = (assignments: { grade: string; extra: string; type: string }[]) => {
+  // If there are no assignments at all, return 100
+  if (assignments.length === 0) return 100;
 
-  const dailyGrades = assignments
-    .filter(a => a.type === 'Daily')
-    .map(a => calculateTotal(a.grade || '0', a.extra || '0'));
+  const dailyGrades = assignments.filter(a => a.type === 'Daily')
+    .map(a => calculateTotal(a.grade, a.extra));
+    
+  const assessmentGrades = assignments.filter(a => a.type === 'Assessment')
+    .map(a => calculateTotal(a.grade, a.extra));
 
-  const assessmentGrades = assignments
-    .filter(a => a.type === 'Assessment')
-    .map(a => calculateTotal(a.grade || '0', a.extra || '0'));
+  // Calculate each component's contribution to final grade
+  const dailyComponent = dailyGrades.length > 0 
+    ? (dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length) * 0.8
+    : 0;
 
-  // If either type is missing, use 100% of the available type
-  if (dailyGrades.length === 0) {
-    return assessmentGrades.length > 0 
-      ? Math.round(assessmentGrades.reduce((a, b) => a + b, 0) / assessmentGrades.length)
-      : 0;
+  const assessmentComponent = assessmentGrades.length > 0
+    ? (assessmentGrades.reduce((a, b) => a + b, 0) / assessmentGrades.length) * 0.2
+    : 0;
+
+  // If one type is missing, scale up the other type's weight
+  if (dailyGrades.length === 0 && assessmentGrades.length > 0) {
+    return Math.round(assessmentComponent * 5); // Scale up from 20% to 100%
+  }
+  if (assessmentGrades.length === 0 && dailyGrades.length > 0) {
+    return Math.round(dailyComponent * 1.25); // Scale up from 80% to 100%
   }
 
-  if (assessmentGrades.length === 0) {
-    return Math.round(dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length);
-  }
-
-  // Calculate weighted average with 80/20 split
-  const dailyAvg = dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length;
-  const assessmentAvg = assessmentGrades.reduce((a, b) => a + b, 0) / assessmentGrades.length;
-
-  return Math.round((dailyAvg * 0.8) + (assessmentAvg * 0.2));
+  // Both types present - use normal weighting
+  return Math.round(dailyComponent + assessmentComponent);
 };

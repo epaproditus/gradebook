@@ -217,6 +217,7 @@ export function StudentDashboard() {
     }
   };
 
+  // 1. Gets the grade value from either saved grades or temp storage
   const getAssignmentStatus = (assignment: Assignment, grade?: string) => {
     if (!grade) return 'not_started';
     const total = calculateTotal(grades[assignment.id], extraPoints[assignment.id] || '0');
@@ -224,6 +225,7 @@ export function StudentDashboard() {
     return 'completed';
   };
 
+  // 2. The actual grade display is handled here
   const getAssignmentDisplay = (assignment: Assignment) => {
     const grade = parseInt(grades[assignment.id] || '0');
     const extra = parseInt(extraPoints[assignment.id] || '0'); // Simplified key for student view
@@ -324,21 +326,26 @@ export function StudentDashboard() {
     );
   }
 
-  // Update the grade calculation section
-  const validAssignments = assignments.map(assignment => ({
-    grade: grades[assignment.id] || '0',
-    extra: extraPoints[assignment.id] || '0',
-    type: assignment.type
-  }));
+  // 3. Filter assignments and only include those that are completed or in progress
+  const validAssignments = assignments
+    .filter(assignment => 
+      assignment.status === 'completed' || 
+      assignment.status === 'in_progress'
+    )
+    .map(assignment => ({
+      grade: grades[assignment.id] || '0',
+      extra: extraPoints[assignment.id] || '0',
+      type: assignment.type
+    }));
 
-  // Use the standardized calculation
+  // 4. Uses the standardized calculation from gradeCalculations.ts
   const totalGrade = calculateStudentAverage(validAssignments);
 
   // For the cards display, we can still show the breakdown
   const dailyPoints = calculateDailyPoints(validAssignments);
   const assessmentPoints = calculateAssessmentPoints(validAssignments);
 
-  console.log('Grade breakdown:', {
+  console.log('Grade breakdown:', { 
     dailyPoints,
     assessmentPoints,
     totalGrade,
@@ -353,7 +360,6 @@ export function StudentDashboard() {
           <SignOutButton variant="dark" />
         </div>
 
-        {/* Update the main container */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 sm:p-6">
           {/* Side Stats Panel */}
           <div className="lg:col-span-3 bg-zinc-900 p-4 sm:p-6 relative h-fit lg:sticky lg:top-24">
@@ -449,14 +455,31 @@ export function StudentDashboard() {
                         cx="48"
                         cy="48"
                         r="44"
-                        className={`${getProgressColor(calculatePercentage(assessmentPoints, 20), 'test')} stroke-current fill-none transition-all duration-1000`}
+                        className={`${getProgressColor(
+                          // Only show actual assessment percentage, not assumed 100%
+                          assignments.filter(a => a.type === 'Assessment').length > 0 
+                            ? calculatePercentage(assessmentPoints, 20)
+                            : 0,
+                          'test'
+                        )} stroke-current fill-none transition-all duration-1000`}
                         strokeWidth="6"
-                        {...getCircleStyles(calculatePercentage(assessmentPoints, 20), 44)}
+                        {...getCircleStyles(
+                          // Use 0 for circle display when no assessments
+                          assignments.filter(a => a.type === 'Assessment').length > 0 
+                            ? calculatePercentage(assessmentPoints, 20)
+                            : 0, 
+                          44
+                        )}
                         strokeLinecap="round"
                       />
                     </svg>
                     <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
-                      <span className="text-2xl font-bold">{Math.round(calculatePercentage(assessmentPoints, 20))}%</span>
+                      <span className="text-2xl font-bold">
+                        {/* Show 0% when no assessments */}
+                        {assignments.filter(a => a.type === 'Assessment').length > 0 
+                          ? Math.round(calculatePercentage(assessmentPoints, 20))
+                          : 0}%
+                      </span>
                     </div>
                   </div>
                   <div className="text-center">
@@ -514,18 +537,20 @@ export function StudentDashboard() {
                         <div className="flex flex-col h-full">
                           <div className="flex items-start justify-between mb-4">
                             <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center">
-                                {assignment.type === 'Daily' ? (
-                                  <Zap className="w-5 h-5 text-blue-500" />
-                                ) : (
-                                  <Target className="w-5 h-5 text-purple-500" />
-                                )}
-                              </div>
+                              <div className={cn(
+                                "h-2 w-2 rounded-full",
+                                assignment.status === 'completed' ? "bg-green-500" :
+                                assignment.status === 'in_progress' ? "bg-blue-500" :
+                                "bg-orange-500"  // Not yet graded
+                              )} />
                               <div>
                                 <h3 className="text-lg font-semibold">{assignment.name}</h3>
                                 <div className="flex items-center gap-2 text-zinc-400 text-sm">
                                   <Calendar className="w-3 h-3" />
                                   <span>{format(assignment.date, 'MMM d')}</span>
+                                  {assignment.status !== 'completed' && (
+                                    <span className="text-orange-500">(Not Yet Graded)</span>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -542,7 +567,6 @@ export function StudentDashboard() {
                               expandedAssignments.has(assignment.id) && "transform rotate-90"
                             )} />
                           </div>
-
                           {expandedAssignments.has(assignment.id) && (
                             <div className="mt-4 pt-4 border-t border-zinc-800">
                               <div className="flex justify-end">
