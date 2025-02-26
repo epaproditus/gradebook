@@ -1909,15 +1909,6 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
             ))}
           </TabsList>
 
-          {/* Add column headers */}
-          <div className="grid grid-cols-[1fr_100px_100px_100px_auto] gap-2 mb-2 px-2 py-1 bg-muted text-sm font-medium">
-            <div>Student ID & Name</div>
-            <div className="text-center">Initial Grade</div>
-            <div className="text-center">Extra Points</div> {/* Fixed title */}
-            <div className="text-center">Total Grade</div>
-            <div className="text-right">Tags</div>
-          </div>
-
           {assignment.periods.map(periodId => (
             <TabsContent key={periodId} value={periodId}>
   <div className="space-y-4">
