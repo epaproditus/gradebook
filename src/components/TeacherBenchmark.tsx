@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Target, Brain, ChevronDown } from 'lucide-react';
+import { Target, Brain, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,6 +12,11 @@ import { Button } from "@/components/ui/button";
 import { teksCategories, getTeksCategory, getTeksDescription } from '@/lib/teksData';
 import { BenchmarkScores } from './BenchmarkScores';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 
 interface StandardScore {
   standard: string;
@@ -116,7 +121,26 @@ export function TeacherBenchmark() {
   const [selectedGroup, setSelectedGroup] = useState<string>('none');
   const [customGroups, setCustomGroups] = useState<Record<string, number[]>>({});
   const [searchQuery, setSearchQuery] = useState('');
-  const [view, setView] = useState<'students' | 'standards'>('students');
+  const [view, setView] = useState<'students' | 'standards'>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('benchmarkView') as 'students' | 'standards' || 'students';
+    }
+    return 'students';
+  });
+  const [categoryCollapsed, setCategoryCollapsed] = useState<Record<string, boolean>>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('categoryCollapsed');
+      return saved ? JSON.parse(saved) : {};
+    }
+    return {};
+  });
+  const [standardsCollapsed, setStandardsCollapsed] = useState<Record<string, boolean>>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('standardsCollapsed');
+      return saved ? JSON.parse(saved) : {};
+    }
+    return {};
+  });
   const supabase = createClientComponentClient();
 
   // Load students and their benchmark data
@@ -137,6 +161,28 @@ export function TeacherBenchmark() {
 
     loadData();
   }, []);
+
+  // Persist view changes
+  useEffect(() => {
+    localStorage.setItem('benchmarkView', view);
+  }, [view]);
+
+  // Persist collapse states
+  useEffect(() => {
+    localStorage.setItem('categoryCollapsed', JSON.stringify(categoryCollapsed));
+  }, [categoryCollapsed]);
+
+  useEffect(() => {
+    localStorage.setItem('standardsCollapsed', JSON.stringify(standardsCollapsed));
+  }, [standardsCollapsed]);
+
+  // Add function to initialize collapse state for new standards
+  const getInitialCollapseState = (id: string, stateObj: Record<string, boolean>) => {
+    if (typeof stateObj[id] === 'boolean') {
+      return stateObj[id];
+    }
+    return true; // Default to collapsed
+  };
 
   // Filter students based on period and search
   const filteredStudents = students.filter(student => {
@@ -184,7 +230,6 @@ export function TeacherBenchmark() {
     });
   });
 
-  // New function to group by standards
   const getStandardsView = () => {
     const standardsMap: Record<string, {
       category: string;
@@ -223,14 +268,22 @@ export function TeacherBenchmark() {
       });
     });
 
-    // Group standards by category
+    // Group by category first, then separate by readiness/supporting within each category
     const byCategory = Object.values(standardsMap).reduce((acc, item) => {
-      if (!acc[item.category]) {
-        acc[item.category] = [];
+      const category = item.category;
+      if (!acc[category]) {
+        acc[category] = {
+          readiness: [],
+          supporting: []
+        };
       }
-      acc[item.category].push(item);
+      if (item.isReporting) {
+        acc[category].readiness.push(item);
+      } else {
+        acc[category].supporting.push(item);
+      }
       return acc;
-    }, {} as Record<string, typeof standardsMap[string][]>);
+    }, {} as Record<string, { readiness: typeof standardsMap[string][]; supporting: typeof standardsMap[string][] }>);
 
     return byCategory;
   };
@@ -321,60 +374,167 @@ export function TeacherBenchmark() {
         <TabsContent value="standards">
           <div className="space-y-8">
             {Object.entries(getStandardsView()).map(([category, standards]) => (
-              <Card key={category}>
-                <CardHeader>
-                  <CardTitle>{teksCategories[category]}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-3 gap-3">
-                    {standards.map(({ standard, description, isReporting, students }) => (
-                      <Card key={standard} className="overflow-hidden">
-                        <CardHeader className="p-3">
-                          <CardTitle className="flex items-center gap-2 text-sm">
-                            <span className="font-medium">{standard}</span>
-                            <span className="text-muted-foreground">-</span>
-                            <span className="text-muted-foreground flex-1 truncate">
-                              {description}
-                            </span>
-                            <span className={cn(
-                              "text-xs px-2 py-0.5 rounded-full whitespace-nowrap",
-                              isReporting 
-                                ? "bg-blue-500/10 text-blue-500" 
-                                : "bg-yellow-500/10 text-yellow-500"
-                            )}>
-                              {isReporting ? 'Reporting' : 'Supporting'}
-                            </span>
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-3">
-                          <div className="grid grid-cols-6 gap-2">
-                            {students
-                              .sort((a, b) => b.mastery - a.mastery)
-                              .map(student => (
-                                <div 
-                                  key={student.id}
-                                  className="flex flex-col items-center gap-1"
-                                >
-                                  <div className="relative w-12 h-12">
-                                    <StandardCircle percentage={student.mastery} />
-                                    <div className="absolute inset-0 flex items-center justify-center">
-                                      <span className="text-xs font-bold">
-                                        {student.mastery}%
-                                      </span>
-                                    </div>
-                                  </div>
-                                  <span className="text-[9px] text-muted-foreground text-center truncate w-full">
-                                    {student.name.split(',')[1]}
-                                  </span>
-                                </div>
+              <Collapsible
+                key={category}
+                open={!getInitialCollapseState(category, categoryCollapsed)}
+                onOpenChange={(isOpen) => 
+                  setCategoryCollapsed(prev => ({ ...prev, [category]: !isOpen }))
+                }
+              >
+                <Card>
+                  <CardHeader>
+                    <CollapsibleTrigger className="w-full">
+                      <div className="flex items-center justify-between">
+                        <CardTitle>{teksCategories[category]}</CardTitle>
+                        {categoryCollapsed[category] ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                      </div>
+                    </CollapsibleTrigger>
+                  </CardHeader>
+                  <CollapsibleContent>
+                    <CardContent className="space-y-6">
+                      {/* Readiness Standards */}
+                      {standards.readiness.length > 0 && (
+                        <div>
+                          <h3 className="text-sm mb-3 font-bold text-blue-500">
+                            Readiness Standards
+                          </h3>
+                          <div className="grid grid-cols-3 gap-3">
+                            {standards.readiness.map(({ standard, description, students }) => (
+                              <Collapsible
+                                key={standard}
+                                open={!getInitialCollapseState(standard, standardsCollapsed)}
+                                onOpenChange={(isOpen) => 
+                                  setStandardsCollapsed(prev => ({ ...prev, [standard]: !isOpen }))
+                                }
+                              >
+                                <Card className="overflow-visible">
+                                  <CardHeader className="p-3">
+                                    <CollapsibleTrigger className="w-full">
+                                      <CardTitle className="flex flex-col gap-2">
+                                        <div className="flex items-center justify-between">
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-medium text-sm leading-none">{standard}</span>
+                                            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500">
+                                              Readiness
+                                            </span>
+                                          </div>
+                                          {standardsCollapsed[standard] ? 
+                                            <ChevronDown className="h-4 w-4 shrink-0" /> : 
+                                            <ChevronUp className="h-4 w-4 shrink-0" />
+                                          }
+                                        </div>
+                                        <p className="text-sm text-muted-foreground text-left hover:whitespace-normal">
+                                          {description}
+                                        </p>
+                                      </CardTitle>
+                                    </CollapsibleTrigger>
+                                  </CardHeader>
+                                  <CollapsibleContent>
+                                    <CardContent className="p-3">
+                                      <div className="grid grid-cols-6 gap-2">
+                                        {students
+                                          .sort((a, b) => b.mastery - a.mastery)
+                                          .map(student => (
+                                            <div 
+                                              key={student.id}
+                                              className="flex flex-col items-center gap-1"
+                                            >
+                                              <div className="relative w-12 h-12">
+                                                <StandardCircle percentage={student.mastery} />
+                                                <div className="absolute inset-0 flex items-center justify-center">
+                                                  <span className="text-xs font-bold">
+                                                    {student.mastery}%
+                                                  </span>
+                                                </div>
+                                              </div>
+                                              <span className="text-[9px] text-muted-foreground text-center truncate w-full">
+                                                {student.name.split(',')[1]}
+                                              </span>
+                                            </div>
+                                        ))}
+                                      </div>
+                                    </CardContent>
+                                  </CollapsibleContent>
+                                </Card>
+                              </Collapsible>
                             ))}
                           </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+                        </div>
+                      )}
+
+                      {/* Supporting Standards */}
+                      {standards.supporting.length > 0 && (
+                        <div>
+                          <h3 className="text-sm mb-3 font-bold text-yellow-500">
+                            Supporting Standards
+                          </h3>
+                          <div className="grid grid-cols-3 gap-3">
+                            {standards.supporting.map(({ standard, description, students }) => (
+                              <Collapsible
+                                key={standard}
+                                open={!getInitialCollapseState(standard, standardsCollapsed)}
+                                onOpenChange={(isOpen) => 
+                                  setStandardsCollapsed(prev => ({ ...prev, [standard]: !isOpen }))
+                                }
+                              >
+                                <Card className="overflow-visible">
+                                  <CardHeader className="p-3">
+                                    <CollapsibleTrigger className="w-full">
+                                      <CardTitle className="flex flex-col gap-2">
+                                        <div className="flex items-center justify-between">
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-medium text-sm leading-none">{standard}</span>
+                                            <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-500">
+                                              Supporting
+                                            </span>
+                                          </div>
+                                          {standardsCollapsed[standard] ? 
+                                            <ChevronDown className="h-4 w-4 shrink-0" /> : 
+                                            <ChevronUp className="h-4 w-4 shrink-0" />
+                                          }
+                                        </div>
+                                        <p className="text-sm text-muted-foreground text-left hover:whitespace-normal">
+                                          {description}
+                                        </p>
+                                      </CardTitle>
+                                    </CollapsibleTrigger>
+                                  </CardHeader>
+                                  <CollapsibleContent>
+                                    <CardContent className="p-3">
+                                      <div className="grid grid-cols-6 gap-2">
+                                        {students
+                                          .sort((a, b) => b.mastery - a.mastery)
+                                          .map(student => (
+                                            <div 
+                                              key={student.id}
+                                              className="flex flex-col items-center gap-1"
+                                            >
+                                              <div className="relative w-12 h-12">
+                                                <StandardCircle percentage={student.mastery} />
+                                                <div className="absolute inset-0 flex items-center justify-center">
+                                                  <span className="text-xs font-bold">
+                                                    {student.mastery}%
+                                                  </span>
+                                                </div>
+                                              </div>
+                                              <span className="text-[9px] text-muted-foreground text-center truncate w-full">
+                                                {student.name.split(',')[1]}
+                                              </span>
+                                            </div>
+                                        ))}
+                                      </div>
+                                    </CardContent>
+                                  </CollapsibleContent>
+                                </Card>
+                              </Collapsible>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
             ))}
           </div>
         </TabsContent>
