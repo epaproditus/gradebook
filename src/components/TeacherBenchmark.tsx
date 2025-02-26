@@ -11,11 +11,95 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { teksCategories, getTeksCategory } from '@/lib/teksData';
 import { BenchmarkScores } from './BenchmarkScores';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+
+interface StandardScore {
+  standard: string;
+  correct: number;
+  tested: number;
+  mastery: number;
+  test_date: string;
+}
+
+interface Student {
+  id: number;
+  name: string;
+  class_period: string;
+  benchmark_scores: Array<{
+    score: number;
+    performance_level: string;
+  }>;
+  benchmark_standards: StandardScore[];
+}
 
 function formatPeriod(period: string) {
   const num = parseInt(period);
   const suffix = num === 1 ? 'st' : num === 2 ? 'nd' : num === 3 ? 'rd' : 'th';
   return `${num}${suffix} Period`;
+}
+
+// Separate circle components for different views
+function StudentCircle({ percentage, performanceLevel }: { percentage: number, performanceLevel: string }) {
+  const radius = 60;
+  const circumference = 2 * Math.PI * radius;
+  
+  return (
+    <svg className="w-full h-full transform -rotate-90">
+      <circle
+        cx="64"
+        cy="64"
+        r={radius}
+        className="stroke-zinc-800 fill-none"
+        strokeWidth="8"
+      />
+      <circle
+        cx="64"
+        cy="64"
+        r={radius}
+        className={cn(
+          "fill-none transition-all duration-500",
+          performanceLevel === 'Masters' ? "stroke-blue-500" :
+          performanceLevel === 'Meets' ? "stroke-green-500" :
+          performanceLevel === 'Approaches' ? "stroke-yellow-500" :
+          "stroke-red-500"
+        )}
+        strokeWidth="8"
+        strokeDasharray={`${(percentage/100) * circumference} ${circumference}`}
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function StandardCircle({ percentage }: { percentage: number }) {
+  const radius = 24; // Smaller radius for standards view
+  const circumference = 2 * Math.PI * radius;
+  
+  return (
+    <svg className="w-full h-full transform -rotate-90">
+      <circle
+        cx="32"
+        cy="32"
+        r={radius}
+        className="stroke-zinc-800 fill-none"
+        strokeWidth="6"
+      />
+      <circle
+        cx="32"
+        cy="32"
+        r={radius}
+        className={cn(
+          "fill-none transition-all duration-500",
+          percentage >= 70 ? "stroke-green-500" :
+          percentage >= 50 ? "stroke-yellow-500" :
+          "stroke-red-500"
+        )}
+        strokeWidth="6"
+        strokeDasharray={`${(percentage/100) * circumference} ${circumference}`}
+        strokeLinecap="round"
+      />
+    </svg>
+  );
 }
 
 export function TeacherBenchmark() {
@@ -24,6 +108,7 @@ export function TeacherBenchmark() {
   const [selectedGroup, setSelectedGroup] = useState<string>('none');
   const [customGroups, setCustomGroups] = useState<Record<string, number[]>>({});
   const [searchQuery, setSearchQuery] = useState('');
+  const [view, setView] = useState<'students' | 'standards'>('students');
   const supabase = createClientComponentClient();
 
   // Load students and their benchmark data
@@ -53,14 +138,22 @@ export function TeacherBenchmark() {
     return matchesPeriod && matchesSearch && matchesGroup;
   });
 
-  // Sort function for students by score
-  const sortStudentsByScore = (a: any, b: any) => {
+  // Update the sorting function to consider standards
+  const sortStudentsByPerformance = (a: Student, b: Student) => {
+    // First sort by overall score
     const scoreA = a.benchmark_scores?.[0]?.score || 0;
     const scoreB = b.benchmark_scores?.[0]?.score || 0;
-    return scoreB - scoreA; // Highest first
+    
+    if (scoreB !== scoreA) return scoreB - scoreA;
+    
+    // If scores are equal, sort by number of mastered standards
+    const masteredA = a.benchmark_standards?.filter(s => s.mastery >= 70).length || 0;
+    const masteredB = b.benchmark_standards?.filter(s => s.mastery >= 70).length || 0;
+    
+    return masteredB - masteredA;
   };
 
-  // Group students by period first, then by performance level
+  // Group students by period and performance level
   const studentsByPeriod = filteredStudents.reduce((acc, student) => {
     const period = student.class_period;
     if (!acc[period]) {
@@ -74,14 +167,59 @@ export function TeacherBenchmark() {
     const level = student.benchmark_scores?.[0]?.performance_level || 'Did Not Meet';
     acc[period][level].push(student);
     return acc;
-  }, {});
+  }, {} as Record<string, Record<string, Student[]>>);
 
   // Sort students within each performance level
   Object.values(studentsByPeriod).forEach(periodData => {
     Object.values(periodData).forEach(students => {
-      students.sort(sortStudentsByScore);
+      students.sort(sortStudentsByPerformance);
     });
   });
+
+  // New function to group by standards
+  const getStandardsView = () => {
+    const standardsMap: Record<string, {
+      category: string;
+      standard: string;
+      students: Array<{
+        id: number;
+        name: string;
+        score: number;
+        mastery: number;
+      }>;
+    }> = {};
+
+    // Group all students' performance by standard
+    filteredStudents.forEach(student => {
+      student.benchmark_standards?.forEach(standard => {
+        if (!standardsMap[standard.standard]) {
+          standardsMap[standard.standard] = {
+            category: getTeksCategory(standard.standard),
+            standard: standard.standard,
+            students: []
+          };
+        }
+        
+        standardsMap[standard.standard].students.push({
+          id: student.id,
+          name: student.name,
+          score: student.benchmark_scores?.[0]?.score || 0,
+          mastery: standard.mastery
+        });
+      });
+    });
+
+    // Group standards by category
+    const byCategory = Object.values(standardsMap).reduce((acc, item) => {
+      if (!acc[item.category]) {
+        acc[item.category] = [];
+      }
+      acc[item.category].push(item);
+      return acc;
+    }, {} as Record<string, typeof standardsMap[string][]>);
+
+    return byCategory;
+  };
 
   return (
     <div className="p-6">
@@ -112,80 +250,103 @@ export function TeacherBenchmark() {
         </div>
       </div>
 
-      <div className="space-y-8">
-        {Object.entries(studentsByPeriod)
-          .sort(([a], [b]) => parseInt(a) - parseInt(b))
-          .map(([period, levels]) => (
-            <div key={period} className="space-y-4">
-              <h2 className="text-xl font-semibold">{formatPeriod(period)}</h2>
-              <div className="grid grid-cols-6 gap-4">
-                {Object.entries(levels)
-                  .flatMap(([level, students]) =>
-                    students.map(student => (
-                      <Dialog key={student.id}>
-                        <DialogTrigger asChild>
-                          <div className="cursor-pointer group">
-                            <div className="relative w-32 h-32 mx-auto">
-                              <CircleProgress 
-                                percentage={student.benchmark_scores?.[0]?.score || 0} 
-                                performanceLevel={student.benchmark_scores?.[0]?.performance_level}
-                              />
-                              <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2">
-                                <span className="text-lg font-bold">
-                                  {student.benchmark_scores?.[0]?.score || 0}%
-                                </span>
-                                <span className="text-xs text-muted-foreground line-clamp-2 group-hover:text-primary">
-                                  {student.name}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-3xl">
-                          <DialogHeader>
-                            <DialogTitle>{student.name} - Benchmark Details</DialogTitle>
-                          </DialogHeader>
-                          <BenchmarkScores studentId={student.id} />
-                        </DialogContent>
-                      </Dialog>
-                    ))
-                )}
-              </div>
-            </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+      <Tabs value={view} onValueChange={(v) => setView(v as 'students' | 'standards')}>
+        <TabsList>
+          <TabsTrigger value="students">By Student</TabsTrigger>
+          <TabsTrigger value="standards">By Standard</TabsTrigger>
+        </TabsList>
 
-function CircleProgress({ percentage, performanceLevel }: { percentage: number, performanceLevel: string }) {
-  const radius = 60; // Increased radius for larger circles
-  const circumference = 2 * Math.PI * radius;
-  
-  return (
-    <svg className="w-full h-full transform -rotate-90">
-      <circle
-        cx="64"
-        cy="64"
-        r={radius}
-        className="stroke-zinc-800 fill-none"
-        strokeWidth="8" // Increased from 4 to 8
-      />
-      <circle
-        cx="64"
-        cy="64"
-        r={radius}
-        className={cn(
-          "fill-none transition-all duration-500",
-          performanceLevel === 'Masters' ? "stroke-blue-500" :
-          performanceLevel === 'Meets' ? "stroke-green-500" :
-          performanceLevel === 'Approaches' ? "stroke-yellow-500" :
-          "stroke-red-500"
-        )}
-        strokeWidth="8" // Increased from 4 to 8
-        strokeDasharray={`${(percentage/100) * circumference} ${circumference}`}
-        strokeLinecap="round"
-      />
-    </svg>
+        <TabsContent value="students">
+          <div className="space-y-8">
+            {Object.entries(studentsByPeriod)
+              .sort(([a], [b]) => parseInt(a) - parseInt(b))
+              .map(([period, levels]) => (
+                <div key={period} className="space-y-4">
+                  <h2 className="text-xl font-semibold">{formatPeriod(period)}</h2>
+                  <div className="grid grid-cols-6 gap-4">
+                    {Object.entries(levels)
+                      .flatMap(([level, students]) =>
+                        students.map(student => (
+                          <Dialog key={student.id}>
+                            <DialogTrigger asChild>
+                              <div className="cursor-pointer group">
+                                <div className="relative w-32 h-32 mx-auto">
+                                  <StudentCircle 
+                                    percentage={student.benchmark_scores?.[0]?.score || 0} 
+                                    performanceLevel={student.benchmark_scores?.[0]?.performance_level}
+                                  />
+                                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2">
+                                    <span className="text-lg font-bold">
+                                      {student.benchmark_scores?.[0]?.score || 0}%
+                                    </span>
+                                    <span className="text-xs text-muted-foreground line-clamp-2 group-hover:text-primary">
+                                      {student.name}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {student.benchmark_standards?.filter(s => s.mastery >= 70).length || 0}/{student.benchmark_standards?.length || 0} Standards
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-3xl">
+                              <DialogHeader>
+                                <DialogTitle>{student.name} - Benchmark Details</DialogTitle>
+                              </DialogHeader>
+                              <BenchmarkScores studentId={student.id} />
+                            </DialogContent>
+                          </Dialog>
+                        ))
+                    )}
+                  </div>
+                </div>
+            ))}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="standards">
+          <div className="space-y-8">
+            {Object.entries(getStandardsView()).map(([category, standards]) => (
+              <Card key={category}>
+                <CardHeader>
+                  <CardTitle>{teksCategories[category]}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-6">
+                    {standards.map(({ standard, students }) => (
+                      <Card key={standard}>
+                        <CardHeader>
+                          <CardTitle className="text-sm">{standard}</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid grid-cols-6 gap-2">
+                            {students.map(student => (
+                              <div 
+                                key={student.id}
+                                className="relative w-16 h-16"
+                              >
+                                <StandardCircle percentage={student.mastery} />
+                                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                                  <span className="text-xs font-bold">
+                                    {student.mastery}%
+                                  </span>
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {student.name.split(',')[1]}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }
