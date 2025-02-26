@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { teksCategories, getTeksCategory } from '@/lib/teksData';
+import { teksCategories, getTeksCategory, getTeksDescription } from '@/lib/teksData';
 import { BenchmarkScores } from './BenchmarkScores';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
@@ -181,11 +181,14 @@ export function TeacherBenchmark() {
     const standardsMap: Record<string, {
       category: string;
       standard: string;
+      description: string;
+      isReporting: boolean;
       students: Array<{
         id: number;
         name: string;
         score: number;
         mastery: number;
+        tested: number;
       }>;
     }> = {};
 
@@ -196,6 +199,8 @@ export function TeacherBenchmark() {
           standardsMap[standard.standard] = {
             category: getTeksCategory(standard.standard),
             standard: standard.standard,
+            description: getTeksDescription(standard.standard),
+            isReporting: standard.tested === 2,
             students: []
           };
         }
@@ -204,7 +209,8 @@ export function TeacherBenchmark() {
           id: student.id,
           name: student.name,
           score: student.benchmark_scores?.[0]?.score || 0,
-          mastery: standard.mastery
+          mastery: standard.mastery,
+          tested: standard.tested
         });
       });
     });
@@ -312,29 +318,47 @@ export function TeacherBenchmark() {
                   <CardTitle>{teksCategories[category]}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-2 gap-6">
-                    {standards.map(({ standard, students }) => (
+                  <div className="grid grid-cols-1 gap-6">
+                    {standards.map(({ standard, description, isReporting, students }) => (
                       <Card key={standard}>
                         <CardHeader>
-                          <CardTitle className="text-sm">{standard}</CardTitle>
+                          <CardTitle className="flex items-center gap-2">
+                            <span className="text-sm font-medium">{standard}</span>
+                            <span className="text-sm text-muted-foreground">-</span>
+                            <span className="text-sm text-muted-foreground flex-1">
+                              {description}
+                            </span>
+                            <span className={cn(
+                              "text-xs px-2 py-1 rounded-full",
+                              isReporting 
+                                ? "bg-blue-500/10 text-blue-500" 
+                                : "bg-yellow-500/10 text-yellow-500"
+                            )}>
+                              {isReporting ? 'Reporting' : 'Supporting'}
+                            </span>
+                          </CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="grid grid-cols-6 gap-2">
-                            {students.map(student => (
-                              <div 
-                                key={student.id}
-                                className="relative w-16 h-16"
-                              >
-                                <StandardCircle percentage={student.mastery} />
-                                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                                  <span className="text-xs font-bold">
-                                    {student.mastery}%
-                                  </span>
-                                  <span className="text-[10px] text-muted-foreground">
+                          <div className="grid grid-cols-8 gap-4">
+                            {students
+                              .sort((a, b) => b.mastery - a.mastery)
+                              .map(student => (
+                                <div 
+                                  key={student.id}
+                                  className="flex flex-col items-center gap-2"
+                                >
+                                  <div className="relative w-16 h-16">
+                                    <StandardCircle percentage={student.mastery} />
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                      <span className="text-sm font-bold">
+                                        {student.mastery}%
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <span className="text-[10px] text-muted-foreground text-center">
                                     {student.name.split(',')[1]}
                                   </span>
                                 </div>
-                              </div>
                             ))}
                           </div>
                         </CardContent>
