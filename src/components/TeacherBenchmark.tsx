@@ -72,32 +72,40 @@ function StudentCircle({ percentage, performanceLevel }: { percentage: number, p
 }
 
 function StandardCircle({ percentage }: { percentage: number }) {
-  const radius = 24; // Smaller radius for standards view
+  const radius = 5; // Small radius for the compact view
   const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - percentage / 100);
   
   return (
-    <svg className="w-full h-full transform -rotate-90">
-      <circle
-        cx="32"
-        cy="32"
-        r={radius}
-        className="stroke-zinc-800 fill-none"
-        strokeWidth="6"
-      />
-      <circle
-        cx="32"
-        cy="32"
-        r={radius}
-        className={cn(
-          "fill-none transition-all duration-500",
-          percentage >= 70 ? "stroke-green-500" :
-          percentage >= 50 ? "stroke-yellow-500" :
-          "stroke-red-500"
-        )}
-        strokeWidth="6"
-        strokeDasharray={`${(percentage/100) * circumference} ${circumference}`}
-        strokeLinecap="round"
-      />
+    <svg 
+      className="w-full h-full"
+      viewBox="0 0 12 12"
+    >
+      <g transform="rotate(-90 6 6)">
+        <circle
+          cx="6"
+          cy="6"
+          r={radius}
+          className="stroke-zinc-800 fill-none"
+          strokeWidth="1.5"
+          style={{ opacity: 0.2 }}
+        />
+        <circle
+          cx="6"
+          cy="6"
+          r={radius}
+          className={cn(
+            "fill-none transition-all duration-500",
+            percentage >= 70 ? "stroke-green-500" :
+            percentage >= 50 ? "stroke-yellow-500" :
+            "stroke-red-500"
+          )}
+          strokeWidth="1.5"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+        />
+      </g>
     </svg>
   );
 }
@@ -318,18 +326,18 @@ export function TeacherBenchmark() {
                   <CardTitle>{teksCategories[category]}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-1 gap-6">
+                  <div className="grid grid-cols-3 gap-3">
                     {standards.map(({ standard, description, isReporting, students }) => (
-                      <Card key={standard}>
-                        <CardHeader>
-                          <CardTitle className="flex items-center gap-2">
-                            <span className="text-sm font-medium">{standard}</span>
-                            <span className="text-sm text-muted-foreground">-</span>
-                            <span className="text-sm text-muted-foreground flex-1">
+                      <Card key={standard} className="overflow-hidden">
+                        <CardHeader className="p-3">
+                          <CardTitle className="flex items-center gap-2 text-sm">
+                            <span className="font-medium">{standard}</span>
+                            <span className="text-muted-foreground">-</span>
+                            <span className="text-muted-foreground flex-1 truncate">
                               {description}
                             </span>
                             <span className={cn(
-                              "text-xs px-2 py-1 rounded-full",
+                              "text-xs px-2 py-0.5 rounded-full whitespace-nowrap",
                               isReporting 
                                 ? "bg-blue-500/10 text-blue-500" 
                                 : "bg-yellow-500/10 text-yellow-500"
@@ -338,24 +346,24 @@ export function TeacherBenchmark() {
                             </span>
                           </CardTitle>
                         </CardHeader>
-                        <CardContent>
-                          <div className="grid grid-cols-8 gap-4">
+                        <CardContent className="p-3">
+                          <div className="grid grid-cols-6 gap-2">
                             {students
                               .sort((a, b) => b.mastery - a.mastery)
                               .map(student => (
                                 <div 
                                   key={student.id}
-                                  className="flex flex-col items-center gap-2"
+                                  className="flex flex-col items-center gap-1"
                                 >
-                                  <div className="relative w-16 h-16">
+                                  <div className="relative w-12 h-12">
                                     <StandardCircle percentage={student.mastery} />
                                     <div className="absolute inset-0 flex items-center justify-center">
-                                      <span className="text-sm font-bold">
+                                      <span className="text-xs font-bold">
                                         {student.mastery}%
                                       </span>
                                     </div>
                                   </div>
-                                  <span className="text-[10px] text-muted-foreground text-center">
+                                  <span className="text-[9px] text-muted-foreground text-center truncate w-full">
                                     {student.name.split(',')[1]}
                                   </span>
                                 </div>
