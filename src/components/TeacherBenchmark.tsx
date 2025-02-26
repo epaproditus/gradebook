@@ -37,8 +37,15 @@ interface Student {
   benchmark_standards: StandardScore[];
 }
 
+function normalizePeriod(period: string) {
+  // Extract just the numeric part from the period
+  const match = period.match(/^(\d+)/);
+  return match ? match[1] : period;
+}
+
 function formatPeriod(period: string) {
-  const num = parseInt(period);
+  // Get just the number
+  const num = parseInt(normalizePeriod(period));
   const suffix = num === 1 ? 'st' : num === 2 ? 'nd' : num === 3 ? 'rd' : 'th';
   return `${num}${suffix} Period`;
 }
@@ -186,7 +193,8 @@ export function TeacherBenchmark() {
 
   // Filter students based on period and search
   const filteredStudents = students.filter(student => {
-    const matchesPeriod = selectedPeriod === 'all' || student.class_period === selectedPeriod;
+    const matchesPeriod = selectedPeriod === 'all' || 
+      normalizePeriod(student.class_period) === selectedPeriod;
     const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesGroup = selectedGroup === 'none' || customGroups[selectedGroup]?.includes(student.id);
     return matchesPeriod && matchesSearch && matchesGroup;
@@ -209,7 +217,7 @@ export function TeacherBenchmark() {
 
   // Group students by period and performance level
   const studentsByPeriod = filteredStudents.reduce((acc, student) => {
-    const period = student.class_period;
+    const period = normalizePeriod(student.class_period);
     if (!acc[period]) {
       acc[period] = {
         Masters: [],
@@ -288,6 +296,12 @@ export function TeacherBenchmark() {
     return byCategory;
   };
 
+  // Add new function to get all unique periods
+  const getAllPeriods = () => {
+    const periodSet = new Set(students.map(student => normalizePeriod(student.class_period)));
+    return Array.from(periodSet).sort((a, b) => parseInt(a) - parseInt(b));
+  };
+
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
@@ -299,12 +313,10 @@ export function TeacherBenchmark() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Periods</SelectItem>
-              {Object.keys(studentsByPeriod)
-                .sort((a, b) => parseInt(a) - parseInt(b))
-                .map(period => (
-                  <SelectItem key={period} value={period}>
-                    {formatPeriod(period)}
-                  </SelectItem>
+              {getAllPeriods().map(period => (
+                <SelectItem key={period} value={period}>
+                  {formatPeriod(period)}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
