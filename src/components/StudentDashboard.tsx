@@ -88,93 +88,89 @@ export function StudentDashboard() {
 
   useEffect(() => {
     const loadStudentData = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (session?.user?.email) {
-          // Get student data
-          const { data: studentData } = await supabase
-            .from('student_mappings')
-            .select('student_id, period, google_email')
-            .eq('google_email', session.user.email)
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user?.email) {
+        // Get student data
+        const { data: studentData } = await supabase
+          .from('student_mappings')
+          .select('student_id, period, google_email')
+          .eq('google_email', session.user.email)
+          .single();
+
+        if (studentData) {
+          // Get student details
+          const { data: studentDetails } = await supabase
+            .from('students')
+            .select('*')
+            .eq('id', studentData.student_id)
             .single();
 
-          if (studentData) {
-            // Get student details
-            const { data: studentDetails } = await supabase
-              .from('students')
+          setStudent({ ...studentData, ...studentDetails });
+
+          // Get assignments for student's period
+          const { data: assignmentData } = await supabase
+            .from('assignments')
+            .select('*')
+            .contains('periods', [studentData.period])
+            .eq('six_weeks_period', currentSixWeeks)
+            .order('date', { ascending: false });
+
+          if (assignmentData) {
+            setAssignments(assignmentData.map(a => ({
+              ...a,
+              date: new Date(a.date)
+            })));
+
+            // Get grades for these assignments
+            const { data: gradeData } = await supabase
+              .from('grades')
               .select('*')
-              .eq('id', studentData.student_id)
-              .single();
+              .eq('student_id', studentData.student_id)
+              .order('created_at', { ascending: false });
 
-            setStudent({ ...studentData, ...studentDetails });
+            if (gradeData) {
+              const gradeMap: Record<string, string> = {};
+              const extraPointsMap: Record<string, string> = {};
+              
+              // Get the most recent creation date
+              const mostRecent = gradeData[0]?.created_at;
+              if (mostRecent) {
+                setLastUpdated(new Date(mostRecent));
+              }
 
-            // Get assignments for student's period
-            const { data: assignmentData } = await supabase
-              .from('assignments')
-              .select('*')
-              .contains('periods', [studentData.period])
-              .eq('six_weeks_period', getCurrentSixWeeks())  // <-- Set default filter
-              .order('date', { ascending: false });
-
-            if (assignmentData) {
-              setAssignments(assignmentData.map(a => ({
-                ...a,
-                date: new Date(a.date)
-              })));
-
-              // Get grades for these assignments
-              const { data: gradeData } = await supabase
-                .from('grades')
-                .select('*')
-                .eq('student_id', studentData.student_id)
-                .order('created_at', { ascending: false });
-
-              if (gradeData) {
-                const gradeMap: Record<string, string> = {};
-                const extraPointsMap: Record<string, string> = {};
-                
-                // Get the most recent creation date
-                const mostRecent = gradeData[0]?.created_at;
-                if (mostRecent) {
-                  setLastUpdated(new Date(mostRecent));
+              gradeData.forEach(grade => {
+                gradeMap[grade.assignment_id] = grade.grade;
+                if (grade.extra_points) {
+                  extraPointsMap[grade.assignment_id] = grade.extra_points;
                 }
+              });
 
-                gradeData.forEach(grade => {
-                  gradeMap[grade.assignment_id] = grade.grade;
-                  if (grade.extra_points) {
-                    extraPointsMap[grade.assignment_id] = grade.extra_points;
-                  }
-                });
+              setGrades(gradeMap);
+              setExtraPoints(extraPointsMap);
+            }
 
-                setGrades(gradeMap);
-                setExtraPoints(extraPointsMap);
-              }
+            // Get tags for these assignments
+            const { data: tagData } = await supabase
+              .from('assignment_tags')
+              .select('*')
+              .eq('student_id', studentData.student_id);
 
-              // Get tags for these assignments
-              const { data: tagData } = await supabase
-                .from('assignment_tags')
-                .select('*')
-                .eq('student_id', studentData.student_id);
+            if (tagData) {
+              setTags(tagData);
+            }
 
-              if (tagData) {
-                setTags(tagData);
-              }
+            // Get messages for these assignments
+            const { data: messageData } = await supabase
+              .from('messages')
+              .select('*')
+              .eq('student_id', studentData.student_id);
 
-              // Get messages for these assignments
-              const { data: messageData } = await supabase
-                .from('messages')
-                .select('*')
-                .eq('student_id', studentData.student_id);
-
-              if (messageData) {
-                setMessages(messageData);
-              }
+            if (messageData) {
+              setMessages(messageData);
             }
           }
         }
-      } catch (error) {
-        console.error('Error loading student data:', error);
       }
     };
 

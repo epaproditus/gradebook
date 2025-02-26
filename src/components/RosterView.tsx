@@ -17,6 +17,7 @@ import { formatGradeDisplay, getGradeDisplayClass } from '@/lib/displayFormatter
 import { MessagePanel } from './MessagePanel';
 import { MessageIndicator } from './MessageIndicator';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { getCurrentSixWeeks } from '@/lib/dateUtils'; // Add this import
 
 interface RosterViewProps {
   students: Record<string, Student[]>;

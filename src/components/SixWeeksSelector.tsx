@@ -12,10 +12,10 @@ export function SixWeeksSelector({ value, onChange }: SixWeeeksSelectorProps) {
       onValueChange={(v) => onChange(v === "all" ? null : v)}
     >
       <SelectTrigger className="w-[180px]">
-        <SelectValue placeholder="Select Six Weeks" />
+        <SelectValue placeholder="Select Grading Window" />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="all">All Periods</SelectItem>
+        <SelectItem value="all">All</SelectItem>
         <SelectItem value="1SW">1st Six Weeks</SelectItem>
         <SelectItem value="2SW">2nd Six Weeks</SelectItem>
         <SelectItem value="3SW">3rd Six Weeks</SelectItem>
