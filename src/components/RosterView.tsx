@@ -1,4 +1,4 @@
-import { FC, useState, useEffect } from 'react';
+import { FC, useState, useEffect, useMemo } from 'react';
 import { Assignment, Student, GradeData } from '@/types/gradebook';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
@@ -38,6 +38,7 @@ interface RosterViewProps {
   messages: Message[];
   onMessageResolve: (messageId: string) => Promise<void>;
   onMessageCreate: (studentId: number, assignmentId: string, message: string, type: 'grade_question' | 'general') => Promise<void>;
+  defaultSixWeeks?: string;
 }
 
 const RosterView: FC<RosterViewProps> = ({
@@ -60,6 +61,7 @@ const RosterView: FC<RosterViewProps> = ({
   messages,
   onMessageResolve,
   onMessageCreate,
+  defaultSixWeeks = getCurrentSixWeeks() // Add default value
 }) => {
   // Add Supabase client initialization at the top with other state
   const supabase = createClientComponentClient({
@@ -522,6 +524,18 @@ const RosterView: FC<RosterViewProps> = ({
       subscription.unsubscribe();
     };
   }, []);
+
+  const [currentSixWeeks, setCurrentSixWeeks] = useState<string>(defaultSixWeeks);
+  
+  // Filter assignments by current six weeks period
+  const filteredAssignments = useMemo(() => {
+    return Object.entries(assignments)
+      .filter(([_, assignment]) => assignment.six_weeks_period === currentSixWeeks)
+      .reduce((acc, [id, assignment]) => ({
+        ...acc,
+        [id]: assignment
+      }), {});
+  }, [assignments, currentSixWeeks]);
 
   return (
     <div className="space-y-4">

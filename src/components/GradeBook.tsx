@@ -666,7 +666,7 @@ const GradeBook: FC = () => {
   const [dateFilter, setDateFilter] = useState(loadConfig().dateFilter);
   const [subjectFilter, setSubjectFilter] = useState(loadConfig().subjectFilter);
   const [studentSortOrder, setStudentSortOrder] = useState(loadConfig().studentSortOrder);
-  const [sixWeeksFilter, setSixWeeksFilter] = useState<string | null>(null);
+  const [sixWeeksFilter, setSixWeeksFilter] = useState<string>(getCurrentSixWeeks());
 
   // Add effect to save config when any related state changes
   useEffect(() => {
