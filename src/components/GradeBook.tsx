@@ -2718,6 +2718,7 @@ return (
           assignments={assignments}
           onResolve={handleResolveFlag}
         />
+        {/* Default light variant will be used */}
         <SignOutButton />
       </div>
     </div>

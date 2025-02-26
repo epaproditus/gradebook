@@ -350,7 +350,7 @@ export function StudentDashboard() {
       <div className="min-h-screen bg-black text-white pt-16 sm:pt-20 pb-16 sm:pb-20">
         {/* Floating Navigation */}
         <div className="fixed top-4 sm:top-6 right-4 sm:right-6 z-50 flex gap-2 sm:gap-4">
-          <SignOutButton className="bg-zinc-900 text-white hover:bg-zinc-800" />
+          <SignOutButton variant="dark" />
         </div>
 
         {/* Update the main container */}

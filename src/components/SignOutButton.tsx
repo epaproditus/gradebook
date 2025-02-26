@@ -7,7 +7,12 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
-export function SignOutButton({ className }: { className?: string }) {
+interface SignOutButtonProps {
+  className?: string;
+  variant?: 'default' | 'dark';
+}
+
+export function SignOutButton({ className, variant = 'default' }: SignOutButtonProps) {
   const router = useRouter();
   const supabase = createClientComponentClient();
 
@@ -29,7 +34,11 @@ export function SignOutButton({ className }: { className?: string }) {
       size="sm" 
       onClick={handleSignOut}
       className={cn(
-        "gap-2 bg-black hover:bg-zinc-900 border-zinc-800",
+        "gap-2",
+        // Default (light) mode styling
+        variant === 'default' && "border-gray-200 hover:bg-gray-100",
+        // Dark mode styling
+        variant === 'dark' && "bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-white",
         className
       )}
     >
