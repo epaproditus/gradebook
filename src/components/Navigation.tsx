@@ -13,6 +13,12 @@ export function Navigation() {
     getUserRole().then(setUserRole);
   }, []);
 
+  const tabs = [
+    { name: 'GradeBook', href: '/gradebook' },
+    { name: 'Google Classroom', href: '/classroom' },
+    { name: 'Benchmark', href: '/teacher/benchmark' }  // Add this line
+  ];
+
   // Only show student links for students
   if (userRole === 'student') {
     return (
@@ -31,18 +37,15 @@ export function Navigation() {
   if (userRole === 'teacher') {
     return (
       <nav className="flex items-center space-x-4 h-14">
-        <Link
-          href="/gradebook"
-          className={pathname === '/gradebook' ? 'font-bold' : ''}
-        >
-          Gradebook
-        </Link>
-        <Link
-          href="/classroom"
-          className={pathname === '/classroom' ? 'font-bold' : ''}
-        >
-          Google Classroom
-        </Link>
+        {tabs.map((tab) => (
+          <Link
+            key={tab.name}
+            href={tab.href}
+            className={pathname === tab.href ? 'font-bold' : ''}
+          >
+            {tab.name}
+          </Link>
+        ))}
       </nav>
     );
   }
