@@ -2708,10 +2708,10 @@ useEffect(() => {
 }, []);
 
 return (
-  <div className="p-6">
-    <div className="flex justify-between items-center mb-4">
-      <h1 className="text-2xl font-bold">Gradebook</h1>
-      <div className="flex items-center gap-4">
+  <div className="p-2 sm:p-4 lg:p-6">
+    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-4 gap-4">
+      <h1 className="text-xl sm:text-2xl font-bold">Gradebook</h1>
+      <div className="flex items-center gap-2 sm:gap-4">
         <FlagInbox 
           flags={flags}
           students={students}
@@ -2721,13 +2721,13 @@ return (
         <SignOutButton />
       </div>
     </div>
-    <div className="flex gap-6">
-      {/* Main content moved to left side */}
-      <div className="flex-grow space-y-4">
-        <div className="flex items-center gap-4">
+    <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
+      {/* Main content */}
+      <div className="flex-grow space-y-4 min-w-0"> {/* Added min-w-0 to prevent overflow */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4">
           <Button
             onClick={handleNewAssignment}
-            className="w-[200px]"
+            className="w-full sm:w-[200px]"
           >
             Create New Assignment
           </Button>
@@ -2956,8 +2956,12 @@ return (
         )}
       </div>
 
-      {/* Calendar moved to right side */}
-      <div className={cn("space-y-4", !isCalendarVisible && "w-auto")}>
+      {/* Calendar sidebar */}
+      <div className={cn(
+        "flex flex-col",
+        !isCalendarVisible && "w-auto",
+        isCalendarVisible && "w-full lg:w-72"
+      )}>
         <Button 
           variant="outline" 
           onClick={() => setIsCalendarVisible(prev => !prev)}

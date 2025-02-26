@@ -346,17 +346,17 @@ export function StudentDashboard() {
   });
 
   return (
-    <div className="fixed inset-0 bg-black overflow-auto"> {/* Added overflow-auto */}
-      <div className="min-h-screen bg-black text-white pt-20 pb-20"> {/* Added pb-20 for bottom padding */}
+    <div className="fixed inset-0 bg-black overflow-auto">
+      <div className="min-h-screen bg-black text-white pt-16 sm:pt-20 pb-16 sm:pb-20">
         {/* Floating Navigation */}
-        <div className="fixed top-6 right-6 z-50 flex gap-4">
+        <div className="fixed top-4 sm:top-6 right-4 sm:right-6 z-50 flex gap-2 sm:gap-4">
           <SignOutButton className="bg-zinc-900 text-white hover:bg-zinc-800" />
         </div>
 
-        {/* Update the main container to remove default margins */}
-        <div className="grid grid-cols-12 gap-4 p-6">
-          {/* Side Stats Panel - remove container margins */}
-          <div className="col-span-3 bg-zinc-900 p-6 relative h-fit sticky top-24"> {/* Adjusted top value */}
+        {/* Update the main container */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 sm:p-6">
+          {/* Side Stats Panel */}
+          <div className="lg:col-span-3 bg-zinc-900 p-4 sm:p-6 relative h-fit lg:sticky lg:top-24">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500" />
             
             <div className="space-y-8">
@@ -468,23 +468,27 @@ export function StudentDashboard() {
             </div>
           </div>
 
-          {/* Main Content Area with Timeline */}
-          <div className="col-span-9 space-y-6 overflow-auto"> {/* Added overflow-auto */}
+          {/* Main Content Area */}
+          <div className="lg:col-span-9 space-y-6">
             <Tabs defaultValue="assignments" className="space-y-4">
-              <TabsList className="bg-zinc-900 border-zinc-800">
-                <TabsTrigger 
-                  value="assignments"
-                  className="data-[state=active]:bg-zinc-800 data-[state=active]:text-white"
-                >
-                  Assignments
-                </TabsTrigger>
-                <TabsTrigger 
-                  value="benchmarks"
-                  className="data-[state=active]:bg-zinc-800 data-[state=active]:text-white"
-                >
-                  Benchmark Scores
-                </TabsTrigger>
-              </TabsList>
+              {/* Make tab list scrollable on mobile */}
+              <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+                <TabsList className="bg-zinc-900 border-zinc-800 w-auto inline-flex min-w-full sm:min-w-0">
+                  <TabsTrigger 
+                    value="assignments"
+                    className="data-[state=active]:bg-zinc-800 data-[state=active]:text-white"
+                  >
+                    Assignments
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="benchmarks"
+                    className="data-[state=active]:bg-zinc-800 data-[state=active]:text-white"
+                  >
+                    Benchmark Scores
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+              
               <TabsContent value="assignments" className="space-y-4">
                 {/* Add Six Weeks selector */}
                 <div className="mb-6">
@@ -493,8 +497,8 @@ export function StudentDashboard() {
                     onChange={(value) => setCurrentSixWeeks(value || getCurrentSixWeeks())}
                   />
                 </div>
-                {/* Existing assignments grid */}
-                <div className="grid grid-cols-2 gap-4">
+                {/* Make assignment grid responsive */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {assignments.map((assignment, index) => (
                     <motion.div
                       key={assignment.id}
@@ -579,7 +583,7 @@ export function StudentDashboard() {
 
         {/* Last Updated Indicator */}
         {lastUpdated && (
-          <div className="fixed bottom-6 left-6 flex items-center gap-2 text-zinc-500 text-sm">
+          <div className="fixed bottom-4 sm:bottom-6 left-4 sm:left-6 flex items-center gap-2 text-zinc-500 text-xs sm:text-sm">
             <Clock className="w-4 h-4" />
             <span>Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}</span>
           </div>
