@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { X, Save, ChevronDown, ChevronUp, Download, ChevronLeft, ChevronRight, PlusCircle, RefreshCw, Copy } from 'lucide-react';
+import { X, Save, ChevronDown, ChevronUp, Download, ChevronLeft, ChevronRight, PlusCircle, RefreshCw, Copy, FileUp } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
@@ -38,6 +38,7 @@ import { calculateTotal, calculateWeightedAverage } from '@/lib/gradeCalculation
 import { FlagInbox } from './FlagInbox';
 import { getCurrentSixWeeks, getSixWeeksForDate } from '@/lib/dateUtils';
 import { SixWeeksSelector } from './SixWeeksSelector';  // Add this line near other imports
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 // Initialize Supabase client (this is fine outside component)
 const supabase = createClient(
@@ -111,13 +112,20 @@ const GradeExportDialog: FC<ExportDialogProps> = ({ assignments, students, onExp
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button 
-          variant="ghost"
-          size="icon"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <Download className="h-4 w-4" />
-        </Button>
+        <Tooltip delayDuration={300}>
+          <TooltipTrigger asChild>
+            <Button 
+              variant="ghost"
+              size="icon"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <FileUp className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p>Export Grades</p>
+          </TooltipContent>
+        </Tooltip>
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
@@ -312,13 +320,24 @@ const ImportScoresDialog: FC<{
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="ml-2">
-          Import DMAC Scores
-        </Button>
+        <Tooltip delayDuration={300}>
+          <TooltipTrigger asChild>
+            <Button 
+              variant="ghost"
+              size="icon"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Download className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p>Import Grades</p>
+          </TooltipContent>
+        </Tooltip>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Import DMAC Scores</DialogTitle>
+          <DialogTitle>Import Scores</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <Input
@@ -327,7 +346,7 @@ const ImportScoresDialog: FC<{
             onChange={handleFileUpload}
           />
           <div className="text-sm text-muted-foreground">
-            Upload a CSV file exported from DMAC containing student scores.
+            Upload a CSV file, including from DMAC, containing student scores.
           </div>
           {file && (
             <Button 
@@ -1267,7 +1286,9 @@ const exportSingleGradeSet = (assignmentId: string, periodId: string) => {
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${assignment.name}-${periodId}-grades.csv`;
+  // Use assignment name in the filename, sanitize it for valid filename
+  const sanitizedName = assignment.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  a.download = `${sanitizedName}_period${periodId}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -1308,7 +1329,11 @@ const exportGrades = (assignmentIds: string[], periodIds: string[], merge: boole
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `grades-export.csv`;
+    const assignmentNames = assignmentIds.map(id => assignments[id].name)
+      .join('_')
+      .replace(/[^a-z0-9]/gi, '_')
+      .toLowerCase();
+    a.download = `${assignmentNames}_merged.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -1811,6 +1836,17 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
         >
           <Copy className="h-4 w-4" />
         </Button>
+        <ImportScoresDialog
+          assignmentId={assignmentId}
+          periodId={activeTab}
+          onImport={(grades) => handleImportGrades(assignmentId, activeTab, grades)}
+          unsavedGrades={unsavedGrades}
+          setUnsavedGrades={setUnsavedGrades}
+          setEditingGrades={setEditingGrades}
+          assignments={assignments}
+          students={students}
+          grades={grades}
+        />
         <GradeExportDialog
           assignments={{ [assignmentId]: assignment }}
           students={students}
@@ -1864,17 +1900,6 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
           </Select>
 
           <div className="flex items-center gap-2">
-            <ImportScoresDialog
-              assignmentId={assignmentId}
-              periodId={activeTab}
-              onImport={(grades) => handleImportGrades(assignmentId, activeTab, grades)}
-              unsavedGrades={unsavedGrades}
-              setUnsavedGrades={setUnsavedGrades}
-              setEditingGrades={setEditingGrades}
-              assignments={assignments}
-              students={students}
-              grades={grades}
-            />
             {assignment.google_classroom_id && (
               <Button
                 variant="outline"
@@ -2072,17 +2097,6 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
               </div>
               
               <div className="mt-4 flex justify-between items-center">
-                <ImportScoresDialog
-                  assignmentId={assignmentId}
-                  periodId={periodId}
-                  onImport={(grades) => handleImportGrades(assignmentId, periodId, grades)}
-                  unsavedGrades={unsavedGrades}
-                  setUnsavedGrades={setUnsavedGrades}
-                  setEditingGrades={setEditingGrades}
-                  assignments={assignments}
-                  students={students}
-                  grades={grades}
-                />
                 {assignment.google_classroom_id && (
                   <Button
                     variant="outline"

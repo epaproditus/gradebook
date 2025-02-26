@@ -18,6 +18,7 @@ import { MessagePanel } from './MessagePanel';
 import { MessageIndicator } from './MessageIndicator';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { getCurrentSixWeeks } from '@/lib/dateUtils'; // Add this import
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"; // New import
 
 interface RosterViewProps {
   students: Record<string, Student[]>;
@@ -539,193 +540,210 @@ const RosterView: FC<RosterViewProps> = ({
   }, [assignments, currentSixWeeks]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full sm:w-auto">
-          <ImportScoresDialog
-            assignmentId={sortedAssignments[0]?.id}
-            periodId={activeTab}
-            onImport={handleImportGrades}
-            unsavedGrades={unsavedGrades}
-            setUnsavedGrades={setUnsavedGrades}
-            setEditingGrades={setEditingGrades}
-            assignments={assignments}
-            students={students}
-            grades={grades}
-          />
-          {/* GradeExportDialog removed from here */}
-          <ColorSettings
-            showColors={showColors}
-            colorMode={colorMode}
-            onShowColorsChange={setShowColors}
-            onColorModeChange={setColorMode}
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setAssignmentSort(prev => prev === 'desc' ? 'asc' : 'desc')}
-            className="flex items-center gap-2"
+    <>
+      <div className="flex justify-between items-center mb-4">
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button>Create New Assignment</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create New Assignment</DialogTitle>
+            </DialogHeader>
+            {/* Reuse the same new assignment form content from GradeBook */}
+            {/* You may need to extract this into a shared component */}
+          </DialogContent>
+        </Dialog>
+        {/* ... rest of existing buttons ... */}
+      </div>
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full sm:w-auto">
+            <ImportScoresDialog
+              assignmentId={sortedAssignments[0]?.id}
+              periodId={activeTab}
+              onImport={handleImportGrades}
+              unsavedGrades={unsavedGrades}
+              setUnsavedGrades={setUnsavedGrades}
+              setEditingGrades={setEditingGrades}
+              assignments={assignments}
+              students={students}
+              grades={grades}
+            />
+            {/* GradeExportDialog removed from here */}
+            <ColorSettings
+              showColors={showColors}
+              colorMode={colorMode}
+              onShowColorsChange={setShowColors}
+              onColorModeChange={setColorMode}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAssignmentSort(prev => prev === 'desc' ? 'asc' : 'desc')}
+              className="flex items-center gap-2"
+            >
+              {assignmentSort === 'desc' ? (
+                <>
+                  Latest First
+                  <ChevronDown className="h-4 w-4" />
+                </>
+              ) : (
+                <>
+                  Earliest First
+                  <ChevronUp className="h-4 w-4" />
+                </>
+              )}
+            </Button>
+          </div>
+          <Button 
+            onClick={handleSaveAll}
+            variant="default"
+            className="w-full sm:w-auto"
           >
-            {assignmentSort === 'desc' ? (
-              <>
-                Latest First
-                <ChevronDown className="h-4 w-4" />
-              </>
-            ) : (
-              <>
-                Earliest First
-                <ChevronUp className="h-4 w-4" />
-              </>
-            )}
+            Save All Changes
           </Button>
         </div>
-        <Button 
-          onClick={handleSaveAll}
-          variant="default"
-          className="w-full sm:w-auto"
-        >
-          Save All Changes
-        </Button>
-      </div>
-      <div className="overflow-x-auto -mx-2 sm:mx-0">
-        <div className="min-w-[800px] border rounded-md"> {/* Set minimum width */}
-          <Table>
-            <TableHeader>
-              <TableRow className="h-[160px]">{/* Remove extra whitespace */}
-                <TableHead className="sticky left-0 top-0 bg-background z-50 w-[200px] min-w-[200px]">
-                  Student
-                </TableHead>
-                <TableHead className="sticky left-0 top-0 bg-background z-50 w-[100px] min-w-[100px]">
-                  Average
-                </TableHead>
-                {sortedAssignments.map((assignment, index) => (
-                  <TableHead 
-                    key={assignment.id} 
-                    onClick={() => toggleColumn(assignment.id)}
-                    className={getColumnHeaderClass(assignment, collapsedColumns.has(assignment.id))}
-                    style={{ zIndex: 40 - index }}
-                  >
-                    <div 
-                      className={cn(
-                        "absolute inset-x-0 bottom-0 flex flex-col items-center justify-end pb-2 px-1",
-                        "transition-all duration-200",
-                        collapsedColumns.has(assignment.id) ? "opacity-0" : "opacity-100"
-                      )}
-                    >
-                      <div className="line-clamp-2 text-center text-sm font-medium w-full">
-                        {assignment.name}
-                      </div>
-                      <div className="text-xs text-muted-foreground whitespace-nowrap">
-                        {format(assignment.date, 'MM/dd')} - {assignment.type}
-                      </div>
-                      <ChevronUp className="h-3 w-3 mt-1 text-muted-foreground" />
-                    </div>
-                    
-                    {/* Collapsed state */}
-                    <div 
-                      className={cn(
-                        "absolute inset-0 flex items-center justify-center",
-                        "transition-all duration-200",
-                        !collapsedColumns.has(assignment.id) ? "opacity-0" : "opacity-100"
-                      )}
-                    >
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="flex flex-col items-center rotate-90">
-                          <ChevronDown className="h-3 w-3 mb-1" />
-                          <span className="text-xs whitespace-nowrap">
-                            {formatAssignmentDate(assignment.date, true)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+        <div className="overflow-x-auto -mx-2 sm:mx-0">
+          <div className="min-w-[800px] border rounded-md"> {/* Set minimum width */}
+            <Table>
+              <TableHeader>
+                <TableRow className="h-[160px]">{/* Remove extra whitespace */}
+                  <TableHead className="sticky left-0 top-0 bg-background z-50 w-[200px] min-w-[200px]">
+                    Student
                   </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {periodStudents.map((student) => {
-                // Calculate student's average from all assignments
-                const average = calculateStudentAverage(student);
-
-                return (
-                  <TableRow key={student.id}>
-                    <TableCell className="sticky left-0 bg-background z-40 font-medium">
-                      {student.name}
-                    </TableCell>
-                    <TableCell className="sticky left-0 bg-background z-40 font-medium text-right">
-                      {average}%
-                    </TableCell>
-                    {sortedAssignments.map((assignment) => (
-                      <TableCell 
-                        key={assignment.id} 
+                  <TableHead className="sticky left-0 top-0 bg-background z-50 w-[100px] min-w-[100px]">
+                    Average
+                  </TableHead>
+                  {sortedAssignments.map((assignment, index) => (
+                    <TableHead 
+                      key={assignment.id} 
+                      onClick={() => toggleColumn(assignment.id)}
+                      className={getColumnHeaderClass(assignment, collapsedColumns.has(assignment.id))}
+                      style={{ zIndex: 40 - index }}
+                    >
+                      <div 
                         className={cn(
-                          "p-0 transition-all duration-200",
-                          collapsedColumns.has(assignment.id) ? "w-12" : "w-32"
+                          "absolute inset-x-0 bottom-0 flex flex-col items-center justify-end pb-2 px-1",
+                          "transition-all duration-200",
+                          collapsedColumns.has(assignment.id) ? "opacity-0" : "opacity-100"
                         )}
                       >
-                        {!collapsedColumns.has(assignment.id) ? (
-                          <GradeCell
-                            assignmentId={assignment.id}
-                            studentId={student.id.toString()}
-                            periodId={activeTab}
-                            initialGrade={getGradeValue(assignment.id, activeTab, student.id.toString())}
-                            extraPoints={extraPoints[`${assignment.id}-${activeTab}-${student.id}`] || '0'}
-                            onGradeChange={(value) => handleGradeChange(
-                              assignment.id,
-                              activeTab,
-                              student.id.toString(),
-                              value
-                            )}
-                            onExtraPointsChange={(value) => handleExtraPointsChange(
-                              assignment.id,
-                              activeTab,
-                              student.id,
-                              value
-                            )}
-                            onSave={() => handleSaveGrade(assignment.id, activeTab, student.id.toString())}
-                            messages={messages.filter(m => m.assignmentId === assignment.id && m.studentId === student.id)}
-                            onMessageResolve={onMessageResolve}
-                            onMessageCreate={(message) => onMessageCreate(student.id, assignment.id, message, 'grade_question')}
-                          />
-                        ) : (
-                          <div className="flex items-center justify-center h-8 text-sm font-medium">
-                            {getGradeTotal(assignment.id, student.id.toString()) || '-'}
-                          </div>
+                        <div className="line-clamp-2 text-center text-sm font-medium w-full">
+                          {assignment.name}
+                        </div>
+                        <div className="text-xs text-muted-foreground whitespace-nowrap">
+                          {format(assignment.date, 'MM/dd')} - {assignment.type}
+                        </div>
+                        <ChevronUp className="h-3 w-3 mt-1 text-muted-foreground" />
+                      </div>
+                      
+                      {/* Collapsed state */}
+                      <div 
+                        className={cn(
+                          "absolute inset-0 flex items-center justify-center",
+                          "transition-all duration-200",
+                          !collapsedColumns.has(assignment.id) ? "opacity-0" : "opacity-100"
                         )}
+                      >
+                        <div className="flex flex-col items-center gap-1">
+                          <div className="flex flex-col items-center rotate-90">
+                            <ChevronDown className="h-3 w-3 mb-1" />
+                            <span className="text-xs whitespace-nowrap">
+                              {formatAssignmentDate(assignment.date, true)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {periodStudents.map((student) => {
+                  // Calculate student's average from all assignments
+                  const average = calculateStudentAverage(student);
+
+                  return (
+                    <TableRow key={student.id}>
+                      <TableCell className="sticky left-0 bg-background z-40 font-medium">
+                        {student.name}
                       </TableCell>
-                    ))}
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-            <tfoot>
-              <tr>
-                <td className="sticky left-0 bg-background z-40" colSpan={2}></td>
-                {sortedAssignments.map((assignment) => (
-                  <td 
-                    key={`footer-${assignment.id}`} 
-                    className={cn(
-                      "p-2 border-t text-center",
-                      collapsedColumns.has(assignment.id) ? "w-12" : "w-32"
-                    )}
-                  >
-                    <Save 
+                      <TableCell className="sticky left-0 bg-background z-40 font-medium text-right">
+                        {average}%
+                      </TableCell>
+                      {sortedAssignments.map((assignment) => (
+                        <TableCell 
+                          key={assignment.id} 
+                          className={cn(
+                            "p-0 transition-all duration-200",
+                            collapsedColumns.has(assignment.id) ? "w-12" : "w-32"
+                          )}
+                        >
+                          {!collapsedColumns.has(assignment.id) ? (
+                            <GradeCell
+                              assignmentId={assignment.id}
+                              studentId={student.id.toString()}
+                              periodId={activeTab}
+                              initialGrade={getGradeValue(assignment.id, activeTab, student.id.toString())}
+                              extraPoints={extraPoints[`${assignment.id}-${activeTab}-${student.id}`] || '0'}
+                              onGradeChange={(value) => handleGradeChange(
+                                assignment.id,
+                                activeTab,
+                                student.id.toString(),
+                                value
+                              )}
+                              onExtraPointsChange={(value) => handleExtraPointsChange(
+                                assignment.id,
+                                activeTab,
+                                student.id,
+                                value
+                              )}
+                              onSave={() => handleSaveGrade(assignment.id, activeTab, student.id.toString())}
+                              messages={messages.filter(m => m.assignmentId === assignment.id && m.studentId === student.id)}
+                              onMessageResolve={onMessageResolve}
+                              onMessageCreate={(message) => onMessageCreate(student.id, assignment.id, message, 'grade_question')}
+                            />
+                          ) : (
+                            <div className="flex items-center justify-center h-8 text-sm font-medium">
+                              {getGradeTotal(assignment.id, student.id.toString()) || '-'}
+                            </div>
+                          )}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+              <tfoot>
+                <tr>
+                  <td className="sticky left-0 bg-background z-40" colSpan={2}></td>
+                  {sortedAssignments.map((assignment) => (
+                    <td 
+                      key={`footer-${assignment.id}`} 
                       className={cn(
-                        "h-4 w-4 inline-block transition-opacity cursor-pointer",
-                        hasUnsavedChanges(assignment.id) 
-                          ? "text-primary hover:text-primary/80" 
-                          : "text-muted-foreground/40 cursor-default"
+                        "p-2 border-t text-center",
+                        collapsedColumns.has(assignment.id) ? "w-12" : "w-32"
                       )}
-                      onClick={() => hasUnsavedChanges(assignment.id) && saveGrades(assignment.id, activeTab)}
-                    />
-                  </td>
-                ))}
-              </tr>
-            </tfoot>
-          </Table>
+                    >
+                      <Save 
+                        className={cn(
+                          "h-4 w-4 inline-block transition-opacity cursor-pointer",
+                          hasUnsavedChanges(assignment.id) 
+                            ? "text-primary hover:text-primary/80" 
+                            : "text-muted-foreground/40 cursor-default"
+                        )}
+                        onClick={() => hasUnsavedChanges(assignment.id) && saveGrades(assignment.id, activeTab)}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              </tfoot>
+            </Table>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 };
 
