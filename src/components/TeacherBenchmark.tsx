@@ -12,6 +12,12 @@ import { Button } from "@/components/ui/button";
 import { teksCategories, getTeksCategory } from '@/lib/teksData';
 import { BenchmarkScores } from './BenchmarkScores';
 
+function formatPeriod(period: string) {
+  const num = parseInt(period);
+  const suffix = num === 1 ? 'st' : num === 2 ? 'nd' : num === 3 ? 'rd' : 'th';
+  return `${num}${suffix} Period`;
+}
+
 export function TeacherBenchmark() {
   const [students, setStudents] = useState<any[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
@@ -47,13 +53,35 @@ export function TeacherBenchmark() {
     return matchesPeriod && matchesSearch && matchesGroup;
   });
 
-  // Group students by performance level
-  const studentsByLevel = {
-    Masters: filteredStudents.filter(s => s.benchmark_scores?.[0]?.performance_level === 'Masters'),
-    Meets: filteredStudents.filter(s => s.benchmark_scores?.[0]?.performance_level === 'Meets'),
-    Approaches: filteredStudents.filter(s => s.benchmark_scores?.[0]?.performance_level === 'Approaches'),
-    'Did Not Meet': filteredStudents.filter(s => s.benchmark_scores?.[0]?.performance_level === 'Did Not Meet')
+  // Sort function for students by score
+  const sortStudentsByScore = (a: any, b: any) => {
+    const scoreA = a.benchmark_scores?.[0]?.score || 0;
+    const scoreB = b.benchmark_scores?.[0]?.score || 0;
+    return scoreB - scoreA; // Highest first
   };
+
+  // Group students by period first, then by performance level
+  const studentsByPeriod = filteredStudents.reduce((acc, student) => {
+    const period = student.class_period;
+    if (!acc[period]) {
+      acc[period] = {
+        Masters: [],
+        Meets: [],
+        Approaches: [],
+        'Did Not Meet': []
+      };
+    }
+    const level = student.benchmark_scores?.[0]?.performance_level || 'Did Not Meet';
+    acc[period][level].push(student);
+    return acc;
+  }, {});
+
+  // Sort students within each performance level
+  Object.values(studentsByPeriod).forEach(periodData => {
+    Object.values(periodData).forEach(students => {
+      students.sort(sortStudentsByScore);
+    });
+  });
 
   return (
     <div className="p-6">
@@ -66,8 +94,12 @@ export function TeacherBenchmark() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Periods</SelectItem>
-              {Array.from(new Set(students.map(s => s.class_period))).sort().map(period => (
-                <SelectItem key={period} value={period}>Period {period}</SelectItem>
+              {Object.keys(studentsByPeriod)
+                .sort((a, b) => parseInt(a) - parseInt(b))
+                .map(period => (
+                  <SelectItem key={period} value={period}>
+                    {formatPeriod(period)}
+                  </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -80,47 +112,46 @@ export function TeacherBenchmark() {
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-6 mb-6">
-        {Object.entries(studentsByLevel).map(([level, students]) => (
-          <Card key={level}>
-            <CardHeader>
-              <CardTitle className="flex justify-between">
-                <span>{level}</span>
-                <span>{students.length}</span>
-              </CardTitle>
-            </CardHeader>
-          </Card>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-4 gap-4">
-        {filteredStudents.map(student => (
-          <Dialog key={student.id}>
-            <DialogTrigger asChild>
-              <Card className="cursor-pointer hover:bg-accent transition-colors">
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="font-medium">{student.name}</h3>
-                      <p className="text-sm text-muted-foreground">Period {student.class_period}</p>
-                    </div>
-                    <div className="relative w-16 h-16">
-                      <CircleProgress 
-                        percentage={student.benchmark_scores?.[0]?.score || 0} 
-                        performanceLevel={student.benchmark_scores?.[0]?.performance_level}
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </DialogTrigger>
-            <DialogContent className="max-w-3xl">
-              <DialogHeader>
-                <DialogTitle>{student.name} - Benchmark Details</DialogTitle>
-              </DialogHeader>
-              <BenchmarkScores studentId={student.id} />
-            </DialogContent>
-          </Dialog>
+      <div className="space-y-8">
+        {Object.entries(studentsByPeriod)
+          .sort(([a], [b]) => parseInt(a) - parseInt(b))
+          .map(([period, levels]) => (
+            <div key={period} className="space-y-4">
+              <h2 className="text-xl font-semibold">{formatPeriod(period)}</h2>
+              <div className="grid grid-cols-6 gap-4">
+                {Object.entries(levels)
+                  .flatMap(([level, students]) =>
+                    students.map(student => (
+                      <Dialog key={student.id}>
+                        <DialogTrigger asChild>
+                          <div className="cursor-pointer group">
+                            <div className="relative w-32 h-32 mx-auto">
+                              <CircleProgress 
+                                percentage={student.benchmark_scores?.[0]?.score || 0} 
+                                performanceLevel={student.benchmark_scores?.[0]?.performance_level}
+                              />
+                              <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2">
+                                <span className="text-lg font-bold">
+                                  {student.benchmark_scores?.[0]?.score || 0}%
+                                </span>
+                                <span className="text-xs text-muted-foreground line-clamp-2 group-hover:text-primary">
+                                  {student.name}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-3xl">
+                          <DialogHeader>
+                            <DialogTitle>{student.name} - Benchmark Details</DialogTitle>
+                          </DialogHeader>
+                          <BenchmarkScores studentId={student.id} />
+                        </DialogContent>
+                      </Dialog>
+                    ))
+                )}
+              </div>
+            </div>
         ))}
       </div>
     </div>
@@ -128,21 +159,21 @@ export function TeacherBenchmark() {
 }
 
 function CircleProgress({ percentage, performanceLevel }: { percentage: number, performanceLevel: string }) {
-  const radius = 20;
+  const radius = 60; // Increased radius for larger circles
   const circumference = 2 * Math.PI * radius;
   
   return (
     <svg className="w-full h-full transform -rotate-90">
       <circle
-        cx="32"
-        cy="32"
+        cx="64"
+        cy="64"
         r={radius}
         className="stroke-zinc-800 fill-none"
-        strokeWidth="4"
+        strokeWidth="8" // Increased from 4 to 8
       />
       <circle
-        cx="32"
-        cy="32"
+        cx="64"
+        cy="64"
         r={radius}
         className={cn(
           "fill-none transition-all duration-500",
@@ -151,7 +182,7 @@ function CircleProgress({ percentage, performanceLevel }: { percentage: number, 
           performanceLevel === 'Approaches' ? "stroke-yellow-500" :
           "stroke-red-500"
         )}
-        strokeWidth="4"
+        strokeWidth="8" // Increased from 4 to 8
         strokeDasharray={`${(percentage/100) * circumference} ${circumference}`}
         strokeLinecap="round"
       />
