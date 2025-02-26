@@ -9,19 +9,19 @@ export const TYPE_COLORS = {
 } as const;
 
 export const STATUS_COLORS = {
-  'not_started': {
-    bg: 'bg-gray-50 hover:bg-gray-100 border-gray-200',
-    text: 'text-gray-400',
-    dot: 'bg-gray-400'
+  completed: {
+    bg: "bg-green-100 dark:bg-green-900/20",
+    text: "text-green-700 dark:text-green-300",
+    dot: "bg-green-500"
   },
-  'in_progress': {
-    bg: 'bg-yellow-50 hover:bg-yellow-100 border-yellow-200',
-    text: 'text-yellow-600',
-    dot: 'bg-yellow-400'
+  in_progress: {
+    bg: "bg-blue-100 dark:bg-blue-900/20",
+    text: "text-blue-700 dark:text-blue-300",
+    dot: "bg-blue-500"
   },
-  'completed': {
-    bg: 'bg-green-50 hover:bg-green-100 border-green-200',
-    text: 'text-green-600',
-    dot: 'bg-green-400'
+  not_graded: {
+    bg: "bg-orange-100 dark:bg-orange-900/20",
+    text: "text-orange-700 dark:text-orange-300",
+    dot: "bg-orange-500"
   }
 } as const;

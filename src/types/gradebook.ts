@@ -56,3 +56,5 @@ export interface Flag {
   reviewed_at: string | null;
   type: string;
 }
+
+export type AssignmentStatus = 'in_progress' | 'completed' | 'not_graded';

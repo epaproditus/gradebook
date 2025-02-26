@@ -548,7 +548,10 @@ export function StudentDashboard() {
                                 <div className="flex items-center gap-2 text-zinc-400 text-sm">
                                   <Calendar className="w-3 h-3" />
                                   <span>{format(assignment.date, 'MMM d')}</span>
-                                  {assignment.status !== 'completed' && (
+                                  {assignment.status === 'in_progress' && (
+                                    <span className="text-blue-500">(In Progress)</span>
+                                  )}
+                                  {assignment.status === 'not_graded' && (
                                     <span className="text-orange-500">(Not Yet Graded)</span>
                                   )}
                                 </div>
