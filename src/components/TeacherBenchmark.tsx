@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Target, Brain, ChevronDown } from 'lucide-react';
@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { teksCategories, getTeksCategory, getTeksDescription } from '@/lib/teksData';
 import { BenchmarkScores } from './BenchmarkScores';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface StandardScore {
   standard: string;
@@ -32,10 +34,20 @@ interface Student {
   benchmark_standards: StandardScore[];
 }
 
+// Update period formatting function
 function formatPeriod(period: string) {
-  const num = parseInt(period);
-  const suffix = num === 1 ? 'st' : num === 2 ? 'nd' : num === 3 ? 'rd' : 'th';
-  return `${num}${suffix} Period`;
+  // Handle special cases like "1st SPED"
+  const match = period.match(/(\d+)(?:st|nd|rd|th)?\s*(.+)?/i);
+  if (!match) return period;
+
+  const [_, num, suffix] = match;
+  const ordinal = nth(parseInt(num));
+  return suffix ? `${ordinal} ${suffix}` : ordinal;
+}
+
+// Add ordinal helper function
+function nth(n: number): string {
+  return n + (['st', 'nd', 'rd'][((n + 90) % 100 - 10) % 10 - 1] || 'th');
 }
 
 // Separate circle components for different views
@@ -72,21 +84,22 @@ function StudentCircle({ percentage, performanceLevel }: { percentage: number, p
 }
 
 function StandardCircle({ percentage }: { percentage: number }) {
-  const radius = 24; // Smaller radius for standards view
+  // Reduce size further for better fit
+  const radius = 16; // Reduced from 24
   const circumference = 2 * Math.PI * radius;
   
   return (
-    <svg className="w-full h-full transform -rotate-90">
+    <svg className="w-full h-full transform -rotate-90" viewBox="0 0 40 40"> // Added viewBox
       <circle
-        cx="32"
-        cy="32"
+        cx="20" // Centered in viewBox
+        cy="20"
         r={radius}
         className="stroke-zinc-800 fill-none"
-        strokeWidth="6"
+        strokeWidth="4" // Reduced from 6
       />
       <circle
-        cx="32"
-        cy="32"
+        cx="20"
+        cy="20"
         r={radius}
         className={cn(
           "fill-none transition-all duration-500",
@@ -94,7 +107,7 @@ function StandardCircle({ percentage }: { percentage: number }) {
           percentage >= 50 ? "stroke-yellow-500" :
           "stroke-red-500"
         )}
-        strokeWidth="6"
+        strokeWidth="4"
         strokeDasharray={`${(percentage/100) * circumference} ${circumference}`}
         strokeLinecap="round"
       />
@@ -109,6 +122,7 @@ export function TeacherBenchmark() {
   const [customGroups, setCustomGroups] = useState<Record<string, number[]>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [view, setView] = useState<'students' | 'standards'>('students');
+  const [selectedTeks, setSelectedTeks] = useState<string[]>([]);
   const supabase = createClientComponentClient();
 
   // Load students and their benchmark data
@@ -130,12 +144,27 @@ export function TeacherBenchmark() {
     loadData();
   }, []);
 
-  // Filter students based on period and search
+  // Get unique TEKS from all students
+  const allTeks = useMemo(() => {
+    const teksSet = new Set<string>();
+    students.forEach(student => {
+      student.benchmark_standards?.forEach(standard => {
+        teksSet.add(standard.standard);
+      });
+    });
+    return Array.from(teksSet).sort();
+  }, [students]);
+
+  // Filter students based on period, search, group, and TEKS
   const filteredStudents = students.filter(student => {
     const matchesPeriod = selectedPeriod === 'all' || student.class_period === selectedPeriod;
     const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesGroup = selectedGroup === 'none' || customGroups[selectedGroup]?.includes(student.id);
-    return matchesPeriod && matchesSearch && matchesGroup;
+    const matchesTeks = selectedTeks.length === 0 || 
+      student.benchmark_standards?.some(standard => 
+        selectedTeks.includes(standard.standard)
+      );
+    return matchesPeriod && matchesSearch && matchesGroup && matchesTeks;
   });
 
   // Update the sorting function to consider standards
@@ -192,9 +221,21 @@ export function TeacherBenchmark() {
       }>;
     }> = {};
 
-    // Group all students' performance by standard
-    filteredStudents.forEach(student => {
+    // Filter students first
+    const studentsToShow = students.filter(student => {
+      const matchesPeriod = selectedPeriod === 'all' || student.class_period === selectedPeriod;
+      const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesPeriod && matchesSearch;
+    });
+
+    studentsToShow.forEach(student => {
       student.benchmark_standards?.forEach(standard => {
+        // Only include selected TEKS or all if none selected
+        if (selectedTeks.length > 0 && !selectedTeks.includes(standard.standard)) {
+          return;
+        }
+
+        // Rest of the grouping logic
         if (!standardsMap[standard.standard]) {
           standardsMap[standard.standard] = {
             category: getTeksCategory(standard.standard),
@@ -232,6 +273,37 @@ export function TeacherBenchmark() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Benchmark Results</h1>
         <div className="flex gap-4">
+          {/* Add TEKS filter */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline">
+                Filter TEKS ({selectedTeks.length})
+                <ChevronDown className="ml-2 h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80">
+              <div className="space-y-2 max-h-80 overflow-y-auto p-2">
+                {allTeks.map(teks => (
+                  <div key={teks} className="flex items-center space-x-2">
+                    <Checkbox
+                      checked={selectedTeks.includes(teks)}
+                      onCheckedChange={(checked) => {
+                        setSelectedTeks(prev => 
+                          checked 
+                            ? [...prev, teks]
+                            : prev.filter(t => t !== teks)
+                        );
+                      }}
+                    />
+                    <span className="text-sm">
+                      {teks} - {getTeksDescription(teks)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
+
           <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Select period..." />
@@ -275,12 +347,14 @@ export function TeacherBenchmark() {
                         students.map(student => (
                           <Dialog key={student.id}>
                             <DialogTrigger asChild>
-                              <div className="cursor-pointer group">
-                                <div className="relative w-32 h-32 mx-auto">
-                                  <StudentCircle 
-                                    percentage={student.benchmark_scores?.[0]?.score || 0} 
-                                    performanceLevel={student.benchmark_scores?.[0]?.performance_level}
-                                  />
+                              <div className="cursor-pointer group/circle">
+                                <div className="relative w-32 h-32 mx-auto transition-all duration-200">
+                                  <div className="peer">
+                                    <StudentCircle 
+                                      percentage={student.benchmark_scores?.[0]?.score || 0} 
+                                      performanceLevel={student.benchmark_scores?.[0]?.performance_level}
+                                    />
+                                  </div>
                                   <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2">
                                     <span className="text-lg font-bold">
                                       {student.benchmark_scores?.[0]?.score || 0}%
@@ -318,44 +392,45 @@ export function TeacherBenchmark() {
                   <CardTitle>{teksCategories[category]}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-1 gap-6">
+                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                     {standards.map(({ standard, description, isReporting, students }) => (
-                      <Card key={standard}>
-                        <CardHeader>
-                          <CardTitle className="flex items-center gap-2">
-                            <span className="text-sm font-medium">{standard}</span>
-                            <span className="text-sm text-muted-foreground">-</span>
-                            <span className="text-sm text-muted-foreground flex-1">
+                      <Card key={standard} className="h-full">
+                        <CardHeader className="p-4">
+                          <CardTitle className="text-sm">
+                            <div className="flex items-center justify-between gap-2">
+                              <span>{standard}</span>
+                              <span className={cn(
+                                "text-xs px-2 py-1 rounded-full",
+                                isReporting 
+                                  ? "bg-blue-500/10 text-blue-500" 
+                                  : "bg-yellow-500/10 text-yellow-500"
+                              )}>
+                                {isReporting ? 'Reporting' : 'Supporting'}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">
                               {description}
-                            </span>
-                            <span className={cn(
-                              "text-xs px-2 py-1 rounded-full",
-                              isReporting 
-                                ? "bg-blue-500/10 text-blue-500" 
-                                : "bg-yellow-500/10 text-yellow-500"
-                            )}>
-                              {isReporting ? 'Reporting' : 'Supporting'}
-                            </span>
+                            </p>
                           </CardTitle>
                         </CardHeader>
-                        <CardContent>
-                          <div className="grid grid-cols-8 gap-4">
+                        <CardContent className="p-4 pt-0">
+                          <div className="grid grid-cols-8 gap-1"> {/* Increased columns, reduced gap */}
                             {students
                               .sort((a, b) => b.mastery - a.mastery)
                               .map(student => (
                                 <div 
                                   key={student.id}
-                                  className="flex flex-col items-center gap-2"
+                                  className="flex flex-col items-center"
                                 >
-                                  <div className="relative w-16 h-16">
+                                  <div className="w-8 h-8"> {/* Reduced from w-10 h-10 */}
                                     <StandardCircle percentage={student.mastery} />
                                     <div className="absolute inset-0 flex items-center justify-center">
-                                      <span className="text-sm font-bold">
+                                      <span className="text-[8px] font-bold"> {/* Reduced font size */}
                                         {student.mastery}%
                                       </span>
                                     </div>
                                   </div>
-                                  <span className="text-[10px] text-muted-foreground text-center">
+                                  <span className="text-[8px] text-muted-foreground text-center mt-0.5">
                                     {student.name.split(',')[1]}
                                   </span>
                                 </div>
