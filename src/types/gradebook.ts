@@ -6,6 +6,7 @@ export interface Assignment {
   subject: 'Math 8' | 'Algebra I';
   google_classroom_id?: string;
   google_course_id?: string;
+  six_weeks_period: '1SW' | '2SW' | '3SW' | '4SW' | '5SW' | '6SW' | null;
 }
 
 export interface Student {

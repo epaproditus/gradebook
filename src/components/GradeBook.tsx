@@ -36,6 +36,8 @@ import { STATUS_COLORS, TYPE_COLORS, SUBJECT_COLORS } from '@/lib/constants';
 import { SignOutButton } from './SignOutButton';
 import { calculateTotal, calculateWeightedAverage } from '@/lib/gradeCalculations';
 import { FlagInbox } from './FlagInbox';
+import { getCurrentSixWeeks, getSixWeeksForDate } from '@/lib/dateUtils';
+import { SixWeeksSelector } from './SixWeeksSelector';  // Add this line near other imports
 
 // Initialize Supabase client (this is fine outside component)
 const supabase = createClient(
@@ -101,7 +103,6 @@ const BirthdayList: FC<BirthdayListProps> = ({ students, currentDate, view }) =>
     </div>
   ) : null;
 };
-
 const GradeExportDialog: FC<ExportDialogProps> = ({ assignments, students, onExport }) => {
   const [selectedAssignment, setSelectedAssignment] = useState<string>('');
   const [selectedPeriods, setSelectedPeriods] = useState<string[]>([]);
@@ -665,6 +666,7 @@ const GradeBook: FC = () => {
   const [dateFilter, setDateFilter] = useState(loadConfig().dateFilter);
   const [subjectFilter, setSubjectFilter] = useState(loadConfig().subjectFilter);
   const [studentSortOrder, setStudentSortOrder] = useState(loadConfig().studentSortOrder);
+  const [sixWeeksFilter, setSixWeeksFilter] = useState<string | null>(null);
 
   // Add effect to save config when any related state changes
   useEffect(() => {
@@ -763,10 +765,17 @@ const GradeBook: FC = () => {
   // Load assignments and grades on component mount
   useEffect(() => {
     const loadAssignments = async () => {
-      // First load assignments
-      const { data: assignmentData, error: assignmentError } = await supabase
+      // Load assignments with conditional six_weeks_period filter
+      const query = supabase
         .from('assignments')
         .select('*');
+      
+      // Only apply the filter if sixWeeksFilter is set and not 'all'
+      if (sixWeeksFilter && sixWeeksFilter !== 'all') {
+        query.eq('six_weeks_period', sixWeeksFilter);
+      }
+  
+      const { data: assignmentData, error: assignmentError } = await query;
   
       if (assignmentError) {
         console.error('Error loading assignments:', assignmentError);
@@ -823,7 +832,7 @@ const GradeBook: FC = () => {
     };
   
     loadAssignments();
-  }, []);
+  }, [sixWeeksFilter]);
 
   // Add function to load tags
   useEffect(() => {
@@ -884,7 +893,8 @@ const GradeBook: FC = () => {
       name: '',
       periods: [],
       type: selectedType,
-      subject: 'Math 8'
+      subject: 'Math 8',
+      six_weeks_period: getSixWeeksForDate(dateToUse) // Automatically set based on date
     });
   };
 
@@ -1175,6 +1185,7 @@ const saveAssignment = async () => {
       type: selectedType,
       periods: newAssignment.periods,
       subject: newAssignment.subject,
+      six_weeks_period: newAssignment.six_weeks_period, // Include six_weeks_period
       max_points: 100,
       created_at: new Date().toISOString()
     };
@@ -1562,6 +1573,13 @@ const getSortedAndFilteredAssignments = () => {
     .filter(id => assignments[id]) // Filter out any invalid IDs
     .map(id => [id, assignments[id]] as [string, Assignment]);
   
+  // Apply Six Weeks filter
+  if (sixWeeksFilter) {
+    entries = entries.filter(([_, assignment]) => 
+      assignment.six_weeks_period === sixWeeksFilter
+    );
+  }
+
   // Apply subject filter
   if (subjectFilter !== 'all') {
     entries = entries.filter(([_, assignment]) => assignment.subject === subjectFilter);
@@ -2851,6 +2869,10 @@ return (
               </Card>
             )}
             <div className="flex gap-4 mb-4">
+              <SixWeeksSelector 
+                value={sixWeeksFilter}
+                onChange={setSixWeeksFilter}
+              />
               <Select
                 value={subjectFilter}
                 onValueChange={(value: 'all' | 'Math 8' | 'Algebra I') => setSubjectFilter(value)}

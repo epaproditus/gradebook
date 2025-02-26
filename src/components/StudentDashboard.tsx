@@ -39,6 +39,8 @@ import { GradeBar } from './GradeBar';
 import { AvatarPicker } from './AvatarPicker';
 import { BenchmarkScores } from './BenchmarkScores';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { SixWeeksSelector } from './SixWeeksSelector';
+import { getCurrentSixWeeks } from '@/lib/dateUtils';
 
 interface StudentData {
   id: number;
@@ -64,6 +66,7 @@ export function StudentDashboard() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [recentlyFlagged, setRecentlyFlagged] = useState<Set<string>>(new Set());
+  const [currentSixWeeks, setCurrentSixWeeks] = useState<string>(getCurrentSixWeeks());
   const supabase = createClientComponentClient({
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
     supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -110,6 +113,7 @@ export function StudentDashboard() {
             .from('assignments')
             .select('*')
             .contains('periods', [studentData.period])
+            .eq('six_weeks_period', currentSixWeeks)
             .order('date', { ascending: false });
 
           if (assignmentData) {
@@ -171,7 +175,7 @@ export function StudentDashboard() {
     };
 
     loadStudentData();
-  }, []);
+  }, [currentSixWeeks]);
 
   const handleFlag = async (assignmentId: string) => {
     try {
@@ -482,6 +486,13 @@ export function StudentDashboard() {
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="assignments" className="space-y-4">
+                {/* Add Six Weeks selector */}
+                <div className="mb-6">
+                  <SixWeeksSelector
+                    value={currentSixWeeks}
+                    onChange={(value) => setCurrentSixWeeks(value || getCurrentSixWeeks())}
+                  />
+                </div>
                 {/* Existing assignments grid */}
                 <div className="grid grid-cols-2 gap-4">
                   {assignments.map((assignment, index) => (

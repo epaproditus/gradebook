@@ -32,6 +32,13 @@ A Next.js application that manages teacher gradebooks with Google Classroom inte
   - DMAC score import functionality
   - Batch grade saving
 
+- **Grading Window Tags**
+  - Assignments can be tagged with Six Weeks periods (e.g., 1SW through 6SW)
+  - Filter assignments based on the selected grading period
+  - Helps in managing and viewing assignments relevant to the current Six Weeks
+  - Automatic date-based grading window assignment
+  - Manual override capability
+
 ### 2. Student Tracking
 - **Organization**
   - Students grouped by periods
@@ -318,6 +325,14 @@ A Next.js application that manages teacher gradebooks with Google Classroom inte
 - `/supabase/migrations/` - Database schema evolution
 - `/supabase/config.toml` - Supabase configuration
 - `/supabase/queries/` - Stored procedures and complex queries
+
+### Grading Windows
+- Six Weeks (SW) periods implemented as `six_weeks_period` column
+- Valid values: '1SW' through '6SW'
+- Indexed for efficient filtering
+- Used for organizing assignments by grading period
+- Synced between teacher and student views
+- Helps manage current vs. historical grades
 
 ## Version Control Notes
 - Use `git stash` to temporarily store local changes
