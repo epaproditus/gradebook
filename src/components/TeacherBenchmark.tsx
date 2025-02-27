@@ -17,6 +17,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import { Badge } from "@/components/ui/badge";
 
 interface StandardScore {
   standard: string;
@@ -136,6 +137,9 @@ export function TeacherBenchmark() {
     mastered: false,
     growth: false
   });
+  const [selectedTeks, setSelectedTeks] = useState<string[]>([]);
+  const [showTeksSelector, setShowTeksSelector] = useState(false);
+  const [teksCategory, setTeksCategory] = useState<'all' | 'algebra' | 'regular'>('all');
   const supabase = createClientComponentClient();
 
   const toggleTopStats = (section: 'mastered' | 'growth') => {
@@ -212,16 +216,31 @@ export function TeacherBenchmark() {
     return true; // Default to collapsed
   };
 
-  // Filter students based on period and search
+  // Function to determine if a TEKS is Algebra or Regular
+  const getTeksType = (teks: string): 'algebra' | 'regular' => {
+    return teks.startsWith('A.') ? 'algebra' : 'regular';
+  };
+
+  // Filter students based on period, search, TEKS selection, and TEKS category
   const filteredStudents = students.filter(student => {
     const matchesPeriod = selectedPeriod === 'all' || 
       normalizePeriod(student.class_period) === selectedPeriod;
     const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesGroup = selectedGroup === 'none' || customGroups[selectedGroup]?.includes(student.id);
-    const matchesTeks = selectedTeks.length === 0 || 
-      student.benchmark_standards?.some(standard => 
+    
+    // Enhanced TEKS filtering with category filter
+    let matchesTeks = true;
+    if (selectedTeks.length > 0) {
+      matchesTeks = student.benchmark_standards?.some(standard => 
         selectedTeks.includes(standard.standard)
       );
+    } else if (teksCategory !== 'all') {
+      // If no specific TEKS selected but category filter is active
+      matchesTeks = student.benchmark_standards?.some(standard => 
+        getTeksType(standard.standard) === teksCategory
+      );
+    }
+    
     return matchesPeriod && matchesSearch && matchesGroup && matchesTeks;
   });
 
@@ -252,6 +271,12 @@ export function TeacherBenchmark() {
       };
     }
     const level = student.benchmark_scores?.[0]?.performance_level || 'Did Not Meet';
+    
+    // Make sure the level exists in our accumulator
+    if (!acc[period][level]) {
+      acc[period][level] = [];
+    }
+    
     acc[period][level].push(student);
     return acc;
   }, {} as Record<string, Record<string, Student[]>>);
@@ -287,6 +312,11 @@ export function TeacherBenchmark() {
 
     studentsToShow.forEach(student => {
       student.benchmark_standards?.forEach(standard => {
+        // Only include standards that match the category filter
+        if (teksCategory !== 'all' && getTeksType(standard.standard) !== teksCategory) {
+          return;
+        }
+        
         // Only include selected TEKS or all if none selected
         if (selectedTeks.length > 0 && !selectedTeks.includes(standard.standard)) {
           return;
@@ -372,6 +402,34 @@ export function TeacherBenchmark() {
     return { masteredStandards, growthStandards };
   };
 
+  // Get all unique TEKS standards from students, filtered by category if needed
+  const allTeksStandards = useMemo(() => {
+    const standards = new Set<string>();
+    students.forEach(student => {
+      student.benchmark_standards?.forEach((standard: StandardScore) => {
+        // Only add standards that match the selected category
+        if (teksCategory === 'all' || getTeksType(standard.standard) === teksCategory) {
+          standards.add(standard.standard);
+        }
+      });
+    });
+    return Array.from(standards).sort();
+  }, [students, teksCategory]);
+
+  // Function to toggle a TEKS selection
+  const toggleTeksSelection = (teks: string) => {
+    if (selectedTeks.includes(teks)) {
+      setSelectedTeks(selectedTeks.filter(t => t !== teks));
+    } else {
+      setSelectedTeks([...selectedTeks, teks]);
+    }
+  };
+
+  // Function to clear all selected TEKS
+  const clearTeksSelection = () => {
+    setSelectedTeks([]);
+  };
+
   return (
     <div className="p-4 sm:p-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
@@ -390,13 +448,119 @@ export function TeacherBenchmark() {
               ))}
             </SelectContent>
           </Select>
+          
+          {/* Add TEKS category filter */}
+          <Select 
+            value={teksCategory} 
+            onValueChange={(value) => {
+              setTeksCategory(value as 'all' | 'algebra' | 'regular');
+              // Clear selected TEKS when changing categories
+              setSelectedTeks([]);
+            }}
+          >
+            <SelectTrigger className="w-full sm:w-[180px]">
+              <SelectValue placeholder="TEKS Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All TEKS</SelectItem>
+              <SelectItem value="algebra">Algebra TEKS (A.)</SelectItem>
+              <SelectItem value="regular">Regular TEKS (8.)</SelectItem>
+            </SelectContent>
+          </Select>
+          
           <Input
             placeholder="Search students..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full sm:w-[200px]"
           />
+          <Dialog open={showTeksSelector} onOpenChange={setShowTeksSelector}>
+            <DialogTrigger asChild>
+              <Button 
+                variant="outline" 
+                className={cn(
+                  "whitespace-nowrap",
+                  selectedTeks.length > 0 && "border-blue-500 text-blue-500"
+                )}
+              >
+                Filter TEKS {selectedTeks.length > 0 && `(${selectedTeks.length})`}
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>
+                  Select {teksCategory === 'algebra' ? 'Algebra' : 
+                         teksCategory === 'regular' ? 'Regular' : 
+                         'All'} TEKS Standards
+                </DialogTitle>
+              </DialogHeader>
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-sm text-muted-foreground">
+                  {selectedTeks.length} standards selected
+                </span>
+                <Button variant="outline" size="sm" onClick={clearTeksSelection}>
+                  Clear All
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                {allTeksStandards.map(teks => (
+                  <div 
+                    key={teks}
+                    className={cn(
+                      "p-2 border rounded-md cursor-pointer text-sm",
+                      selectedTeks.includes(teks) 
+                        ? "bg-primary/10 border-primary" 
+                        : "hover:bg-accent"
+                    )}
+                    onClick={() => toggleTeksSelection(teks)}
+                  >
+                    <div className="font-medium">{teks}</div>
+                    <div className="text-xs text-muted-foreground line-clamp-2">
+                      {getTeksDescription(teks)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
+      </div>
+
+      {/* Display selected TEKS category information */}
+      <div className="mb-4 flex items-center gap-2">
+        {teksCategory !== 'all' && (
+          <Badge variant="secondary">
+            {teksCategory === 'algebra' ? 'Algebra TEKS' : 'Regular TEKS'}
+          </Badge>
+        )}
+        
+        {selectedTeks.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {selectedTeks.map(teks => (
+              <Badge 
+                key={teks}
+                variant="outline"
+                className="flex items-center gap-1"
+              >
+                {teks}
+                <button 
+                  className="ml-1 hover:text-destructive"
+                  onClick={() => toggleTeksSelection(teks)}
+                >
+                  ×
+                </button>
+              </Badge>
+            ))}
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={clearTeksSelection}
+              className="h-6"
+            >
+              Clear all
+            </Button>
+          </div>
+        )}
       </div>
 
       <Tabs value={view} onValueChange={(v) => setView(v as 'students' | 'standards')}>
