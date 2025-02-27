@@ -357,12 +357,12 @@ export function TeacherBenchmark() {
   };
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="p-4 sm:p-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <h1 className="text-2xl font-bold">Benchmark Results</h1>
-        <div className="flex gap-4">
+        <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
           <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue placeholder="Select period..." />
             </SelectTrigger>
             <SelectContent>
@@ -378,7 +378,7 @@ export function TeacherBenchmark() {
             placeholder="Search students..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-[200px]"
+            className="w-full sm:w-[200px]"
           />
         </div>
       </div>
@@ -415,7 +415,7 @@ export function TeacherBenchmark() {
                     </CardHeader>
                     <CollapsibleContent>
                       <CardContent>
-                        <div className="grid grid-cols-6 gap-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                           {Object.entries(levels)
                             .flatMap(([level, students]) =>
                               students.map(student => (
@@ -466,7 +466,7 @@ export function TeacherBenchmark() {
             const { masteredStandards, growthStandards } = getOverallMasteryStats(standardsView);
             
             return (
-              <div className="grid grid-cols-2 gap-6 mb-8">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
                 {/* Mastered Standards */}
                 <Card>
                   <CardHeader 
@@ -593,7 +593,7 @@ export function TeacherBenchmark() {
                           <h3 className="text-sm mb-3 font-bold text-blue-500">
                             Readiness Standards
                           </h3>
-                          <div className="grid grid-cols-3 gap-3">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                             {standards.readiness.map(({ standard, description, students }) => {
                               // Calculate performance level percentages
                               const totalStudents = students.length;
@@ -683,7 +683,7 @@ export function TeacherBenchmark() {
                           <h3 className="text-sm mb-3 font-bold text-yellow-500">
                             Supporting Standards
                           </h3>
-                          <div className="grid grid-cols-3 gap-3">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                             {standards.supporting.map(({ standard, description, students }) => {
                               // Calculate performance level percentages for supporting standards
                               const totalStudents = students.length;
