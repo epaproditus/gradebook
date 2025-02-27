@@ -38,6 +38,25 @@ Displays detailed benchmark scores for individual students, including:
 - Standard-by-standard mastery percentages
 - Historical performance data
 
+### Tutoring Center (Implemented)
+
+The Tutoring Center feature provides personalized practice for students based on their performance in benchmark assessments:
+
+- **Student-Specific Remediation**: Targets standards where students scored below mastery level
+- **Interactive Practice Problems**: Multiple-choice questions with hints and step-by-step solutions
+- **Progress Tracking**: Monitors student improvement on specific TEKS standards
+- **Adaptive Learning**: Increases problem difficulty as students demonstrate mastery
+- **Engagement Features**: Includes achievement streaks and visual progress indicators
+
+Implementation details:
+- Problems are generated using a hybrid approach combining SymPy for mathematical precision and AI for context
+- Problems are categorized by TEKS standard and difficulty level
+- Students can filter practice problems by TEKS category (Algebra vs Regular)
+- Progress data is persisted to show improvement over time
+- Supports features like hints, detailed solutions, and immediate feedback
+
+Technical documentation for this feature is available in `/docs/tutoring-center-approach.md` with a sample implementation in `/scripts/generate_problems.py`.
+
 ### Database Structure
 
 The application uses Supabase with the following main tables:

@@ -394,6 +394,15 @@ export function StudentDashboard() {
       <div className="min-h-screen bg-black text-white pt-16 sm:pt-20 pb-16 sm:pb-20">
         {/* Floating Navigation */}
         <div className="fixed top-4 sm:top-6 right-4 sm:right-6 z-50 flex gap-2 sm:gap-4">
+          <Button 
+            variant="dark"
+            asChild
+          >
+            <Link href="/tutoring">
+              <Brain className="h-4 w-4 mr-2" />
+              Tutoring Center
+            </Link>
+          </Button>
           <SignOutButton variant="dark" />
         </div>
 

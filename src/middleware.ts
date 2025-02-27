@@ -70,6 +70,13 @@ export async function middleware(req: NextRequest) {
       res.headers.set('x-session-check', now.toString());
     }
 
+    // Protect tutoring routes
+    if (req.nextUrl.pathname.startsWith('/tutoring')) {
+      if (!session) {
+        return NextResponse.redirect(new URL('/login', req.url));
+      }
+    }
+
     return res;
   } catch (error) {
     console.error('Middleware error:', error);
@@ -85,6 +92,7 @@ export const config = {
     '/student/:path*',
     '/students/:path*',
     '/api/:path*',
-    '/login'
+    '/login',
+    '/tutoring/:path*'
   ],
 };
