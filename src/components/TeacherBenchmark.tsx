@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Target, Brain, ChevronDown } from 'lucide-react';
+import { Target, Brain, ChevronDown, ChevronUp, Award } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,8 +12,11 @@ import { Button } from "@/components/ui/button";
 import { teksCategories, getTeksCategory, getTeksDescription } from '@/lib/teksData';
 import { BenchmarkScores } from './BenchmarkScores';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 
 interface StandardScore {
   standard: string;
@@ -34,20 +37,17 @@ interface Student {
   benchmark_standards: StandardScore[];
 }
 
-// Update period formatting function
-function formatPeriod(period: string) {
-  // Handle special cases like "1st SPED"
-  const match = period.match(/(\d+)(?:st|nd|rd|th)?\s*(.+)?/i);
-  if (!match) return period;
-
-  const [_, num, suffix] = match;
-  const ordinal = nth(parseInt(num));
-  return suffix ? `${ordinal} ${suffix}` : ordinal;
+function normalizePeriod(period: string) {
+  // Extract just the numeric part from the period
+  const match = period.match(/^(\d+)/);
+  return match ? match[1] : period;
 }
 
-// Add ordinal helper function
-function nth(n: number): string {
-  return n + (['st', 'nd', 'rd'][((n + 90) % 100 - 10) % 10 - 1] || 'th');
+function formatPeriod(period: string) {
+  // Get just the number
+  const num = parseInt(normalizePeriod(period));
+  const suffix = num === 1 ? 'st' : num === 2 ? 'nd' : num === 3 ? 'rd' : 'th';
+  return `${num}${suffix} Period`;
 }
 
 // Separate circle components for different views
@@ -84,33 +84,40 @@ function StudentCircle({ percentage, performanceLevel }: { percentage: number, p
 }
 
 function StandardCircle({ percentage }: { percentage: number }) {
-  // Reduce size further for better fit
-  const radius = 16; // Reduced from 24
+  const radius = 5; // Small radius for the compact view
   const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - percentage / 100);
   
   return (
-    <svg className="w-full h-full transform -rotate-90" viewBox="0 0 40 40"> // Added viewBox
-      <circle
-        cx="20" // Centered in viewBox
-        cy="20"
-        r={radius}
-        className="stroke-zinc-800 fill-none"
-        strokeWidth="4" // Reduced from 6
-      />
-      <circle
-        cx="20"
-        cy="20"
-        r={radius}
-        className={cn(
-          "fill-none transition-all duration-500",
-          percentage >= 70 ? "stroke-green-500" :
-          percentage >= 50 ? "stroke-yellow-500" :
-          "stroke-red-500"
-        )}
-        strokeWidth="4"
-        strokeDasharray={`${(percentage/100) * circumference} ${circumference}`}
-        strokeLinecap="round"
-      />
+    <svg 
+      className="w-full h-full"
+      viewBox="0 0 12 12"
+    >
+      <g transform="rotate(-90 6 6)">
+        <circle
+          cx="6"
+          cy="6"
+          r={radius}
+          className="stroke-zinc-800 fill-none"
+          strokeWidth="1.5"
+          style={{ opacity: 0.2 }}
+        />
+        <circle
+          cx="6"
+          cy="6"
+          r={radius}
+          className={cn(
+            "fill-none transition-all duration-500",
+            percentage >= 70 ? "stroke-green-500" :
+            percentage >= 50 ? "stroke-yellow-500" :
+            "stroke-red-500"
+          )}
+          strokeWidth="1.5"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+        />
+      </g>
     </svg>
   );
 }
@@ -122,8 +129,21 @@ export function TeacherBenchmark() {
   const [customGroups, setCustomGroups] = useState<Record<string, number[]>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [view, setView] = useState<'students' | 'standards'>('students');
-  const [selectedTeks, setSelectedTeks] = useState<string[]>([]);
+  const [categoryCollapsed, setCategoryCollapsed] = useState<Record<string, boolean>>({});
+  const [standardsCollapsed, setStandardsCollapsed] = useState<Record<string, boolean>>({});
+  const [periodsCollapsed, setPeriodsCollapsed] = useState<Record<string, boolean>>({});
+  const [topStatsCollapsed, setTopStatsCollapsed] = useState<Record<string, boolean>>({
+    mastered: false,
+    growth: false
+  });
   const supabase = createClientComponentClient();
+
+  const toggleTopStats = (section: 'mastered' | 'growth') => {
+    setTopStatsCollapsed(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  };
 
   // Load students and their benchmark data
   useEffect(() => {
@@ -144,20 +164,58 @@ export function TeacherBenchmark() {
     loadData();
   }, []);
 
-  // Get unique TEKS from all students
-  const allTeks = useMemo(() => {
-    const teksSet = new Set<string>();
-    students.forEach(student => {
-      student.benchmark_standards?.forEach(standard => {
-        teksSet.add(standard.standard);
-      });
-    });
-    return Array.from(teksSet).sort();
-  }, [students]);
+  // Load persisted states after mount
+  useEffect(() => {
+    const savedView = localStorage.getItem('benchmarkView') as 'students' | 'standards';
+    if (savedView) setView(savedView);
 
-  // Filter students based on period, search, group, and TEKS
+    const savedCategory = localStorage.getItem('categoryCollapsed');
+    if (savedCategory) setCategoryCollapsed(JSON.parse(savedCategory));
+
+    const savedStandards = localStorage.getItem('standardsCollapsed');
+    if (savedStandards) setStandardsCollapsed(JSON.parse(savedStandards));
+
+    const savedPeriods = localStorage.getItem('periodsCollapsed');
+    if (savedPeriods) setPeriodsCollapsed(JSON.parse(savedPeriods));
+
+    const savedTopStats = localStorage.getItem('topStatsCollapsed');
+    if (savedTopStats) setTopStatsCollapsed(JSON.parse(savedTopStats));
+  }, []);
+
+  // Persist view changes
+  useEffect(() => {
+    localStorage.setItem('benchmarkView', view);
+  }, [view]);
+
+  // Persist collapse states
+  useEffect(() => {
+    localStorage.setItem('categoryCollapsed', JSON.stringify(categoryCollapsed));
+  }, [categoryCollapsed]);
+
+  useEffect(() => {
+    localStorage.setItem('standardsCollapsed', JSON.stringify(standardsCollapsed));
+  }, [standardsCollapsed]);
+
+  useEffect(() => {
+    localStorage.setItem('periodsCollapsed', JSON.stringify(periodsCollapsed));
+  }, [periodsCollapsed]);
+
+  useEffect(() => {
+    localStorage.setItem('topStatsCollapsed', JSON.stringify(topStatsCollapsed));
+  }, [topStatsCollapsed]);
+
+  // Add function to initialize collapse state for new standards
+  const getInitialCollapseState = (id: string, stateObj: Record<string, boolean>) => {
+    if (typeof stateObj[id] === 'boolean') {
+      return stateObj[id];
+    }
+    return true; // Default to collapsed
+  };
+
+  // Filter students based on period and search
   const filteredStudents = students.filter(student => {
-    const matchesPeriod = selectedPeriod === 'all' || student.class_period === selectedPeriod;
+    const matchesPeriod = selectedPeriod === 'all' || 
+      normalizePeriod(student.class_period) === selectedPeriod;
     const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesGroup = selectedGroup === 'none' || customGroups[selectedGroup]?.includes(student.id);
     const matchesTeks = selectedTeks.length === 0 || 
@@ -184,7 +242,7 @@ export function TeacherBenchmark() {
 
   // Group students by period and performance level
   const studentsByPeriod = filteredStudents.reduce((acc, student) => {
-    const period = student.class_period;
+    const period = normalizePeriod(student.class_period);
     if (!acc[period]) {
       acc[period] = {
         Masters: [],
@@ -205,7 +263,6 @@ export function TeacherBenchmark() {
     });
   });
 
-  // New function to group by standards
   const getStandardsView = () => {
     const standardsMap: Record<string, {
       category: string;
@@ -256,66 +313,80 @@ export function TeacherBenchmark() {
       });
     });
 
-    // Group standards by category
+    // Group by category first, then separate by readiness/supporting within each category
     const byCategory = Object.values(standardsMap).reduce((acc, item) => {
-      if (!acc[item.category]) {
-        acc[item.category] = [];
+      const category = item.category;
+      if (!acc[category]) {
+        acc[category] = {
+          readiness: [],
+          supporting: []
+        };
       }
-      acc[item.category].push(item);
+      if (item.isReporting) {
+        acc[category].readiness.push(item);
+      } else {
+        acc[category].supporting.push(item);
+      }
       return acc;
-    }, {} as Record<string, typeof standardsMap[string][]>);
+    }, {} as Record<string, { readiness: typeof standardsMap[string][]; supporting: typeof standardsMap[string][] }>);
 
     return byCategory;
   };
 
-  return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Benchmark Results</h1>
-        <div className="flex gap-4">
-          {/* Add TEKS filter */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline">
-                Filter TEKS ({selectedTeks.length})
-                <ChevronDown className="ml-2 h-4 w-4" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-80">
-              <div className="space-y-2 max-h-80 overflow-y-auto p-2">
-                {allTeks.map(teks => (
-                  <div key={teks} className="flex items-center space-x-2">
-                    <Checkbox
-                      checked={selectedTeks.includes(teks)}
-                      onCheckedChange={(checked) => {
-                        setSelectedTeks(prev => 
-                          checked 
-                            ? [...prev, teks]
-                            : prev.filter(t => t !== teks)
-                        );
-                      }}
-                    />
-                    <span className="text-sm">
-                      {teks} - {getTeksDescription(teks)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </PopoverContent>
-          </Popover>
+  // Add new function to get all unique periods
+  const getAllPeriods = () => {
+    const periodSet = new Set(students.map(student => normalizePeriod(student.class_period)));
+    return Array.from(periodSet).sort((a, b) => parseInt(a) - parseInt(b));
+  };
 
+  // Modify the overall mastery stats function to focus on standards
+  const getOverallMasteryStats = (standardsView: ReturnType<typeof getStandardsView>) => {
+    const allStandards = Object.values(standardsView).flatMap(category => [
+      ...category.readiness,
+      ...category.supporting
+    ]).map(standard => {
+      const totalStudents = standard.students.length;
+      const mastersCount = standard.students.filter(s => s.mastery >= 77).length;
+      const mastersPercent = Math.round((mastersCount / totalStudents) * 100);
+      
+      return {
+        standard: standard.standard,
+        description: standard.description,
+        isReporting: standard.isReporting,
+        mastersPercent,
+        totalStudents
+      };
+    });
+
+    // Find best and worst performing standards
+    const masteredStandards = allStandards
+      .filter(s => s.mastersPercent >= 50) // Show standards where at least 50% of students mastered
+      .sort((a, b) => b.mastersPercent - a.mastersPercent)
+      .slice(0, 5);
+
+    const growthStandards = allStandards
+      .filter(s => s.mastersPercent < 50)
+      .sort((a, b) => a.mastersPercent - b.mastersPercent)
+      .slice(0, 5);
+
+    return { masteredStandards, growthStandards };
+  };
+
+  return (
+    <div className="p-4 sm:p-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <h1 className="text-2xl font-bold">Benchmark Results</h1>
+        <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
           <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue placeholder="Select period..." />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Periods</SelectItem>
-              {Object.keys(studentsByPeriod)
-                .sort((a, b) => parseInt(a) - parseInt(b))
-                .map(period => (
-                  <SelectItem key={period} value={period}>
-                    {formatPeriod(period)}
-                  </SelectItem>
+              {getAllPeriods().map(period => (
+                <SelectItem key={period} value={period}>
+                  {formatPeriod(period)}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -323,7 +394,7 @@ export function TeacherBenchmark() {
             placeholder="Search students..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-[200px]"
+            className="w-full sm:w-[200px]"
           />
         </div>
       </div>
@@ -339,109 +410,385 @@ export function TeacherBenchmark() {
             {Object.entries(studentsByPeriod)
               .sort(([a], [b]) => parseInt(a) - parseInt(b))
               .map(([period, levels]) => (
-                <div key={period} className="space-y-4">
-                  <h2 className="text-xl font-semibold">{formatPeriod(period)}</h2>
-                  <div className="grid grid-cols-6 gap-4">
-                    {Object.entries(levels)
-                      .flatMap(([level, students]) =>
-                        students.map(student => (
-                          <Dialog key={student.id}>
-                            <DialogTrigger asChild>
-                              <div className="cursor-pointer group/circle">
-                                <div className="relative w-32 h-32 mx-auto transition-all duration-200">
-                                  <div className="peer">
-                                    <StudentCircle 
-                                      percentage={student.benchmark_scores?.[0]?.score || 0} 
-                                      performanceLevel={student.benchmark_scores?.[0]?.performance_level}
-                                    />
-                                  </div>
-                                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2">
-                                    <span className="text-lg font-bold">
-                                      {student.benchmark_scores?.[0]?.score || 0}%
-                                    </span>
-                                    <span className="text-xs text-muted-foreground line-clamp-2 group-hover:text-primary">
-                                      {student.name}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {student.benchmark_standards?.filter(s => s.mastery >= 70).length || 0}/{student.benchmark_standards?.length || 0} Standards
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            </DialogTrigger>
-                            <DialogContent className="max-w-3xl">
-                              <DialogHeader>
-                                <DialogTitle>{student.name} - Benchmark Details</DialogTitle>
-                              </DialogHeader>
-                              <BenchmarkScores studentId={student.id} />
-                            </DialogContent>
-                          </Dialog>
-                        ))
-                    )}
-                  </div>
-                </div>
+                <Collapsible
+                  key={period}
+                  open={!getInitialCollapseState(period, periodsCollapsed)}
+                  onOpenChange={(isOpen) => 
+                    setPeriodsCollapsed(prev => ({ ...prev, [period]: !isOpen }))
+                  }
+                >
+                  <Card>
+                    <CardHeader>
+                      <CollapsibleTrigger className="w-full">
+                        <div className="flex items-center justify-between">
+                          <h2 className="text-xl font-semibold">{formatPeriod(period)}</h2>
+                          {!periodsCollapsed[period] ? 
+                            <ChevronDown className="h-4 w-4" /> : 
+                            <ChevronUp className="h-4 w-4" />
+                          }
+                        </div>
+                      </CollapsibleTrigger>
+                    </CardHeader>
+                    <CollapsibleContent>
+                      <CardContent>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                          {Object.entries(levels)
+                            .flatMap(([level, students]) =>
+                              students.map(student => (
+                                <Dialog key={student.id}>
+                                  <DialogTrigger asChild>
+                                    <div className="cursor-pointer group">
+                                      <div className="relative w-32 h-32 mx-auto">
+                                        <StudentCircle 
+                                          percentage={student.benchmark_scores?.[0]?.score || 0} 
+                                          performanceLevel={student.benchmark_scores?.[0]?.performance_level}
+                                        />
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2">
+                                          <span className="text-lg font-bold">
+                                            {student.benchmark_scores?.[0]?.score || 0}%
+                                          </span>
+                                          <span className="text-xs text-muted-foreground line-clamp-2 group-hover:text-primary">
+                                            {student.name}
+                                          </span>
+                                          <span className="text-xs text-muted-foreground">
+                                            {student.benchmark_standards?.filter(s => s.mastery >= 70).length || 0}/{student.benchmark_standards?.length || 0} Standards
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </DialogTrigger>
+                                  <DialogContent className="max-w-3xl">
+                                    <DialogHeader>
+                                      <DialogTitle>{student.name} - Benchmark Details</DialogTitle>
+                                    </DialogHeader>
+                                    <BenchmarkScores studentId={student.id} />
+                                  </DialogContent>
+                                </Dialog>
+                              ))
+                          )}
+                        </div>
+                      </CardContent>
+                    </CollapsibleContent>
+                  </Card>
+                </Collapsible>
             ))}
           </div>
         </TabsContent>
 
         <TabsContent value="standards">
-          <div className="space-y-8">
-            {Object.entries(getStandardsView()).map(([category, standards]) => (
-              <Card key={category}>
-                <CardHeader>
-                  <CardTitle>{teksCategories[category]}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                    {standards.map(({ standard, description, isReporting, students }) => (
-                      <Card key={standard} className="h-full">
-                        <CardHeader className="p-4">
-                          <CardTitle className="text-sm">
-                            <div className="flex items-center justify-between gap-2">
-                              <span>{standard}</span>
-                              <span className={cn(
-                                "text-xs px-2 py-1 rounded-full",
-                                isReporting 
-                                  ? "bg-blue-500/10 text-blue-500" 
-                                  : "bg-yellow-500/10 text-yellow-500"
-                              )}>
-                                {isReporting ? 'Reporting' : 'Supporting'}
+          {/* Updated Overall Mastery Stats at top */}
+          {(() => {
+            const standardsView = getStandardsView();
+            const { masteredStandards, growthStandards } = getOverallMasteryStats(standardsView);
+            
+            return (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                {/* Mastered Standards */}
+                <Card>
+                  <CardHeader 
+                    className="cursor-pointer"
+                    onClick={() => toggleTopStats('mastered')}
+                  >
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2 text-green-500">
+                        <Award className="h-5 w-5" />
+                        <span>Highest Performing Standards</span>
+                      </CardTitle>
+                      {topStatsCollapsed.mastered ? 
+                        <ChevronDown className="h-4 w-4" /> : 
+                        <ChevronUp className="h-4 w-4" />
+                      }
+                    </div>
+                  </CardHeader>
+                  <div className={cn(
+                    "transition-all",
+                    topStatsCollapsed.mastered ? "hidden" : "block"
+                  )}>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {masteredStandards.map(standard => (
+                          <div key={standard.standard} className="space-y-2">
+                            <div className="flex items-center justify-between gap-4">
+                              <span className="font-medium">
+                                {standard.standard}
+                                <span className={cn(
+                                  "ml-2 text-xs px-2 py-0.5 rounded-full whitespace-nowrap",
+                                  standard.isReporting 
+                                    ? "bg-blue-500/10 text-blue-500" 
+                                    : "bg-yellow-500/10 text-yellow-500"
+                                )}>
+                                  {standard.isReporting ? 'Readiness' : 'Supporting'}
+                                </span>
+                              </span>
+                              <span className="font-medium text-green-500 whitespace-nowrap">
+                                {standard.mastersPercent}% Mastery
                               </span>
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {description}
+                            <p className="text-sm text-muted-foreground">
+                              {standard.description}
                             </p>
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-4 pt-0">
-                          <div className="grid grid-cols-8 gap-1"> {/* Increased columns, reduced gap */}
-                            {students
-                              .sort((a, b) => b.mastery - a.mastery)
-                              .map(student => (
-                                <div 
-                                  key={student.id}
-                                  className="flex flex-col items-center"
-                                >
-                                  <div className="w-8 h-8"> {/* Reduced from w-10 h-10 */}
-                                    <StandardCircle percentage={student.mastery} />
-                                    <div className="absolute inset-0 flex items-center justify-center">
-                                      <span className="text-[8px] font-bold"> {/* Reduced font size */}
-                                        {student.mastery}%
-                                      </span>
-                                    </div>
-                                  </div>
-                                  <span className="text-[8px] text-muted-foreground text-center mt-0.5">
-                                    {student.name.split(',')[1]}
-                                  </span>
-                                </div>
-                            ))}
                           </div>
-                        </CardContent>
-                      </Card>
-                    ))}
+                        ))}
+                      </div>
+                    </CardContent>
                   </div>
-                </CardContent>
-              </Card>
+                </Card>
+
+                {/* Areas for Growth */}
+                <Card>
+                  <CardHeader 
+                    className="cursor-pointer"
+                    onClick={() => toggleTopStats('growth')}
+                  >
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2 text-yellow-500">
+                        <Target className="h-5 w-5" />
+                        <span>Standards Needing Growth</span>
+                      </CardTitle>
+                      {topStatsCollapsed.growth ? 
+                        <ChevronDown className="h-4 w-4" /> : 
+                        <ChevronUp className="h-4 w-4" />
+                      }
+                    </div>
+                  </CardHeader>
+                  <div className={cn(
+                    "transition-all",
+                    topStatsCollapsed.growth ? "hidden" : "block"
+                  )}>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {growthStandards.map(standard => (
+                          <div key={standard.standard} className="space-y-2">
+                            <div className="flex items-center justify-between gap-4">
+                              <span className="font-medium">
+                                {standard.standard}
+                                <span className={cn(
+                                  "ml-2 text-xs px-2 py-0.5 rounded-full whitespace-nowrap",
+                                  standard.isReporting 
+                                    ? "bg-blue-500/10 text-blue-500" 
+                                    : "bg-yellow-500/10 text-yellow-500"
+                                )}>
+                                  {standard.isReporting ? 'Readiness' : 'Supporting'}
+                                </span>
+                              </span>
+                              <span className="font-medium text-yellow-500 whitespace-nowrap">
+                                {standard.mastersPercent}% Mastery
+                              </span>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              {standard.description}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </div>
+                </Card>
+              </div>
+            );
+          })()}
+
+          {/* Standards view - remove mastery/growth sections from individual standards */}
+          <div className="space-y-8">
+            {Object.entries(getStandardsView()).map(([category, standards]) => (
+              <Collapsible key={category}>
+                <Card>
+                  <CardHeader>
+                    <CollapsibleTrigger className="w-full">
+                      <div className="flex items-center justify-between">
+                        <CardTitle>{teksCategories[category]}</CardTitle>
+                        {categoryCollapsed[category] ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                      </div>
+                    </CollapsibleTrigger>
+                  </CardHeader>
+                  <CollapsibleContent>
+                    <CardContent className="space-y-6">
+                      {/* Readiness Standards */}
+                      {standards.readiness.length > 0 && (
+                        <div>
+                          <h3 className="text-sm mb-3 font-bold text-blue-500">
+                            Readiness Standards
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {standards.readiness.map(({ standard, description, students }) => {
+                              // Calculate performance level percentages
+                              const totalStudents = students.length;
+                              const mastersCount = students.filter(s => s.mastery >= 77).length;
+                              const meetsCount = students.filter(s => s.mastery >= 54 && s.mastery < 77).length;
+                              const approachesCount = students.filter(s => s.mastery >= 38 && s.mastery < 54).length;
+                              
+                              const mastersPercent = Math.round((mastersCount / totalStudents) * 100);
+                              const meetsPercent = Math.round((meetsCount / totalStudents) * 100);
+                              const approachesPercent = Math.round((approachesCount / totalStudents) * 100);
+
+                              return (
+                                <Collapsible key={standard}>
+                                  <Card className="overflow-visible">
+                                    <CardHeader className="p-3">
+                                      <CollapsibleTrigger className="w-full">
+                                        <CardTitle className="flex flex-col gap-2">
+                                          <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                              <span className="font-medium text-sm leading-none">{standard}</span>
+                                              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500">
+                                                Readiness
+                                              </span>
+                                            </div>
+                                            {!standardsCollapsed[standard] ? 
+                                              <ChevronDown className="h-4 w-4 shrink-0" /> : 
+                                              <ChevronUp className="h-4 w-4 shrink-0" />
+                                            }
+                                          </div>
+                                          <p className="text-sm text-muted-foreground text-left hover:whitespace-normal">
+                                            {description}
+                                          </p>
+                                          <div className="flex items-center justify-between text-xs text-muted-foreground mt-1 border-t pt-2">
+                                            <div className="flex gap-3">
+                                              <span className="text-blue-500 font-medium">
+                                                {mastersPercent}% Masters
+                                              </span>
+                                              <span className="text-green-500 font-medium">
+                                                {meetsPercent}% Meets
+                                              </span>
+                                              <span className="text-yellow-500 font-medium">
+                                                {approachesPercent}% Approaches
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </CardTitle>
+                                      </CollapsibleTrigger>
+                                    </CardHeader>
+                                    <CollapsibleContent>
+                                      <CardContent className="p-3">
+                                        {/* Only keep the all students grid view */}
+                                        <div className="grid grid-cols-6 gap-2">
+                                          {students
+                                            .sort((a, b) => b.mastery - a.mastery)
+                                            .map(student => (
+                                              <div 
+                                                key={student.id}
+                                                className="flex flex-col items-center gap-1"
+                                              >
+                                                <div className="relative w-12 h-12">
+                                                  <StandardCircle percentage={student.mastery} />
+                                                  <div className="absolute inset-0 flex items-center justify-center">
+                                                    <span className="text-xs font-bold">
+                                                      {student.mastery}%
+                                                    </span>
+                                                  </div>
+                                                </div>
+                                                <span className="text-[9px] text-muted-foreground text-center truncate w-full">
+                                                  {student.name.split(',')[1]}
+                                                </span>
+                                              </div>
+                                          ))}
+                                        </div>
+                                      </CardContent>
+                                    </CollapsibleContent>
+                                  </Card>
+                                </Collapsible>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Supporting Standards */}
+                      {standards.supporting.length > 0 && (
+                        <div>
+                          <h3 className="text-sm mb-3 font-bold text-yellow-500">
+                            Supporting Standards
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {standards.supporting.map(({ standard, description, students }) => {
+                              // Calculate performance level percentages for supporting standards
+                              const totalStudents = students.length;
+                              const mastersCount = students.filter(s => s.mastery >= 77).length;
+                              const meetsCount = students.filter(s => s.mastery >= 54 && s.mastery < 77).length;
+                              const approachesCount = students.filter(s => s.mastery >= 38 && s.mastery < 54).length;
+                              
+                              const mastersPercent = Math.round((mastersCount / totalStudents) * 100);
+                              const meetsPercent = Math.round((meetsCount / totalStudents) * 100);
+                              const approachesPercent = Math.round((approachesCount / totalStudents) * 100);
+                              const averageMastery = Math.round(
+                                students.reduce((sum, s) => sum + s.mastery, 0) / totalStudents
+                              );
+                              const masteredCount = students.filter(s => s.mastery >= 70).length;
+
+                              return (
+                                <Collapsible key={standard}>
+                                  <Card className="overflow-visible">
+                                    <CardHeader className="p-3">
+                                      <CollapsibleTrigger className="w-full">
+                                        <CardTitle className="flex flex-col gap-2">
+                                          <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                              <span className="font-medium text-sm leading-none">{standard}</span>
+                                              <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-500">
+                                                Supporting
+                                              </span>
+                                            </div>
+                                            {!standardsCollapsed[standard] ? 
+                                              <ChevronDown className="h-4 w-4 shrink-0" /> : 
+                                              <ChevronUp className="h-4 w-4 shrink-0" />
+                                            }
+                                          </div>
+                                          <p className="text-sm text-muted-foreground text-left hover:whitespace-normal">
+                                            {description}
+                                          </p>
+                                          <div className="flex items-center justify-between text-xs text-muted-foreground mt-1 border-t pt-2">
+                                            <div className="flex gap-3">
+                                              <span className="text-blue-500 font-medium">
+                                                {mastersPercent}% Masters
+                                              </span>
+                                              <span className="text-green-500 font-medium">
+                                                {meetsPercent}% Meets
+                                              </span>
+                                              <span className="text-yellow-500 font-medium">
+                                                {approachesPercent}% Approaches
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </CardTitle>
+                                      </CollapsibleTrigger>
+                                    </CardHeader>
+                                    <CollapsibleContent>
+                                      <CardContent className="p-3">
+                                        <div className="grid grid-cols-6 gap-2">
+                                          {students
+                                            .sort((a, b) => b.mastery - a.mastery)
+                                            .map(student => (
+                                              <div 
+                                                key={student.id}
+                                                className="flex flex-col items-center gap-1"
+                                              >
+                                                <div className="relative w-12 h-12">
+                                                  <StandardCircle percentage={student.mastery} />
+                                                  <div className="absolute inset-0 flex items-center justify-center">
+                                                    <span className="text-xs font-bold">
+                                                      {student.mastery}%
+                                                    </span>
+                                                  </div>
+                                                </div>
+                                                <span className="text-[9px] text-muted-foreground text-center truncate w-full">
+                                                  {student.name.split(',')[1]}
+                                                </span>
+                                              </div>
+                                          ))}
+                                        </div>
+                                      </CardContent>
+                                    </CollapsibleContent>
+                                  </Card>
+                                </Collapsible>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
             ))}
           </div>
         </TabsContent>

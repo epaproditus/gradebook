@@ -222,24 +222,29 @@ const GoogleClassroom: FC = () => {
   }
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center">
+    <div className="p-4 sm:p-6">
+      {/* Header with Sign Out */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <h2 className="text-2xl font-bold">Google Classroom</h2>
-        <SignOutButton />
+        <div className="self-end sm:self-auto">
+          <SignOutButton />
+        </div>
       </div>
+
       {!session ? (
         <Button onClick={handleAuth}>
           Connect Google Classroom
         </Button>
       ) : (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <div className="flex gap-4">
+        <div className="space-y-6">
+          {/* Controls Section */}
+          <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap items-start">
+            <div className="w-full sm:w-auto min-w-[200px]">
               <Select
                 value={selectedPeriod}
                 onValueChange={handlePeriodSelect}
               >
-                <SelectTrigger className="w-[200px]">
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select period..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -250,12 +255,14 @@ const GoogleClassroom: FC = () => {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
 
+            <div className="w-full sm:w-auto min-w-[300px]">
               <Select
                 value={selectedCourse || ''}
                 onValueChange={(value: string) => setSelectedCourse(value)}
               >
-                <SelectTrigger className="w-[300px]">
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select a course..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -270,17 +277,20 @@ const GoogleClassroom: FC = () => {
                   )}
                 </SelectContent>
               </Select>
-              <Button
-                onClick={() => setSyncInProgress(true)}
-                disabled={syncInProgress || !selectedCourse}
-              >
-                Sync Grades
-              </Button>
             </div>
+
+            <Button
+              onClick={() => setSyncInProgress(true)}
+              disabled={syncInProgress || !selectedCourse}
+              className="w-full sm:w-auto"
+            >
+              Sync Grades
+            </Button>
           </div>
           
+          {/* Classwork Grid */}
           {selectedCourse && (
-            <div className="space-y-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {classwork.map(item => (
                 <Collapsible
                   key={item.id}
@@ -290,22 +300,24 @@ const GoogleClassroom: FC = () => {
                   <Card>
                     <CardHeader>
                       <CollapsibleTrigger className="flex items-center justify-between w-full">
-                        <CardTitle className="text-lg">{item.title}</CardTitle>
+                        <CardTitle className="text-base sm:text-lg line-clamp-2">
+                          {item.title}
+                        </CardTitle>
                         <ChevronRight 
-                          className={`h-4 w-4 transition-transform ${
-                            expandedItems[item.id] ? 'transform rotate-90' : ''
+                          className={`h-4 w-4 shrink-0 transition-transform ${
+                            expandedItems[item.id] ? 'rotate-90' : ''
                           }`}
                         />
                       </CollapsibleTrigger>
                     </CardHeader>
                     <CollapsibleContent>
                       <CardContent>
-                        <div className="prose max-w-none">
+                        <div className="prose max-w-none text-sm sm:text-base">
                           <div dangerouslySetInnerHTML={{ __html: item.description }} />
                         </div>
                         {item.maxPoints !== undefined && (
                           <div className="mt-4">
-                            <h4 className="text-xl font-bold">Grades</h4>
+                            <h4 className="text-lg font-bold">Grades</h4>
                             {/* Add your grades content here */}
                           </div>
                         )}
