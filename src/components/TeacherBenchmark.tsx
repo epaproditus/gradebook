@@ -148,6 +148,13 @@ export function TeacherBenchmark() {
     }
     return {};
   });
+  const [periodsCollapsed, setPeriodsCollapsed] = useState<Record<string, boolean>>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('periodsCollapsed');
+      return saved ? JSON.parse(saved) : {};
+    }
+    return {};
+  });
   const supabase = createClientComponentClient();
 
   // Load students and their benchmark data
@@ -182,6 +189,10 @@ export function TeacherBenchmark() {
   useEffect(() => {
     localStorage.setItem('standardsCollapsed', JSON.stringify(standardsCollapsed));
   }, [standardsCollapsed]);
+
+  useEffect(() => {
+    localStorage.setItem('periodsCollapsed', JSON.stringify(periodsCollapsed));
+  }, [periodsCollapsed]);
 
   // Add function to initialize collapse state for new standards
   const getInitialCollapseState = (id: string, stateObj: Record<string, boolean>) => {
@@ -340,45 +351,67 @@ export function TeacherBenchmark() {
             {Object.entries(studentsByPeriod)
               .sort(([a], [b]) => parseInt(a) - parseInt(b))
               .map(([period, levels]) => (
-                <div key={period} className="space-y-4">
-                  <h2 className="text-xl font-semibold">{formatPeriod(period)}</h2>
-                  <div className="grid grid-cols-6 gap-4">
-                    {Object.entries(levels)
-                      .flatMap(([level, students]) =>
-                        students.map(student => (
-                          <Dialog key={student.id}>
-                            <DialogTrigger asChild>
-                              <div className="cursor-pointer group">
-                                <div className="relative w-32 h-32 mx-auto">
-                                  <StudentCircle 
-                                    percentage={student.benchmark_scores?.[0]?.score || 0} 
-                                    performanceLevel={student.benchmark_scores?.[0]?.performance_level}
-                                  />
-                                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2">
-                                    <span className="text-lg font-bold">
-                                      {student.benchmark_scores?.[0]?.score || 0}%
-                                    </span>
-                                    <span className="text-xs text-muted-foreground line-clamp-2 group-hover:text-primary">
-                                      {student.name}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {student.benchmark_standards?.filter(s => s.mastery >= 70).length || 0}/{student.benchmark_standards?.length || 0} Standards
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            </DialogTrigger>
-                            <DialogContent className="max-w-3xl">
-                              <DialogHeader>
-                                <DialogTitle>{student.name} - Benchmark Details</DialogTitle>
-                              </DialogHeader>
-                              <BenchmarkScores studentId={student.id} />
-                            </DialogContent>
-                          </Dialog>
-                        ))
-                    )}
-                  </div>
-                </div>
+                <Collapsible
+                  key={period}
+                  open={!getInitialCollapseState(period, periodsCollapsed)}
+                  onOpenChange={(isOpen) => 
+                    setPeriodsCollapsed(prev => ({ ...prev, [period]: !isOpen }))
+                  }
+                >
+                  <Card>
+                    <CardHeader>
+                      <CollapsibleTrigger className="w-full">
+                        <div className="flex items-center justify-between">
+                          <h2 className="text-xl font-semibold">{formatPeriod(period)}</h2>
+                          {periodsCollapsed[period] ? 
+                            <ChevronDown className="h-4 w-4" /> : 
+                            <ChevronUp className="h-4 w-4" />
+                          }
+                        </div>
+                      </CollapsibleTrigger>
+                    </CardHeader>
+                    <CollapsibleContent>
+                      <CardContent>
+                        <div className="grid grid-cols-6 gap-4">
+                          {Object.entries(levels)
+                            .flatMap(([level, students]) =>
+                              students.map(student => (
+                                <Dialog key={student.id}>
+                                  <DialogTrigger asChild>
+                                    <div className="cursor-pointer group">
+                                      <div className="relative w-32 h-32 mx-auto">
+                                        <StudentCircle 
+                                          percentage={student.benchmark_scores?.[0]?.score || 0} 
+                                          performanceLevel={student.benchmark_scores?.[0]?.performance_level}
+                                        />
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2">
+                                          <span className="text-lg font-bold">
+                                            {student.benchmark_scores?.[0]?.score || 0}%
+                                          </span>
+                                          <span className="text-xs text-muted-foreground line-clamp-2 group-hover:text-primary">
+                                            {student.name}
+                                          </span>
+                                          <span className="text-xs text-muted-foreground">
+                                            {student.benchmark_standards?.filter(s => s.mastery >= 70).length || 0}/{student.benchmark_standards?.length || 0} Standards
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </DialogTrigger>
+                                  <DialogContent className="max-w-3xl">
+                                    <DialogHeader>
+                                      <DialogTitle>{student.name} - Benchmark Details</DialogTitle>
+                                    </DialogHeader>
+                                    <BenchmarkScores studentId={student.id} />
+                                  </DialogContent>
+                                </Dialog>
+                              ))
+                          )}
+                        </div>
+                      </CardContent>
+                    </CollapsibleContent>
+                  </Card>
+                </Collapsible>
             ))}
           </div>
         </TabsContent>
