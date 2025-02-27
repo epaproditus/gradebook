@@ -42,6 +42,18 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { SixWeeksSelector } from './SixWeeksSelector';
 import { getCurrentSixWeeks } from '@/lib/dateUtils';
 
+// Add this function to determine medal emoji
+const getMedalForRank = (rank: number) => {
+  switch (rank) {
+    case 1: return "🥇";
+    case 2: return "🥈";
+    case 3: return "🥉";
+    case 4:
+    case 5: return "🏅";
+    default: return null;
+  }
+};
+
 interface StudentData {
   id: number;
   name: string;
@@ -67,6 +79,7 @@ export function StudentDashboard() {
   const [messages, setMessages] = useState<any[]>([]);
   const [recentlyFlagged, setRecentlyFlagged] = useState<Set<string>>(new Set());
   const [currentSixWeeks, setCurrentSixWeeks] = useState<string>(getCurrentSixWeeks());
+  const [studentRank, setStudentRank] = useState<number | null>(null);
   const supabase = createClientComponentClient({
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
     supabaseKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -169,6 +182,30 @@ export function StudentDashboard() {
             if (messageData) {
               setMessages(messageData);
             }
+          }
+
+          // Get all students in the same period for ranking
+          const { data: periodStudents } = await supabase
+            .from('students')
+            .select(`
+              id,
+              benchmark_scores (
+                score
+              )
+            `)
+            .eq('period', studentData.period);
+
+          if (periodStudents) {
+            // Sort by benchmark score and find current student's rank
+            const sortedStudents = periodStudents
+              .map(s => ({
+                id: s.id,
+                score: s.benchmark_scores?.[0]?.score || 0
+              }))
+              .sort((a, b) => b.score - a.score);
+
+            const rank = sortedStudents.findIndex(s => s.id === studentData.student_id) + 1;
+            setStudentRank(rank);
           }
         }
       }
@@ -375,6 +412,11 @@ export function StudentDashboard() {
                   <h1 className="text-4xl font-bold tracking-tight">
                     {student?.name ? formatName(student.name) : ''}
                   </h1>
+                  {studentRank && studentRank <= 5 && (
+                    <div className="text-lg mt-1">
+                      {getMedalForRank(studentRank)} {studentRank === 1 ? "Highest Score" : `${studentRank}${getOrdinalSuffix(studentRank)} Place`}
+                    </div>
+                  )}
                   <p className="text-zinc-400">
                     {student?.period ? formatPeriod(student.period) : ''}
                   </p>
@@ -618,5 +660,16 @@ export function StudentDashboard() {
       </div>
     </div>
   );
+}
+
+// Helper function for ordinal suffixes
+function getOrdinalSuffix(n: number): string {
+  if (n > 3 && n < 21) return 'th';
+  switch (n % 10) {
+    case 1: return 'st';
+    case 2: return 'nd';
+    case 3: return 'rd';
+    default: return 'th';
+  }
 }
 
