@@ -12,6 +12,23 @@ This project is a comprehensive gradebook application designed for teachers to m
 
 ## Key Features
 
+### Grade Import/Export Functionality
+
+The system provides robust grade import and export capabilities:
+
+- **ImportScoresDialog**: Allows importing student scores from CSV files (including DMAC exports)
+  - Automatically detects student ID and score columns
+  - Maps imported grades to the correct students across periods
+  - Validates data before importing to prevent errors
+  - Supports bulk imports across multiple assignments
+  
+- **GradeExportDialog**: Enables exporting grades in CSV format
+  - Can export individual assignments or merge multiple assignments
+  - Supports filtering by period
+  - Creates properly formatted files for external systems
+
+Both components are used in the GradeBook interface to provide seamless data transfer capabilities.
+
 ### TeacherBenchmark Component
 
 The TeacherBenchmark component displays benchmark assessment results in different views:
@@ -63,6 +80,9 @@ The application uses Supabase with the following main tables:
 - `students` - Student personal and academic information
 - `benchmark_scores` - Overall benchmark assessment scores
 - `benchmark_standards` - Standard-specific performance data
+- `assignments` - Assignment information including type, subject, and periods
+- `grades` - Student grades for assignments with extra points tracking
+- `assignment_tags` - Tags for tracking absences, late work, and retest requirements
 
 ## Implementation Notes
 
