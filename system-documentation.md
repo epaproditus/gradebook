@@ -17,10 +17,13 @@ This project is a comprehensive gradebook application designed for teachers to m
 The system provides robust grade import and export capabilities:
 
 - **ImportScoresDialog**: Allows importing student scores from CSV files (including DMAC exports)
-  - Automatically detects student ID and score columns
+  - Uses a controlled dialog pattern with explicit state management
+  - Separates UI event handling from dialog control for reliable operation
+  - Uses icon-based interface with tooltips for improved UI consistency
+  - Automatically detects student ID and score columns in various CSV formats
   - Maps imported grades to the correct students across periods
+  - Preselects the current assignment to streamline the workflow
   - Validates data before importing to prevent errors
-  - Supports bulk imports across multiple assignments
   
 - **GradeExportDialog**: Enables exporting grades in CSV format
   - Can export individual assignments or merge multiple assignments
