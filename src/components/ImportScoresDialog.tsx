@@ -5,7 +5,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Assignment, Student, GradeData } from '@/types/gradebook';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Download } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -33,9 +32,9 @@ export const ImportScoresDialog: FC<ImportScoresDialogProps> = ({
   grades,
 }) => {
   const [file, setFile] = useState<File | null>(null);
-  const [selectedAssignment, setSelectedAssignment] = useState<string>(assignmentId);
   const [open, setOpen] = useState(false);
   const dialogTriggerRef = useRef<HTMLButtonElement>(null);
+  const assignment = assignments[assignmentId];
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -45,8 +44,8 @@ export const ImportScoresDialog: FC<ImportScoresDialogProps> = ({
   };
 
   const handleSubmitImport = async () => {
-    if (!file || !selectedAssignment) {
-      alert('Please select both a file and an assignment');
+    if (!file) {
+      alert('Please select a file to import');
       return;
     }
 
@@ -134,29 +133,9 @@ export const ImportScoresDialog: FC<ImportScoresDialogProps> = ({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Import Scores</DialogTitle>
+            <DialogTitle>Import Scores for {assignment?.name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
-              <h4 className="mb-2 text-sm font-medium">Select Assignment</h4>
-              <Select value={selectedAssignment} onValueChange={setSelectedAssignment}>
-                <SelectTrigger>
-                  <SelectValue>
-                    {assignments[selectedAssignment]?.name || "Choose assignment..."}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(assignments)
-                    .filter(([_, a]) => a.periods.includes(periodId))
-                    .map(([id, assignment]) => (
-                      <SelectItem key={id} value={id}>
-                        {assignment.name}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </div>
-
             <Input
               type="file"
               accept=".csv"
@@ -164,6 +143,7 @@ export const ImportScoresDialog: FC<ImportScoresDialogProps> = ({
             />
             <div className="text-sm text-muted-foreground">
               Upload a CSV file exported from DMAC containing student scores.
+              Scores will be imported for <strong>{assignment?.name}</strong>.
             </div>
             {file && (
               <Button 

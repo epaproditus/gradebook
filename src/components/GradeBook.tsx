@@ -41,6 +41,7 @@ import { SixWeeksSelector } from './SixWeeksSelector';  // Add this line near ot
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ImportScoresDialog } from './ImportScoresDialog';  // Import the component
 import { GradeExportDialog } from './GradeExportDialog'; // Import the standalone component
+import { BulkActionsDialog } from './BulkActionsDialog';  // Import the component alongside other imports
 
 // Initialize Supabase client (this is fine outside component)
 const supabase = createClient(
@@ -487,6 +488,7 @@ const GradeBook: FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageSubscription, setMessageSubscription] = useState<RealtimeChannel | null>(null);
   const [flags, setFlags] = useState<Flag[]>([]);
+  const [deleteDialog, setDeleteDialog] = useState<{ isOpen: boolean, assignmentId: string, assignmentName: string }>({ isOpen: false, assignmentId: '', assignmentName: '' });
 
   // Fetch students from Supabase
   useEffect(() => {
@@ -778,41 +780,51 @@ const getGradeValue = (assignmentId: string, periodId: string, studentId: string
 };
 
 const deleteAssignment = async (assignmentId: string) => {
-  if (!confirm('Are you sure you want to delete this assignment?')) {
-    return;
-  }
-
+  console.log('Beginning delete process for assignment:', assignmentId);
+  
   try {
-    // Validate UUID format
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(assignmentId)) {
-      throw new Error('Invalid assignment ID format');
-    }
+    toast({
+      title: "Deleting...",
+      description: "Removing assignment and related data"
+    });
 
-    // Delete all related data in order
-    console.log('Deleting assignment:', assignmentId);
-
+    console.log('Deleting tags for assignment:', assignmentId);
+    // Delete in order of dependencies - first tags, then grades, then assignment
     const { error: tagsError } = await supabase
       .from('assignment_tags')
       .delete()
       .eq('assignment_id', assignmentId);
+    
+    if (tagsError) {
+      console.error('Error deleting tags:', tagsError);
+      // Continue with deletion even if tags fail
+    }
 
-    if (tagsError) throw tagsError;
-
+    console.log('Deleting grades for assignment:', assignmentId);
+    // Then delete grades 
     const { error: gradesError } = await supabase
       .from('grades')
       .delete()
       .eq('assignment_id', assignmentId);
 
-    if (gradesError) throw gradesError;
+    if (gradesError) {
+      console.error('Error deleting grades:', gradesError);
+      // Continue with deletion even if grades fail
+    }
 
+    console.log('Deleting assignment with ID:', assignmentId);
+    // Finally delete the assignment
     const { error: assignmentError } = await supabase
       .from('assignments')
       .delete()
       .eq('id', assignmentId);
 
-    if (assignmentError) throw assignmentError;
+    if (assignmentError) {
+      throw assignmentError;
+    }
 
     // Update local state
+    console.log('Updating local state after successful deletion');
     setAssignments(prev => {
       const newAssignments = { ...prev };
       delete newAssignments[assignmentId];
@@ -821,6 +833,19 @@ const deleteAssignment = async (assignmentId: string) => {
 
     setAssignmentOrder(prev => prev.filter(id => id !== assignmentId));
     setTags(prev => prev.filter(tag => tag.assignment_id !== assignmentId));
+
+    // Clear any related grades
+    setGrades(prev => {
+      const newGrades = { ...prev };
+      delete newGrades[assignmentId];
+      return newGrades;
+    });
+
+    setUnsavedGrades(prev => {
+      const newUnsaved = { ...prev };
+      delete newUnsaved[assignmentId];
+      return newUnsaved;
+    });
 
     toast({
       title: "Success",
@@ -833,6 +858,79 @@ const deleteAssignment = async (assignmentId: string) => {
       variant: "destructive",
       title: "Error",
       description: error instanceof Error ? error.message : 'Failed to delete assignment'
+    });
+  }
+};
+
+// Add bulk delete assignments functionality
+const bulkDeleteAssignments = async (assignmentIds: string[]): Promise<void> => {
+  try {
+    toast({
+      title: "Deleting assignments...",
+      description: `Removing ${assignmentIds.length} assignments`,
+    });
+
+    // Process deletions sequentially to avoid overwhelming the database
+    for (const assignmentId of assignmentIds) {
+      // Delete assignment tags
+      await supabase
+        .from('assignment_tags')
+        .delete()
+        .eq('assignment_id', assignmentId);
+
+      // Delete grades
+      await supabase
+        .from('grades')
+        .delete()
+        .eq('assignment_id', assignmentId);
+
+      // Delete assignment
+      await supabase
+        .from('assignments')
+        .delete()
+        .eq('id', assignmentId);
+    }
+
+    // Update local state
+    setAssignments(prev => {
+      const newAssignments = { ...prev };
+      assignmentIds.forEach(id => {
+        delete newAssignments[id];
+      });
+      return newAssignments;
+    });
+
+    setAssignmentOrder(prev => prev.filter(id => !assignmentIds.includes(id)));
+    setTags(prev => prev.filter(tag => !assignmentIds.includes(tag.assignment_id)));
+
+    // Clear grades for deleted assignments
+    setGrades(prev => {
+      const newGrades = { ...prev };
+      assignmentIds.forEach(id => {
+        delete newGrades[id];
+      });
+      return newGrades;
+    });
+
+    setUnsavedGrades(prev => {
+      const newUnsaved = { ...prev };
+      assignmentIds.forEach(id => {
+        delete newUnsaved[id];
+      });
+      return newUnsaved;
+    });
+
+    toast({
+      title: "Success",
+      description: `${assignmentIds.length} assignments deleted successfully`
+    });
+
+  } catch (error) {
+    console.error('Error bulk deleting assignments:', error);
+    toast({
+      variant: "destructive",
+      title: "Error",
+      description: "Failed to delete some assignments. Please try again."
     });
   }
 };
@@ -1603,16 +1701,23 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
           students={students}
           onExport={(ids, periods, merge) => exportGrades(ids, periods, merge)}
         />
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={(e) => {
-            e.stopPropagation();
-            deleteAssignment(assignmentId);
-          }}
-        >
-          <X className="h-4 w-4" />
-        </Button>
+        <Tooltip delayDuration={300}>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Delete button clicked for assignment:', assignmentId);
+                setDeleteDialog({ isOpen: true, assignmentId, assignmentName: assignment.name });
+              }}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Delete assignment</TooltipContent>
+        </Tooltip>
         {expandedAssignments[assignmentId] ? (
           <ChevronUp className="h-4 w-4" />
         ) : (
@@ -2670,6 +2775,10 @@ return (
                   <SelectItem value="desc">Newest First</SelectItem>
                 </SelectContent>
               </Select>
+              <BulkActionsDialog 
+                assignments={assignments}
+                onDelete={bulkDeleteAssignments}
+              />
             </div>
             {renderAssignmentsSection()}
           </>
@@ -2810,9 +2919,52 @@ return (
         )}
       </div>
     </div>
+    <DeleteConfirmationDialog
+      isOpen={deleteDialog.isOpen}
+      assignmentId={deleteDialog.assignmentId}
+      assignmentName={deleteDialog.assignmentName}
+      onConfirm={() => {
+        deleteAssignment(deleteDialog.assignmentId);
+        setDeleteDialog({ isOpen: false, assignmentId: '', assignmentName: '' });
+      }}
+      onCancel={() => setDeleteDialog({ isOpen: false, assignmentId: '', assignmentName: '' })}
+    />
   </div>
 );
 };
 
 export default GradeBook;
+
+// Add this component to the existing components at the top
+const DeleteConfirmationDialog: FC<{
+  isOpen: boolean;
+  assignmentId: string;
+  assignmentName: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}> = ({ isOpen, assignmentId, assignmentName, onConfirm, onCancel }) => {
+  if (!isOpen) return null;
+  
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onCancel()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete Assignment</DialogTitle>
+        </DialogHeader>
+        <div className="py-4">
+          <p>Are you sure you want to delete <strong>{assignmentName}</strong>?</p>
+          <p className="text-sm text-muted-foreground mt-2">This will permanently delete all grades and data associated with this assignment.</p>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button variant="destructive" onClick={onConfirm}>
+            Delete
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
 

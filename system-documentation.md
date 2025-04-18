@@ -43,12 +43,19 @@ The assignment card interface provides a comprehensive view of each assignment w
   - Copy button: Creates a duplicate of an assignment with all its grades
   - Import button: Opens the import dialog to bulk import grades from CSV
   - Export button: Opens the export dialog to export grades to CSV
-  - Delete button: Removes an assignment after confirmation
+  - Delete button: Removes an assignment after confirmation through a reliable React dialog component
   - All buttons implement proper event propagation handling to avoid unintended card toggling
 
 - **Card Header**: Shows assignment name, date, subject, and status indicator
 - **Editing Mode**: Allows inline editing of assignment details
 - **Grade Entry Grid**: Shows a table of students with grade input fields when expanded
+- **Assignment Deletion**: Implements a custom confirmation dialog to ensure reliable deletion process:
+  - Uses controlled React state for dialog visibility
+  - Properly handles event propagation to prevent unwanted behavior
+  - Provides clear feedback through toast notifications
+  - Handles cascading deletion of all related data (grades, tags, etc.)
+  - Updates local state for immediate UI feedback
+  - Shows assignment name in confirmation to help prevent accidental deletion
 
 ### TeacherBenchmark Component
 
