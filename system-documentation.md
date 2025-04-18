@@ -19,10 +19,11 @@ The system provides robust grade import and export capabilities:
 - **ImportScoresDialog**: Allows importing student scores from CSV files (including DMAC exports)
   - Uses a controlled dialog pattern with explicit state management
   - Separates UI event handling from dialog control for reliable operation
+  - Pre-selects the current assignment by default in the assignment dropdown
+  - Shows the actual assignment name in the select field rather than just a placeholder
   - Uses icon-based interface with tooltips for improved UI consistency
   - Automatically detects student ID and score columns in various CSV formats
   - Maps imported grades to the correct students across periods
-  - Preselects the current assignment to streamline the workflow
   - Validates data before importing to prevent errors
   
 - **GradeExportDialog**: Enables exporting grades in CSV format

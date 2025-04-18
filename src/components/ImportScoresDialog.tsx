@@ -139,9 +139,11 @@ export const ImportScoresDialog: FC<ImportScoresDialogProps> = ({
           <div className="space-y-4">
             <div>
               <h4 className="mb-2 text-sm font-medium">Select Assignment</h4>
-              <Select defaultValue={assignmentId} onValueChange={setSelectedAssignment}>
+              <Select value={selectedAssignment} onValueChange={setSelectedAssignment}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Choose assignment..." />
+                  <SelectValue>
+                    {assignments[selectedAssignment]?.name || "Choose assignment..."}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {Object.entries(assignments)
