@@ -26,11 +26,28 @@ The system provides robust grade import and export capabilities:
   - Validates data before importing to prevent errors
   
 - **GradeExportDialog**: Enables exporting grades in CSV format
-  - Can export individual assignments or merge multiple assignments
-  - Supports filtering by period
-  - Creates properly formatted files for external systems
+  - Implements the same controlled dialog pattern as the import dialog
+  - Uses explicit state management to prevent event propagation issues
+  - Supports selecting specific assignments and class periods
+  - Offers option to merge all periods into a single export file
+  - Creates properly formatted CSV files with student ID, name, and grades
+  - Handles special characters in student names with proper CSV escaping
 
-Both components are used in the GradeBook interface to provide seamless data transfer capabilities.
+### Assignment Card Interface
+
+The assignment card interface provides a comprehensive view of each assignment with several interactive features:
+
+- **Expandable/Collapsible Cards**: Cards can be expanded to show detailed grade information
+- **Action Buttons**: 
+  - Copy button: Creates a duplicate of an assignment with all its grades
+  - Import button: Opens the import dialog to bulk import grades from CSV
+  - Export button: Opens the export dialog to export grades to CSV
+  - Delete button: Removes an assignment after confirmation
+  - All buttons implement proper event propagation handling to avoid unintended card toggling
+
+- **Card Header**: Shows assignment name, date, subject, and status indicator
+- **Editing Mode**: Allows inline editing of assignment details
+- **Grade Entry Grid**: Shows a table of students with grade input fields when expanded
 
 ### TeacherBenchmark Component
 
