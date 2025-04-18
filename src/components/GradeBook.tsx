@@ -788,8 +788,19 @@ const deleteAssignment = async (assignmentId: string) => {
       description: "Removing assignment and related data"
     });
 
+    // Delete in order of dependencies (child records first)
+    console.log('Deleting assignment flags for assignment:', assignmentId);
+    const { error: flagsError } = await supabase
+      .from('assignment_flags')
+      .delete()
+      .eq('assignment_id', assignmentId);
+    
+    if (flagsError) {
+      console.error('Error deleting assignment flags:', flagsError);
+      // Continue with deletion even if some related records fail
+    }
+
     console.log('Deleting tags for assignment:', assignmentId);
-    // Delete in order of dependencies - first tags, then grades, then assignment
     const { error: tagsError } = await supabase
       .from('assignment_tags')
       .delete()
@@ -797,11 +808,10 @@ const deleteAssignment = async (assignmentId: string) => {
     
     if (tagsError) {
       console.error('Error deleting tags:', tagsError);
-      // Continue with deletion even if tags fail
+      // Continue with deletion even if some related records fail
     }
 
     console.log('Deleting grades for assignment:', assignmentId);
-    // Then delete grades 
     const { error: gradesError } = await supabase
       .from('grades')
       .delete()
@@ -809,11 +819,47 @@ const deleteAssignment = async (assignmentId: string) => {
 
     if (gradesError) {
       console.error('Error deleting grades:', gradesError);
-      // Continue with deletion even if grades fail
+      // Continue with deletion even if some related records fail
+    }
+
+    // Check for and delete Google Classroom links
+    console.log('Deleting Google Classroom links for assignment:', assignmentId);
+    const { error: linksError } = await supabase
+      .from('google_classroom_links')
+      .delete()
+      .eq('assignment_id', assignmentId);
+
+    if (linksError) {
+      console.error('Error deleting Google Classroom links:', linksError);
+      // Continue with deletion even if some related records fail
+    }
+
+    // Check for and delete any extra points
+    console.log('Deleting extra points for assignment:', assignmentId);
+    const { error: extraPointsError } = await supabase
+      .from('extra_points')
+      .delete()
+      .eq('assignment_id', assignmentId);
+
+    if (extraPointsError) {
+      console.error('Error deleting extra points:', extraPointsError);
+      // Continue with deletion even if some related records fail
+    }
+
+    // Check for and delete any assignment notes
+    console.log('Deleting assignment notes for assignment:', assignmentId);
+    const { error: notesError } = await supabase
+      .from('assignment_notes')
+      .delete()
+      .eq('assignment_id', assignmentId);
+
+    if (notesError) {
+      console.error('Error deleting assignment notes:', notesError);
+      // Continue with deletion even if some related records fail
     }
 
     console.log('Deleting assignment with ID:', assignmentId);
-    // Finally delete the assignment
+    // Finally delete the assignment itself
     const { error: assignmentError } = await supabase
       .from('assignments')
       .delete()
@@ -833,6 +879,7 @@ const deleteAssignment = async (assignmentId: string) => {
 
     setAssignmentOrder(prev => prev.filter(id => id !== assignmentId));
     setTags(prev => prev.filter(tag => tag.assignment_id !== assignmentId));
+    setFlags(prev => prev.filter(flag => flag.assignment_id !== assignmentId));
 
     // Clear any related grades
     setGrades(prev => {
