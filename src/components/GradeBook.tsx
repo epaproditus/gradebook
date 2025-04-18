@@ -917,43 +917,145 @@ const bulkDeleteAssignments = async (assignmentIds: string[]): Promise<void> => 
       description: `Removing ${assignmentIds.length} assignments`,
     });
 
+    // Create arrays to track successfully deleted assignments and errors
+    const successfullyDeleted: string[] = [];
+    const errors: { id: string, error: any }[] = [];
+
     // Process deletions sequentially to avoid overwhelming the database
     for (const assignmentId of assignmentIds) {
-      // Delete assignment tags
-      await supabase
-        .from('assignment_tags')
-        .delete()
-        .eq('assignment_id', assignmentId);
+      try {
+        console.log(`Starting deletion process for assignment: ${assignmentId}`);
+        
+        // Check if the assignment exists before attempting deletion
+        const { data: assignmentCheck, error: checkError } = await supabase
+          .from('assignments')
+          .select('id')
+          .eq('id', assignmentId)
+          .single();
+          
+        if (checkError || !assignmentCheck) {
+          console.error(`Assignment ${assignmentId} not found in database:`, checkError);
+          errors.push({ id: assignmentId, error: 'Assignment not found' });
+          continue; // Skip to the next assignment
+        }
 
-      // Delete grades
-      await supabase
-        .from('grades')
-        .delete()
-        .eq('assignment_id', assignmentId);
+        // 1. Delete assignment flags
+        const { error: flagsError } = await supabase
+          .from('assignment_flags')
+          .delete()
+          .eq('assignment_id', assignmentId);
+        
+        if (flagsError) {
+          console.error('Error deleting assignment flags:', flagsError);
+          // Continue with deletion as this might be empty
+        }
 
-      // Delete assignment
-      await supabase
-        .from('assignments')
-        .delete()
-        .eq('id', assignmentId);
+        // 2. Delete assignment tags
+        const { error: tagsError } = await supabase
+          .from('assignment_tags')
+          .delete()
+          .eq('assignment_id', assignmentId);
+        
+        if (tagsError) {
+          console.error('Error deleting assignment tags:', tagsError);
+          // Continue with deletion as this might be empty
+        }
+
+        // 3. Delete grades
+        const { error: gradesError } = await supabase
+          .from('grades')
+          .delete()
+          .eq('assignment_id', assignmentId);
+
+        if (gradesError) {
+          console.error('Error deleting grades:', gradesError);
+          // Continue with deletion as this might be empty
+        }
+
+        // 4. Delete Google Classroom links
+        const { error: linksError } = await supabase
+          .from('google_classroom_links')
+          .delete()
+          .eq('assignment_id', assignmentId);
+
+        if (linksError) {
+          console.error('Error deleting Google Classroom links:', linksError);
+          // Continue with deletion as this might be empty
+        }
+
+        // 5. Delete extra points
+        const { error: extraPointsError } = await supabase
+          .from('extra_points')
+          .delete()
+          .eq('assignment_id', assignmentId);
+
+        if (extraPointsError) {
+          console.error('Error deleting extra points:', extraPointsError);
+          // Continue with deletion as this might be empty
+        }
+
+        // 6. Delete assignment notes
+        const { error: notesError } = await supabase
+          .from('assignment_notes')
+          .delete()
+          .eq('assignment_id', assignmentId);
+
+        if (notesError) {
+          console.error('Error deleting assignment notes:', notesError);
+          // Continue with deletion as this might be empty
+        }
+
+        // 7. Finally, delete the assignment itself
+        const { error: assignmentError } = await supabase
+          .from('assignments')
+          .delete()
+          .eq('id', assignmentId);
+
+        if (assignmentError) {
+          throw assignmentError; // This is critical, so throw error
+        }
+
+        // Verify the assignment was actually deleted
+        const { data: verifyDelete, error: verifyError } = await supabase
+          .from('assignments')
+          .select('id')
+          .eq('id', assignmentId);
+          
+        if (!verifyError && verifyDelete && verifyDelete.length > 0) {
+          throw new Error(`Assignment ${assignmentId} still exists after deletion attempt`);
+        }
+
+        // If we get here, the assignment was successfully deleted
+        console.log(`Successfully deleted assignment: ${assignmentId}`);
+        successfullyDeleted.push(assignmentId);
+      } catch (err) {
+        console.error(`Failed to delete assignment ${assignmentId}:`, err);
+        errors.push({ id: assignmentId, error: err });
+      }
     }
 
-    // Update local state
+    // Check if any assignments were successfully deleted
+    if (successfullyDeleted.length === 0) {
+      throw new Error("Failed to delete any assignments");
+    }
+
+    // Update local state for successfully deleted assignments
     setAssignments(prev => {
       const newAssignments = { ...prev };
-      assignmentIds.forEach(id => {
+      successfullyDeleted.forEach(id => {
         delete newAssignments[id];
       });
       return newAssignments;
     });
 
-    setAssignmentOrder(prev => prev.filter(id => !assignmentIds.includes(id)));
-    setTags(prev => prev.filter(tag => !assignmentIds.includes(tag.assignment_id)));
+    setAssignmentOrder(prev => prev.filter(id => !successfullyDeleted.includes(id)));
+    setTags(prev => prev.filter(tag => !successfullyDeleted.includes(tag.assignment_id)));
+    setFlags(prev => prev.filter(flag => !successfullyDeleted.includes(flag.assignment_id)));
 
     // Clear grades for deleted assignments
     setGrades(prev => {
       const newGrades = { ...prev };
-      assignmentIds.forEach(id => {
+      successfullyDeleted.forEach(id => {
         delete newGrades[id];
       });
       return newGrades;
@@ -961,23 +1063,39 @@ const bulkDeleteAssignments = async (assignmentIds: string[]): Promise<void> => 
 
     setUnsavedGrades(prev => {
       const newUnsaved = { ...prev };
-      assignmentIds.forEach(id => {
+      successfullyDeleted.forEach(id => {
         delete newUnsaved[id];
       });
       return newUnsaved;
     });
 
-    toast({
-      title: "Success",
-      description: `${assignmentIds.length} assignments deleted successfully`
-    });
+    // Show appropriate toast based on results
+    if (errors.length === 0) {
+      toast({
+        title: "Success",
+        description: `${successfullyDeleted.length} assignments deleted successfully`
+      });
+    } else if (successfullyDeleted.length > 0) {
+      toast({
+        variant: "default",
+        title: "Partial Success",
+        description: `${successfullyDeleted.length} assignments deleted, ${errors.length} failed`
+      });
+    } else {
+      // This shouldn't happen due to the earlier check, but just in case
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to delete any assignments. Please try again."
+      });
+    }
 
   } catch (error) {
     console.error('Error bulk deleting assignments:', error);
     toast({
       variant: "destructive",
       title: "Error",
-      description: "Failed to delete some assignments. Please try again."
+      description: error instanceof Error ? error.message : "Failed to delete assignments. Please try again."
     });
   }
 };

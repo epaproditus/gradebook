@@ -8,19 +8,57 @@ import { Trash2 } from 'lucide-react';
 import { Assignment } from '@/types/gradebook';
 import { format } from 'date-fns';
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useToast } from "@/components/ui/use-toast";
 
 interface BulkActionsDialogProps {
   assignments: Record<string, Assignment>;
   onDelete: (assignmentIds: string[]) => Promise<void>;
 }
 
+// Custom confirmation dialog component
+const ConfirmDialog: FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  message: string;
+  count: number;
+}> = ({ isOpen, onClose, onConfirm, title, message, count }) => {
+  if (!isOpen) return null;
+  
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <div className="py-4">
+          <p>{message}</p>
+          <p className="text-sm text-muted-foreground mt-2">This will permanently delete all grades and related data for {count} assignment{count !== 1 ? 's' : ''}.</p>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="destructive" onClick={onConfirm}>
+            Delete
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
 export const BulkActionsDialog: FC<BulkActionsDialogProps> = ({
   assignments,
   onDelete
 }) => {
+  const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [selectedAssignments, setSelectedAssignments] = useState<Record<string, boolean>>({});
   const [isDeleting, setIsDeleting] = useState(false);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [idsToDelete, setIdsToDelete] = useState<string[]>([]);
 
   const handleToggleAssignment = (assignmentId: string) => {
     setSelectedAssignments(prev => ({
@@ -41,27 +79,42 @@ export const BulkActionsDialog: FC<BulkActionsDialogProps> = ({
     }
   };
 
-  const handleDelete = async () => {
-    const idsToDelete = Object.entries(selectedAssignments)
+  const handleDeleteClick = () => {
+    const ids = Object.entries(selectedAssignments)
       .filter(([_, isSelected]) => isSelected)
       .map(([id]) => id);
     
-    if (idsToDelete.length === 0) return;
+    if (ids.length === 0) return;
 
-    if (!confirm(`Are you sure you want to delete ${idsToDelete.length} assignments? This action cannot be undone.`)) {
-      return;
-    }
+    setIdsToDelete(ids);
+    setConfirmDialogOpen(true);
+  };
 
+  const handleConfirmDelete = async () => {
+    setConfirmDialogOpen(false);
     setIsDeleting(true);
     
     try {
+      console.log('Starting bulk deletion of', idsToDelete.length, 'assignments');
       await onDelete(idsToDelete);
+      console.log('Bulk deletion completed');
       setSelectedAssignments({});
       setOpen(false);
+      
+      toast({
+        title: "Success",
+        description: `${idsToDelete.length} assignments deleted successfully`,
+      });
     } catch (error) {
       console.error('Error deleting assignments:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete assignments"
+      });
     } finally {
       setIsDeleting(false);
+      setIdsToDelete([]);
     }
   };
 
@@ -134,7 +187,7 @@ export const BulkActionsDialog: FC<BulkActionsDialogProps> = ({
               </Button>
               <Button 
                 variant="destructive" 
-                onClick={handleDelete}
+                onClick={handleDeleteClick}
                 disabled={selectedCount === 0 || isDeleting}
               >
                 {isDeleting ? 'Deleting...' : `Delete ${selectedCount} Assignment${selectedCount !== 1 ? 's' : ''}`}
@@ -143,6 +196,16 @@ export const BulkActionsDialog: FC<BulkActionsDialogProps> = ({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Custom confirmation dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialogOpen}
+        onClose={() => setConfirmDialogOpen(false)}
+        onConfirm={handleConfirmDelete}
+        title="Confirm Deletion"
+        message={`Are you sure you want to delete ${idsToDelete.length} assignment${idsToDelete.length !== 1 ? 's' : ''}?`}
+        count={idsToDelete.length}
+      />
     </>
   );
 };

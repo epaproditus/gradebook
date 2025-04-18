@@ -34,9 +34,9 @@ The system provides robust grade import and export capabilities:
   - Creates properly formatted CSV files with student ID, name, and grades
   - Handles special characters in student names with proper CSV escaping
 
-### Assignment Card Interface
+### Assignment Management Interface
 
-The assignment card interface provides a comprehensive view of each assignment with several interactive features:
+The assignment management interface provides a comprehensive view of each assignment with several interactive features:
 
 - **Expandable/Collapsible Cards**: Cards can be expanded to show detailed grade information
 - **Action Buttons**: 
@@ -49,13 +49,34 @@ The assignment card interface provides a comprehensive view of each assignment w
 - **Card Header**: Shows assignment name, date, subject, and status indicator
 - **Editing Mode**: Allows inline editing of assignment details
 - **Grade Entry Grid**: Shows a table of students with grade input fields when expanded
-- **Assignment Deletion**: Implements a custom confirmation dialog to ensure reliable deletion process:
+- **Assignment Deletion**: Implements cascading deletion process to ensure database integrity:
+  - **Single Assignment Deletion**: Uses a custom confirmation dialog to ensure reliable deletion process
+  - **Bulk Assignment Deletion**: Allows deleting multiple assignments at once through the BulkActionsDialog
+  - Both deletion processes handle all foreign key dependencies correctly, including:
+    - First deletes records from `assignment_flags` table
+    - Then deletes from `assignment_tags` table
+    - Deletes from `grades` table
+    - Deletes from `google_classroom_links` table
+    - Deletes from `extra_points` table
+    - Deletes from `assignment_notes` table
+    - Finally deletes the assignment records themselves
   - Uses controlled React state for dialog visibility
-  - Properly handles event propagation to prevent unwanted behavior
   - Provides clear feedback through toast notifications
-  - Handles cascading deletion of all related data (grades, tags, etc.)
   - Updates local state for immediate UI feedback
   - Shows assignment name in confirmation to help prevent accidental deletion
+
+- **Bulk Actions Dialog**: The system includes a bulk actions dialog accessible from the assignment view:
+  - Located in the filter options row next to the Six Weeks selector, Subject filter, and Date filter
+  - Appears as a button with a trash icon and "Bulk Actions" label
+  - When clicked, opens a dialog showing all assignments with checkboxes
+  - Supports selecting multiple assignments for deletion
+  - Includes a "Select All" option for quick selection
+  - Shows a count of selected assignments
+  - Has a scrollable area for browsing assignments when there are many
+  - Displays assignment details (date, type, number of periods) for each item
+  - Requires confirmation before performing deletion operations
+  - Handles cascading deletion properly like single-assignment deletion
+  - Only visible in the assignment view mode, not in roster view mode
 
 ### TeacherBenchmark Component
 
@@ -111,6 +132,10 @@ The application uses Supabase with the following main tables:
 - `assignments` - Assignment information including type, subject, and periods
 - `grades` - Student grades for assignments with extra points tracking
 - `assignment_tags` - Tags for tracking absences, late work, and retest requirements
+- `assignment_flags` - Flags for assignment review notifications
+- `assignment_notes` - Notes associated with assignments
+- `google_classroom_links` - Connection mappings between assignments and Google Classroom
+- `extra_points` - Extra credit points awarded to students
 
 ## Implementation Notes
 
