@@ -2500,7 +2500,7 @@ const cloneAssignment = async (assignmentId: string) => {
 
     if (assignmentError) throw assignmentError;
 
-    // Clone grades
+    // Clone grades with deep copy
     const gradesToClone = sourceAssignment.periods.flatMap(periodId => {
       const periodGrades = grades[assignmentId]?.[periodId] || {};
       
@@ -2508,8 +2508,8 @@ const cloneAssignment = async (assignmentId: string) => {
         assignment_id: newAssignmentId,
         student_id: studentId,
         period: periodId,
-        grade: grade,
-        extra_points: extraPoints[`${assignmentId}-${periodId}-${studentId}`] || '0'
+        grade: String(grade), // Ensure new string reference
+        extra_points: String(extraPoints[`${assignmentId}-${periodId}-${studentId}`] || '0')
       }));
     }).filter(grade => grade.grade); // Only clone non-empty grades
 
@@ -2520,9 +2520,9 @@ const cloneAssignment = async (assignmentId: string) => {
 
       if (gradesError) throw gradesError;
 
-      // Update local grades state
-      const newGrades = { ...grades };
-      const newExtraPoints = { ...extraPoints };
+      // Update local grades state with deep copies
+      const newGrades = JSON.parse(JSON.stringify(grades));
+      const newExtraPoints = JSON.parse(JSON.stringify(extraPoints));
 
       gradesToClone.forEach(({ assignment_id, period, student_id, grade, extra_points }) => {
         if (!newGrades[assignment_id]) {
