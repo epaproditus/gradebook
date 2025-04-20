@@ -1885,11 +1885,7 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
         <div className="flex items-center gap-4" onClick={() => setEditingAssignment(assignmentId)}>
           <Popover>
             <PopoverTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-6 w-6 p-0 hover:bg-transparent"
-              >
+              <div className="cursor-pointer p-1">
                 <div className={cn(
                   "h-3 w-3 rounded-full",
                   assignment.status === 'completed' ? "bg-green-500" :
@@ -1897,7 +1893,7 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
                   assignment.status === 'not_graded' ? "bg-orange-500" :
                   "bg-slate-500"
                 )} />
-              </Button>
+              </div>
             </PopoverTrigger>
             <PopoverContent className="w-40 p-1">
               <div className="space-y-1">
