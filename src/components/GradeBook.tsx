@@ -3176,6 +3176,8 @@ return (
               <TabsContent value={activeTab} className="mt-4">
                 <RosterView
                   students={students}
+                  setStudents={setStudents}
+                  deactivateStudent={deactivateStudent}
                   assignments={assignments}
                   grades={grades}
                   onGradeChange={handleGradeChange}
