@@ -23,7 +23,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 
 interface RosterViewProps {
   students: Record<string, Student[]>;
-  setStudents: React.Dispatch<React.SetStateAction<Record<string, Student[]>>>;
+  setStudents: (students: Record<string, Student[]>) => void;
   assignments: Record<string, Assignment>;
   grades: GradeData;
   onGradeChange: (assignmentId: string, periodId: string, studentId: string, grade: string) => void;
