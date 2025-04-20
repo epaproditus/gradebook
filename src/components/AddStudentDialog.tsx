@@ -33,17 +33,29 @@ export function AddStudentDialog({ period, onStudentAdded }: AddStudentDialogPro
       return;
     }
 
-    // Check for existing student by name (since we don't have student_id column)
+    // Validate student ID is numeric
+    if (!studentId.trim() || !/^\d+$/.test(studentId)) {
+      toast({
+        title: "Invalid ID",
+        description: "Student ID must contain only numbers",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Check for existing student by name and ID
     const { data: existing } = await supabase
       .from('students')
-      .select('id')
-      .eq('name', name.trim())
-      .single();
+      .select('id, name')
+      .or(`name.eq.${name.trim()},id.eq.${studentId.trim()}`)
+      .maybeSingle();
 
     if (existing) {
       toast({
         title: "Student Exists",
-        description: `Student ${name.trim()} already exists`,
+        description: existing.name === name.trim() 
+          ? `Student ${name.trim()} already exists`
+          : `Student ID ${studentId.trim()} already exists`,
         variant: "destructive"
       });
       return;
@@ -54,6 +66,7 @@ export function AddStudentDialog({ period, onStudentAdded }: AddStudentDialogPro
       const { data, error } = await supabase
         .from('students')
         .insert([{
+          id: Number(studentId.trim()),
           name: name.trim(),
           class_period: period,
           period: period
@@ -95,6 +108,15 @@ export function AddStudentDialog({ period, onStudentAdded }: AddStudentDialogPro
           <DialogTitle>Add New Student</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-4">
+          <div>
+            <Label>Student ID *</Label>
+            <Input 
+              value={studentId}
+              onChange={(e) => setStudentId(e.target.value)}
+              placeholder="12345"
+              required
+            />
+          </div>
           <div>
             <Label>Full Name *</Label>
             <Input 
