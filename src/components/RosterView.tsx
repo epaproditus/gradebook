@@ -673,7 +673,10 @@ const RosterView: FC<RosterViewProps> = ({
                   return (
                     <TableRow key={student.id}>
                       <TableCell className="sticky left-0 bg-background z-40 font-medium">
-                        {student.name}
+                        <div className="flex flex-col">
+                          <span>{student.name}</span>
+                          <span className="text-xs text-muted-foreground">ID: {student.id}</span>
+                        </div>
                       </TableCell>
                       <TableCell className="sticky left-0 bg-background z-40 font-medium text-right">
                         {average}%
