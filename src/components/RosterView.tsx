@@ -920,11 +920,11 @@ const RosterView: FC<RosterViewProps> = ({
                               });
                               if (confirmed) {
                                 try {
-                                  const success = await deleteStudent(student.id.toString());
+                                  const success = await deactivateStudent(student.id.toString());
                                   if (success) {
                                     toast({
-                                      title: "Student Removed",
-                                      description: `${student.name} has been removed from Period ${activeTab}`
+                                      title: "Student Deactivated",
+                                      description: `${student.name} has been deactivated and hidden from view`
                                     });
                                   } else {
                                     throw new Error('Failed to delete student');

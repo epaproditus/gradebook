@@ -14,6 +14,7 @@ export function useStudents(initialPeriod?: string) {
       let query = supabase
         .from('students')
         .select('*')
+        .eq('is_active', true)
         .order('name');
 
       if (period) {
@@ -68,40 +69,16 @@ export function useStudents(initialPeriod?: string) {
     fetchStudents(initialPeriod);
   }, [initialPeriod]);
 
-  const deleteStudent = async (studentId: string) => {
+  const deactivateStudent = async (studentId: string) => {
     try {
-      // First check if student exists
-      const { data: existing, error: checkError } = await supabase
+      const { error } = await supabase
         .from('students')
-        .select('id, period')
-        .eq('id', studentId)
-        .single();
-
-      if (checkError || !existing) {
-        throw new Error('Student not found');
-      }
-
-      // Delete student and all related records in a transaction
-      const { error: deleteError } = await supabase.rpc('delete_student_with_related', {
-        student_id: studentId
-      });
-
-      if (deleteError) {
-        console.error('Supabase delete error:', deleteError);
-        throw deleteError;
-      }
-
-      // Verify deletion
-      const { data: verifyDelete, error: verifyError } = await supabase
-        .from('students')
-        .select('id')
+        .update({ is_active: false })
         .eq('id', studentId);
 
-      if (verifyError || (verifyDelete && verifyDelete.length > 0)) {
-        throw new Error('Student still exists after deletion');
-      }
+      if (error) throw error;
 
-      // Update local state by removing the student
+      // Update local state by filtering out deactivated student
       setStudents(prev => {
         const updated = {...prev};
         for (const period in updated) {
@@ -141,7 +118,7 @@ export function useStudents(initialPeriod?: string) {
     error,
     fetchStudents,
     addStudent,
-    deleteStudent,
+    deactivateStudent,
     setStudents
   };
 }
