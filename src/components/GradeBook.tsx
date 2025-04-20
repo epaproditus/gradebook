@@ -497,6 +497,7 @@ const GradeBook: FC = () => {
         const { data, error } = await supabase
           .from('students')
           .select('*')
+          .eq('is_active', true)  // Add filter to only fetch active students
           .order('class_period, name');
 
         if (error) {
