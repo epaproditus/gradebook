@@ -1902,6 +1902,38 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
         </div>
       )}
       <div className="flex items-center gap-2 ml-4" onClick={(e) => e.stopPropagation()}>
+        <Select
+          value={assignment.status || 'not_started'}
+          onValueChange={(value: AssignmentStatus) => {
+            handleAssignmentEdit(assignmentId, {
+              ...assignment,
+              status: value,
+              completed: value === 'completed',
+              completed_at: value === 'completed' ? new Date() : null
+            });
+          }}
+        >
+          <SelectTrigger className="h-8 w-28">
+            <div className="flex items-center gap-1">
+              <div className={cn(
+                "h-2 w-2 rounded-full",
+                assignment.status === 'completed' ? "bg-green-500" :
+                assignment.status === 'in_progress' ? "bg-blue-500" :
+                assignment.status === 'not_graded' ? "bg-orange-500" :
+                "bg-slate-500"
+              )} />
+              <span className="text-xs capitalize">
+                {assignment.status?.replace('_', ' ') || 'not started'}
+              </span>
+            </div>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="not_started">Not Started</SelectItem>
+            <SelectItem value="not_graded">Not Graded</SelectItem>
+            <SelectItem value="in_progress">In Progress</SelectItem>
+            <SelectItem value="completed">Completed</SelectItem>
+          </SelectContent>
+        </Select>
         <Button
           variant="ghost"
           size="icon"
