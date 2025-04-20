@@ -476,7 +476,6 @@ const GradeBook: FC = () => {
   const [grades, setGrades] = useState<GradeData>({});
   const [unsavedGrades, setUnsavedGrades] = useState<GradeData>({});
   const [editingGrades, setEditingGrades] = useState<Record<string, boolean>>({});
-  const [expandedAssignments, setExpandedAssignments] = useState<Record<string, boolean>>({});
   const [selectedType, setSelectedType] = useState<'Daily' | 'Assessment'>('Daily');
   const [absences, setAbsences] = useState<Record<string, boolean>>({});
   const [lateWork, setLateWork] = useState<Record<string, boolean>>({});
