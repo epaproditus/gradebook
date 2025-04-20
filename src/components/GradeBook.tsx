@@ -2479,66 +2479,117 @@ const cloneAssignment = async (assignmentId: string) => {
     const sourceAssignment = assignments[assignmentId];
     if (!sourceAssignment) return;
 
+    // Log starting state for debugging
+    console.log('Starting clone operation:', {
+      sourceAssignmentId: assignmentId,
+      sourceAssignment,
+      sourceGrades: grades[assignmentId],
+      sourceExtraPoints: Object.entries(extraPoints)
+        .filter(([key]) => key.startsWith(`${assignmentId}-`))
+        .reduce((acc, [key, value]) => ({...acc, [key]: value}), {})
+    });
+
     const newAssignmentId = crypto.randomUUID();
 
-    // Create new assignment data
+    // Create new assignment data, preserving all important fields
     const newAssignmentData = {
       id: newAssignmentId,
       name: `${sourceAssignment.name} (Copy)`,
-      date: new Date(),
+      date: new Date(), // Use current date for the copy
       type: sourceAssignment.type,
-      periods: sourceAssignment.periods,
+      periods: [...sourceAssignment.periods], // Make sure to create a new array
       subject: sourceAssignment.subject,
-      max_points: sourceAssignment.max_points,
+      six_weeks_period: sourceAssignment.six_weeks_period, // Critical: preserve six weeks period
+      status: sourceAssignment.status || 'not_started',
+      max_points: sourceAssignment.max_points || 100,
       created_at: new Date().toISOString()
     };
 
+    console.log('Prepared new assignment data:', newAssignmentData);
+
     // Insert new assignment
-    const { error: assignmentError } = await supabase
+    const { data: insertedAssignment, error: assignmentError } = await supabase
       .from('assignments')
-      .insert([newAssignmentData]);
+      .insert([newAssignmentData])
+      .select()
+      .single();
 
     if (assignmentError) throw assignmentError;
 
-    // Clone grades with deep copy
-    const gradesToClone = sourceAssignment.periods.flatMap(periodId => {
-      const periodGrades = grades[assignmentId]?.[periodId] || {};
+    console.log('Assignment inserted in database:', insertedAssignment);
+
+    // Clone grades
+    const sourceGrades = grades[assignmentId] || {};
+    const gradesToClone = [];
+    
+    // Explicitly build grade objects for each period and student
+    for (const periodId of sourceAssignment.periods) {
+      const periodGrades = sourceGrades[periodId] || {};
       
-      return Object.entries(periodGrades).map(([studentId, grade]) => ({
-        assignment_id: newAssignmentId,
-        student_id: studentId,
-        period: periodId,
-        grade: String(grade), // Ensure new string reference
-        extra_points: String(extraPoints[`${assignmentId}-${periodId}-${studentId}`] || '0')
-      }));
-    }).filter(grade => grade.grade); // Only clone non-empty grades
+      for (const [studentId, grade] of Object.entries(periodGrades)) {
+        // Skip empty grades
+        if (!grade || grade === '0') continue;
+        
+        // Get extra points if any
+        const extraPointsKey = `${assignmentId}-${periodId}-${studentId}`;
+        const extraPointsValue = extraPoints[extraPointsKey] || '0';
+        
+        gradesToClone.push({
+          assignment_id: newAssignmentId,
+          student_id: studentId,
+          period: periodId,
+          grade: String(grade), // Ensure it's a string
+          extra_points: extraPointsValue
+        });
+      }
+    }
+
+    console.log(`Prepared ${gradesToClone.length} grades to clone:`, gradesToClone);
 
     if (gradesToClone.length > 0) {
-      const { error: gradesError } = await supabase
+      const { data: insertedGrades, error: gradesError } = await supabase
         .from('grades')
-        .insert(gradesToClone);
+        .insert(gradesToClone)
+        .select();
 
       if (gradesError) throw gradesError;
 
-      // Update local grades state with deep copies
-      const newGrades = JSON.parse(JSON.stringify(grades));
-      const newExtraPoints = JSON.parse(JSON.stringify(extraPoints));
+      console.log('Grades inserted in database:', insertedGrades);
+      
+      // Update local state - for both grades and extra points
+      const newGradesState = {...grades};
+      const newExtraPointsState = {...extraPoints};
 
+      // Initialize nested structure for the new assignment
+      if (!newGradesState[newAssignmentId]) {
+        newGradesState[newAssignmentId] = {};
+      }
+
+      // Populate the grades
       gradesToClone.forEach(({ assignment_id, period, student_id, grade, extra_points }) => {
-        if (!newGrades[assignment_id]) {
-          newGrades[assignment_id] = {};
+        // Make sure the period object exists
+        if (!newGradesState[assignment_id][period]) {
+          newGradesState[assignment_id][period] = {};
         }
-        if (!newGrades[assignment_id][period]) {
-          newGrades[assignment_id][period] = {};
-        }
-        newGrades[assignment_id][period][student_id] = grade;
+        
+        // Set the grade
+        newGradesState[assignment_id][period][student_id] = grade;
+        
+        // Set extra points if needed
         if (extra_points && extra_points !== '0') {
-          newExtraPoints[`${assignment_id}-${period}-${student_id}`] = extra_points;
+          const newKey = `${assignment_id}-${period}-${student_id}`;
+          newExtraPointsState[newKey] = extra_points;
         }
       });
 
-      setGrades(newGrades);
-      setExtraPoints(newExtraPoints);
+      // Update state with our carefully constructed objects
+      setGrades(newGradesState);
+      setExtraPoints(newExtraPointsState);
+      
+      console.log('Updated local state with new grades:', {
+        updatedGrades: newGradesState[newAssignmentId],
+        extraPointsUpdated: Object.keys(newExtraPointsState).filter(k => k.startsWith(newAssignmentId)).length
+      });
     }
 
     // Update local assignment state
@@ -2546,24 +2597,45 @@ const cloneAssignment = async (assignmentId: string) => {
       ...prev,
       [newAssignmentId]: {
         ...newAssignmentData,
-        date: new Date()
+        date: new Date() // Ensure date is a Date object
       }
     }));
 
-    // Add to assignment order at the top
-    setAssignmentOrder(prev => [newAssignmentId, ...prev]);
-
-    toast({
-      title: "Success",
-      description: `Assignment cloned with ${gradesToClone.length} grades`
+    // Add to assignment order at the top - also check if we need to handle filters
+    setAssignmentOrder(prev => {
+      const updatedOrder = [newAssignmentId, ...prev];
+      console.log('Updated assignment order:', {
+        previousLength: prev.length,
+        newLength: updatedOrder.length,
+        firstFewIds: updatedOrder.slice(0, 3)
+      });
+      return updatedOrder;
     });
+
+    // Check if the assignment might be filtered out
+    const mightBeFiltered = 
+      (sixWeeksFilter && sixWeeksFilter !== 'all' && newAssignmentData.six_weeks_period !== sixWeeksFilter) ||
+      (subjectFilter !== 'all' && newAssignmentData.subject !== subjectFilter);
+    
+    if (mightBeFiltered) {
+      toast({
+        title: "Assignment Copied",
+        description: `Note: The copied assignment may be hidden due to active filters. Check your filter settings if you don't see it.`,
+        variant: "default"
+      });
+    } else {
+      toast({
+        title: "Success",
+        description: `Assignment cloned with ${gradesToClone.length} grades`
+      });
+    }
 
   } catch (error) {
     console.error('Error cloning assignment:', error);
     toast({
       variant: "destructive",
-      title: "Error",
-      description: "Failed to clone assignment"
+      title: "Error", 
+      description: error instanceof Error ? error.message : "Failed to clone assignment"
     });
   }
 };
