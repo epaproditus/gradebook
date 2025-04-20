@@ -530,6 +530,7 @@ const GradeBook: FC = () => {
 
   // Load assignments and grades on component mount
   useEffect(() => {
+    console.log('Initializing gradebook - loading assignments and grades');
     const loadAssignments = async () => {
       // Load assignments with conditional six_weeks_period filter
       const query = supabase
@@ -560,9 +561,17 @@ const GradeBook: FC = () => {
       setAssignmentOrder(Object.keys(formattedAssignments));
   
       // Then load grades in a separate query
+      console.log('Loading grades from Supabase...');
       const { data: gradeData, error: gradeError } = await supabase
         .from('grades')
-        .select('*');
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      console.log('Grades loaded:', {
+        count: gradeData?.length,
+        sample: gradeData?.slice(0, 3),
+        error: gradeError
+      });
   
       if (gradeError) {
         console.error('Error loading grades:', gradeError);
@@ -763,19 +772,36 @@ const handleGradeChange = (assignmentId: string, periodId: string, studentId: st
 };
 
 const getGradeValue = (assignmentId: string, periodId: string, studentId: string) => {
-  // Debug logging for specific student
-  if (studentId === '426836' && periodId === '6th' && assignmentId === '77e824f2-2e53-4862-bd6e-53d01b0ed5ef') {
-    console.log('Grade debug:', {
-      assignmentId,
-      periodId, 
-      studentId,
-      supabaseGrade: grades[assignmentId]?.[periodId]?.[studentId],
-      unsavedGrade: unsavedGrades[assignmentId]?.[periodId]?.[studentId],
-      localGrade: localGrades[`${assignmentId}-${periodId}-${studentId}`],
+  // Enhanced debug logging
+  const debugData = {
+    assignmentId,
+    periodId,
+    studentId,
+    sources: {
+      supabase: grades[assignmentId]?.[periodId]?.[studentId],
+      unsaved: unsavedGrades[assignmentId]?.[periodId]?.[studentId],
+      local: localGrades[`${assignmentId}-${periodId}-${studentId}`]
+    },
+    states: {
       isEditing: editingGrades[`${assignmentId}-${periodId}`],
-      extraPoints: extraPoints[`${assignmentId}-${periodId}-${studentId}`]
-    });
-  }
+      hasExtraPoints: extraPoints[`${assignmentId}-${periodId}-${studentId}`] !== undefined
+    },
+    resolvedValue: (() => {
+      if (editingGrades[`${assignmentId}-${periodId}`]) {
+        const unsavedValue = unsavedGrades[assignmentId]?.[periodId]?.[studentId];
+        if (unsavedValue !== undefined) return `unsaved: ${unsavedValue}`;
+      }
+      
+      const localKey = `${assignmentId}-${periodId}-${studentId}`;
+      const localValue = localGrades[localKey];
+      if (localValue !== undefined) return `local: ${localValue}`;
+      
+      const savedValue = grades[assignmentId]?.[periodId]?.[studentId];
+      return savedValue !== undefined ? `saved: ${savedValue}` : 'empty';
+    })()
+  };
+
+  console.log('Grade resolution path:', debugData);
 
   // First check unsaved/editing grades
   if (editingGrades[`${assignmentId}-${periodId}`]) {
