@@ -490,7 +490,6 @@ const GradeBook: FC = () => {
   const { data: session } = useSession();
   const [activeRow, setActiveRow] = useState<string | null>(null);
   const [localGrades, setLocalGrades] = useState<Record<string, string>>({});
-  const [viewMode, setViewMode] = useState<'assignment' | 'roster'>('assignment');
   const [messages, setMessages] = useState<Message[]>([]);
   const [messageSubscription, setMessageSubscription] = useState<RealtimeChannel | null>(null);
   const [flags, setFlags] = useState<Flag[]>([]);
