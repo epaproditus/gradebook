@@ -914,12 +914,26 @@ const RosterView: FC<RosterViewProps> = ({
                             className="h-6 w-6 text-muted-foreground hover:text-destructive"
                             onClick={async (e) => {
                               e.stopPropagation();
-                              if (confirm(`Are you sure you want to remove ${student.name}?`)) {
-                                const success = await deleteStudent(student.id.toString());
-                                if (success) {
+                              const confirmed = await new Promise(resolve => {
+                                const confirmed = confirm(`Are you sure you want to remove ${student.name}? This cannot be undone.`);
+                                resolve(confirmed);
+                              });
+                              if (confirmed) {
+                                try {
+                                  const success = await deleteStudent(student.id.toString());
+                                  if (success) {
+                                    toast({
+                                      title: "Student Removed",
+                                      description: `${student.name} has been removed from Period ${activeTab}`
+                                    });
+                                  } else {
+                                    throw new Error('Failed to delete student');
+                                  }
+                                } catch (error) {
                                   toast({
-                                    title: "Student Removed",
-                                    description: `${student.name} has been removed from your roster`
+                                    title: "Error",
+                                    description: error instanceof Error ? error.message : "Failed to delete student",
+                                    variant: "destructive"
                                   });
                                 }
                               }

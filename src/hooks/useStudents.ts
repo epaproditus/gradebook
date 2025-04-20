@@ -70,12 +70,24 @@ export function useStudents(initialPeriod?: string) {
 
   const deleteStudent = async (studentId: string) => {
     try {
-      const { error } = await supabase
+      // First check if student exists
+      const { data: existing, error: checkError } = await supabase
+        .from('students')
+        .select('id, period')
+        .eq('id', studentId)
+        .single();
+
+      if (checkError || !existing) {
+        throw new Error('Student not found');
+      }
+
+      // Delete student
+      const { error: deleteError } = await supabase
         .from('students')
         .delete()
         .eq('id', studentId);
 
-      if (error) throw error;
+      if (deleteError) throw deleteError;
 
       // Update local state by removing the student
       setStudents(prev => {
@@ -88,6 +100,7 @@ export function useStudents(initialPeriod?: string) {
 
       return true;
     } catch (err) {
+      console.error('Error deleting student:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete student');
       return false;
     }

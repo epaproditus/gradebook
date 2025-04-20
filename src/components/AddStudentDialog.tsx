@@ -71,7 +71,8 @@ export function AddStudentDialog({ period, onStudentAdded }: AddStudentDialogPro
           class_period: period,
           period: period
         }])
-        .select();
+        .select()
+        .single(); // Ensure we get single result
 
       if (error) throw error;
 
@@ -82,7 +83,7 @@ export function AddStudentDialog({ period, onStudentAdded }: AddStudentDialogPro
       setName('');
       setStudentId('');
       onStudentAdded();
-      setOpen(false); // Move this after onStudentAdded
+      setOpen(false);
     } catch (error: any) {
       console.error('Error adding student:', error);
       toast({
@@ -90,6 +91,7 @@ export function AddStudentDialog({ period, onStudentAdded }: AddStudentDialogPro
         description: error.message || "Failed to add student",
         variant: "destructive"
       });
+      // Don't close dialog on error so user can try again
     } finally {
       setLoading(false);
     }
