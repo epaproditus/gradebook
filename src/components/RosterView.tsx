@@ -920,14 +920,19 @@ const RosterView: FC<RosterViewProps> = ({
                               });
                               if (confirmed) {
                                 try {
-                                  const { error } = await supabase
+                                  // First try basic deactivation
+                                  let { error } = await supabase
                                     .from('students')
-                                    .update({ 
-                                      is_active: false,
-                                      updated_at: new Date().toISOString() 
-                                    })
-                                    .eq('id', student.id)
-                                    .select();
+                                    .update({ is_active: false })
+                                    .eq('id', student.id);
+
+                                  // If column doesn't exist, try without updated_at
+                                  if (error?.code === 'PGRST204') {
+                                    ({ error } = await supabase
+                                      .from('students')
+                                      .update({ is_active: false })
+                                      .eq('id', student.id));
+                                  }
 
                                   if (error) throw error;
 

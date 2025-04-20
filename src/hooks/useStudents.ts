@@ -71,16 +71,21 @@ export function useStudents(initialPeriod?: string) {
 
   const deactivateStudent = async (studentId: string) => {
     try {
-      const { error } = await supabase
+      // First try with both fields
+      let { error } = await supabase
         .from('students')
-        .update({ is_active: false, updated_at: new Date().toISOString() })
-        .eq('id', studentId)
-        .select();
+        .update({ is_active: false })
+        .eq('id', studentId);
 
-      if (error) {
-        console.error('Supabase update error:', error);
-        throw error;
+      // If that fails, try without updated_at
+      if (error?.code === 'PGRST204') {
+        ({ error } = await supabase
+          .from('students')
+          .update({ is_active: false })
+          .eq('id', studentId));
       }
+
+      if (error) throw error;
 
       // Refresh students data after deactivation
       await fetchStudents();
