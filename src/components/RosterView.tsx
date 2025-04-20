@@ -15,8 +15,7 @@ import { ImportScoresDialog } from './ImportScoresDialog';
 import { GradeExportDialog } from './GradeExportDialog';
 import { STATUS_COLORS, TYPE_COLORS } from '@/lib/constants';
 import { toast } from "@/components/ui/use-toast";
-import { ColorSettings } from './ColorSettings'; // New import
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // New import
+import { ColorSettings } from './ColorSettings';
 import { calculateWeightedAverage, calculateTotal } from '@/lib/gradeCalculations';
 import { formatGradeDisplay, getGradeDisplayClass } from '@/lib/displayFormatters';
 import { MessagePanel } from './MessagePanel';
