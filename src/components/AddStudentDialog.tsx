@@ -23,19 +23,37 @@ export function AddStudentDialog({ period, onStudentAdded }: AddStudentDialogPro
   const supabase = createClientComponentClient();
 
   const handleSubmit = async () => {
-    if (!name.trim()) {
+    // Validate name format (Last, First)
+    if (!name.trim() || !name.includes(',')) {
       toast({
-        title: "Error",
-        description: "Name is required",
+        title: "Invalid Name",
+        description: "Please enter name as 'Last, First'",
         variant: "destructive"
       });
       return;
     }
 
-    if (!studentId.trim()) {
+    // Validate student ID is numeric
+    if (!studentId.trim() || !/^\d+$/.test(studentId)) {
       toast({
-        title: "Error",
-        description: "Student ID is required",
+        title: "Invalid ID",
+        description: "Student ID must contain only numbers",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Check for existing student
+    const { data: existing } = await supabase
+      .from('students')
+      .select('id')
+      .eq('student_id', studentId.trim())
+      .single();
+
+    if (existing) {
+      toast({
+        title: "Student Exists",
+        description: `Student ID ${studentId} already exists`,
         variant: "destructive"
       });
       return;

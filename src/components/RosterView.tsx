@@ -23,6 +23,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 
 interface RosterViewProps {
   students: Record<string, Student[]>;
+  setStudents: React.Dispatch<React.SetStateAction<Record<string, Student[]>>>;
   assignments: Record<string, Assignment>;
   grades: GradeData;
   onGradeChange: (assignmentId: string, periodId: string, studentId: string, grade: string) => void;
@@ -735,24 +736,25 @@ const RosterView: FC<RosterViewProps> = ({
                   <TableCell className="sticky left-0 bg-background z-40">
                     <AddStudentDialog 
                       period={activeTab}
-                      onStudentAdded={() => {
-                        // Refresh students data
-                        const fetchStudents = async () => {
-                          const { data, error } = await supabase
-                            .from('students')
-                            .select('*')
-                            .order('class_period, name');
-                          if (!error && data) {
-                            const updatedStudents = data.reduce((acc: Record<string, any[]>, student: any) => {
-                              if (!acc[student.class_period]) acc[student.class_period] = [];
-                              acc[student.class_period].push(student);
-                              return acc;
-                            }, {});
-                            // Update parent state
-                            // You'll need to pass a setStudents prop or find another way to update
-                          }
-                        };
-                        fetchStudents();
+                      onStudentAdded={async () => {
+                        // Refresh students for current period
+                        const { data, error } = await supabase
+                          .from('students')
+                          .select('*')
+                          .eq('period', activeTab)
+                          .order('name');
+                        
+                        if (!error && data) {
+                          // Update local students state
+                          setStudents(prev => ({
+                            ...prev,
+                            [activeTab]: data
+                          }));
+                          toast({
+                            title: "Roster Updated",
+                            description: `Added new student to Period ${activeTab}`
+                          });
+                        }
                       }}
                     />
                   </TableCell>
