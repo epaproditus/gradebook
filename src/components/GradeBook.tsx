@@ -772,51 +772,64 @@ const handleGradeChange = (assignmentId: string, periodId: string, studentId: st
 };
 
 const getGradeValue = (assignmentId: string, periodId: string, studentId: string) => {
-  // Enhanced debug logging
+  // Enhanced debug logging with more context
   const debugData = {
-    assignmentId,
-    periodId,
-    studentId,
+    assignment: assignments[assignmentId]?.name,
+    student: students[periodId]?.find(s => s.id === parseInt(studentId))?.name,
     sources: {
-      supabase: grades[assignmentId]?.[periodId]?.[studentId],
-      unsaved: unsavedGrades[assignmentId]?.[periodId]?.[studentId],
-      local: localGrades[`${assignmentId}-${periodId}-${studentId}`]
+      supabase: {
+        value: grades[assignmentId]?.[periodId]?.[studentId],
+        exists: grades[assignmentId]?.[periodId]?.[studentId] !== undefined
+      },
+      unsaved: {
+        value: unsavedGrades[assignmentId]?.[periodId]?.[studentId],
+        exists: unsavedGrades[assignmentId]?.[periodId]?.[studentId] !== undefined
+      },
+      local: {
+        value: localGrades[`${assignmentId}-${periodId}-${studentId}`],
+        exists: localGrades[`${assignmentId}-${periodId}-${studentId}`] !== undefined
+      }
     },
     states: {
       isEditing: editingGrades[`${assignmentId}-${periodId}`],
       hasExtraPoints: extraPoints[`${assignmentId}-${periodId}-${studentId}`] !== undefined
-    },
-    resolvedValue: (() => {
-      if (editingGrades[`${assignmentId}-${periodId}`]) {
-        const unsavedValue = unsavedGrades[assignmentId]?.[periodId]?.[studentId];
-        if (unsavedValue !== undefined) return `unsaved: ${unsavedValue}`;
-      }
-      
-      const localKey = `${assignmentId}-${periodId}-${studentId}`;
-      const localValue = localGrades[localKey];
-      if (localValue !== undefined) return `local: ${localValue}`;
-      
-      const savedValue = grades[assignmentId]?.[periodId]?.[studentId];
-      return savedValue !== undefined ? `saved: ${savedValue}` : 'empty';
-    })()
+    }
   };
 
-  console.log('Grade resolution path:', debugData);
+  // Get values from all sources
+  const supabaseGrade = grades[assignmentId]?.[periodId]?.[studentId];
+  const unsavedGrade = unsavedGrades[assignmentId]?.[periodId]?.[studentId];
+  const localGrade = localGrades[`${assignmentId}-${periodId}-${studentId}`];
 
-  // First check unsaved/editing grades
-  if (editingGrades[`${assignmentId}-${periodId}`]) {
-    const unsavedValue = unsavedGrades[assignmentId]?.[periodId]?.[studentId];
-    if (unsavedValue !== undefined) return unsavedValue;
+  // Determine final value with clearer priority
+  let finalGrade = '';
+  
+  // 1. Check for local edits first (immediate feedback)
+  if (localGrade !== undefined && localGrade !== '') {
+    finalGrade = localGrade;
+    debugData.resolvedFrom = 'local';
+  } 
+  // 2. Check unsaved changes if in editing mode
+  else if (editingGrades[`${assignmentId}-${periodId}`] && unsavedGrade !== undefined) {
+    finalGrade = unsavedGrade;
+    debugData.resolvedFrom = 'unsaved';
   }
-  
-  // Then check local grades for immediate feedback
-  const localKey = `${assignmentId}-${periodId}-${studentId}`;
-  const localValue = localGrades[localKey];
-  if (localValue !== undefined) return localValue;
-  
-  // Finally fall back to saved grades
-  const savedValue = grades[assignmentId]?.[periodId]?.[studentId];
-  return savedValue !== undefined ? savedValue : '';
+  // 3. Fall back to Supabase value
+  else if (supabaseGrade !== undefined) {
+    // Only use Supabase value if it's not empty/zero
+    finalGrade = supabaseGrade !== '0' ? supabaseGrade : '';
+    debugData.resolvedFrom = supabaseGrade === '0' ? 'supabase (ignored zero)' : 'supabase';
+  }
+
+  console.log('Grade resolution:', {
+    ...debugData,
+    finalGrade,
+    assignmentId,
+    periodId, 
+    studentId
+  });
+
+  return finalGrade;
 };
 
 const deleteAssignment = async (assignmentId: string) => {
