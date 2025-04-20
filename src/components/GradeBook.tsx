@@ -1883,13 +1883,53 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
         </div>
       ) : (
         <div className="flex items-center gap-4" onClick={() => setEditingAssignment(assignmentId)}>
-          <div className={cn(
-            "h-2 w-2 rounded-full",
-            assignment.status === 'completed' ? "bg-green-500" :
-            assignment.status === 'in_progress' ? "bg-blue-500" :
-            assignment.status === 'not_graded' ? "bg-orange-500" :
-            "bg-slate-500" // Default for not_started
-          )} />
+          <Select
+            value={assignment.status || 'not_started'}
+            onValueChange={(value: AssignmentStatus) => {
+              handleAssignmentEdit(assignmentId, {
+                ...assignment,
+                status: value,
+                completed: value === 'completed',
+                completed_at: value === 'completed' ? new Date() : null
+              });
+            }}
+          >
+            <SelectTrigger className="h-4 w-4 p-0">
+              <div className={cn(
+                "h-2 w-2 rounded-full",
+                assignment.status === 'completed' ? "bg-green-500" :
+                assignment.status === 'in_progress' ? "bg-blue-500" :
+                assignment.status === 'not_graded' ? "bg-orange-500" :
+                "bg-slate-500"
+              )} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="not_started">
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-slate-500" />
+                  <span>Not Started</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="not_graded">
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-orange-500" />
+                  <span>Not Graded</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="in_progress">
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-blue-500" />
+                  <span>In Progress</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="completed">
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-green-500" />
+                  <span>Completed</span>
+                </div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
           <div>
             <CardTitle>{assignment.name}</CardTitle>
             <div className="text-sm text-muted-foreground">
@@ -1902,53 +1942,6 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
         </div>
       )}
       <div className="flex items-center gap-2 ml-4" onClick={(e) => e.stopPropagation()}>
-        <Select
-          value={assignment.status || 'not_started'}
-          onValueChange={(value: AssignmentStatus) => {
-            handleAssignmentEdit(assignmentId, {
-              ...assignment,
-              status: value,
-              completed: value === 'completed',
-              completed_at: value === 'completed' ? new Date() : null
-            });
-          }}
-        >
-          <SelectTrigger className="h-8 w-8 p-0 justify-center">
-            <div className={cn(
-              "h-3 w-3 rounded-full",
-              assignment.status === 'completed' ? "bg-green-500" :
-              assignment.status === 'in_progress' ? "bg-blue-500" :
-              assignment.status === 'not_graded' ? "bg-orange-500" :
-              "bg-slate-500"
-            )} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="not_started">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-slate-500" />
-                <span>Not Started</span>
-              </div>
-            </SelectItem>
-            <SelectItem value="not_graded">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-orange-500" />
-                <span>Not Graded</span>
-              </div>
-            </SelectItem>
-            <SelectItem value="in_progress">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-blue-500" />
-                <span>In Progress</span>
-              </div>
-            </SelectItem>
-            <SelectItem value="completed">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-green-500" />
-                <span>Completed</span>
-              </div>
-            </SelectItem>
-          </SelectContent>
-        </Select>
         <Button
           variant="ghost"
           size="icon"
