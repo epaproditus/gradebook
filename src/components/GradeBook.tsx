@@ -763,6 +763,20 @@ const handleGradeChange = (assignmentId: string, periodId: string, studentId: st
 };
 
 const getGradeValue = (assignmentId: string, periodId: string, studentId: string) => {
+  // Debug logging for specific student
+  if (studentId === '12345' && periodId === '2' && assignmentId === 'your-assignment-id-here') {
+    console.log('Grade debug:', {
+      assignmentId,
+      periodId, 
+      studentId,
+      supabaseGrade: grades[assignmentId]?.[periodId]?.[studentId],
+      unsavedGrade: unsavedGrades[assignmentId]?.[periodId]?.[studentId],
+      localGrade: localGrades[`${assignmentId}-${periodId}-${studentId}`],
+      isEditing: editingGrades[`${assignmentId}-${periodId}`],
+      extraPoints: extraPoints[`${assignmentId}-${periodId}-${studentId}`]
+    });
+  }
+
   // First check unsaved/editing grades
   if (editingGrades[`${assignmentId}-${periodId}`]) {
     const unsavedValue = unsavedGrades[assignmentId]?.[periodId]?.[studentId];
