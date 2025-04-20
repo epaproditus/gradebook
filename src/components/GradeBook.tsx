@@ -1883,53 +1883,77 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
         </div>
       ) : (
         <div className="flex items-center gap-4" onClick={() => setEditingAssignment(assignmentId)}>
-          <Select
-            value={assignment.status || 'not_started'}
-            onValueChange={(value: AssignmentStatus) => {
-              handleAssignmentEdit(assignmentId, {
-                ...assignment,
-                status: value,
-                completed: value === 'completed',
-                completed_at: value === 'completed' ? new Date() : null
-              });
-            }}
-          >
-            <SelectTrigger className="h-4 w-4 p-0">
+          <Popover>
+            <PopoverTrigger asChild>
               <div className={cn(
-                "h-2 w-2 rounded-full",
+                "h-5 w-5 rounded-full cursor-pointer",
                 assignment.status === 'completed' ? "bg-green-500" :
                 assignment.status === 'in_progress' ? "bg-blue-500" :
                 assignment.status === 'not_graded' ? "bg-orange-500" :
                 "bg-slate-500"
               )} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="not_started">
-                <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-slate-500" />
-                  <span>Not Started</span>
+            </PopoverTrigger>
+            <PopoverContent className="w-40 p-1">
+              <div className="space-y-1">
+                <div 
+                  className="flex items-center gap-2 p-2 rounded hover:bg-accent cursor-pointer"
+                  onClick={() => {
+                    handleAssignmentEdit(assignmentId, {
+                      ...assignment,
+                      status: 'not_started',
+                      completed: false,
+                      completed_at: null
+                    });
+                  }}
+                >
+                  <div className="h-3 w-3 rounded-full bg-slate-500" />
+                  <span className="text-sm">Not Started</span>
                 </div>
-              </SelectItem>
-              <SelectItem value="not_graded">
-                <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-orange-500" />
-                  <span>Not Graded</span>
+                <div 
+                  className="flex items-center gap-2 p-2 rounded hover:bg-accent cursor-pointer"
+                  onClick={() => {
+                    handleAssignmentEdit(assignmentId, {
+                      ...assignment,
+                      status: 'not_graded',
+                      completed: false,
+                      completed_at: null
+                    });
+                  }}
+                >
+                  <div className="h-3 w-3 rounded-full bg-orange-500" />
+                  <span className="text-sm">Not Graded</span>
                 </div>
-              </SelectItem>
-              <SelectItem value="in_progress">
-                <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-blue-500" />
-                  <span>In Progress</span>
+                <div 
+                  className="flex items-center gap-2 p-2 rounded hover:bg-accent cursor-pointer"
+                  onClick={() => {
+                    handleAssignmentEdit(assignmentId, {
+                      ...assignment,
+                      status: 'in_progress',
+                      completed: false,
+                      completed_at: null
+                    });
+                  }}
+                >
+                  <div className="h-3 w-3 rounded-full bg-blue-500" />
+                  <span className="text-sm">In Progress</span>
                 </div>
-              </SelectItem>
-              <SelectItem value="completed">
-                <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-green-500" />
-                  <span>Completed</span>
+                <div 
+                  className="flex items-center gap-2 p-2 rounded hover:bg-accent cursor-pointer"
+                  onClick={() => {
+                    handleAssignmentEdit(assignmentId, {
+                      ...assignment,
+                      status: 'completed',
+                      completed: true,
+                      completed_at: new Date()
+                    });
+                  }}
+                >
+                  <div className="h-3 w-3 rounded-full bg-green-500" />
+                  <span className="text-sm">Completed</span>
                 </div>
-              </SelectItem>
-            </SelectContent>
-          </Select>
+              </div>
+            </PopoverContent>
+          </Popover>
           <div>
             <CardTitle>{assignment.name}</CardTitle>
             <div className="text-sm text-muted-foreground">
