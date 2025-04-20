@@ -10,6 +10,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 interface ImportScoresDialogProps {
   assignmentId: string;
+  assignmentName?: string; // New optional prop
   periodId: string;
   onImport: (grades: Record<string, string>) => void;
   unsavedGrades: GradeData;
@@ -18,6 +19,7 @@ interface ImportScoresDialogProps {
   assignments: Record<string, Assignment>;
   students: Record<string, Student[]>;
   grades: GradeData;
+  multipleAssignmentsVisible?: boolean; // New flag
 }
 
 export const ImportScoresDialog: FC<ImportScoresDialogProps> = ({
@@ -133,9 +135,19 @@ export const ImportScoresDialog: FC<ImportScoresDialogProps> = ({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Import Scores for {assignment?.name}</DialogTitle>
+            <DialogTitle>Import Scores</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="flex flex-col gap-1">
+              <div className="font-medium">
+                Target Assignment: {assignmentName || assignment?.name}
+              </div>
+              {multipleAssignmentsVisible && (
+                <div className="text-sm text-yellow-600">
+                  Note: Only the first visible assignment will receive imports
+                </div>
+              )}
+            </div>
             <Input
               type="file"
               accept=".csv"
