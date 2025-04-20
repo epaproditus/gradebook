@@ -482,7 +482,6 @@ const GradeBook: FC = () => {
   const [incomplete, setIncomplete] = useState<Record<string, boolean>>({});
   const [extraPoints, setExtraPoints] = useState<Record<string, string>>({});
   const [retest, setRetest] = useState<Record<string, boolean>>({});
-  const [isCalendarVisible, setIsCalendarVisible] = useState(false);
   const [tags, setTags] = useState<AssignmentTag[]>([]);
   const [activeTab, setActiveTab] = useState<string>('');
   const [assignmentOrder, setAssignmentOrder] = useState<string[]>([]);
