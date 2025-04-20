@@ -428,7 +428,7 @@ const GradeBook: FC = () => {
   const [showColors, setShowColors] = useState(loadConfig().showColors);
   const [colorMode, setColorMode] = useState(loadConfig().colorMode);
   const [groupBy, setGroupBy] = useState(loadConfig().groupBy);
-  const [dateFilter, setDateFilter] = useState(loadConfig().dateFilter);
+  const [dateFilter, setDateFilter] = useState<'name-asc' | 'name-desc' | 'date-asc' | 'date-desc' | 'none'>(loadConfig().dateFilter);
   const [subjectFilter, setSubjectFilter] = useState(loadConfig().subjectFilter);
   const [studentSortOrder, setStudentSortOrder] = useState(loadConfig().studentSortOrder);
   const [sixWeeksFilter, setSixWeeksFilter] = useState<string>(getCurrentSixWeeks());
@@ -439,7 +439,7 @@ const GradeBook: FC = () => {
       showColors,
       colorMode,
       groupBy,
-      dateFilter,
+      dateFilter: dateFilter as 'asc' | 'desc' | 'none', // Backward compatible
       subjectFilter,
       studentSortOrder
     };
@@ -1618,12 +1618,21 @@ const getSortedAndFilteredAssignments = () => {
     entries = entries.filter(([_, assignment]) => assignment.subject === subjectFilter);
   }
 
-  // Apply date sorting
+  // Apply sorting
   if (dateFilter !== 'none') {
     entries.sort(([, a], [, b]) => {
-      const dateA = new Date(a.date).getTime();
-      const dateB = new Date(b.date).getTime();
-      return dateFilter === 'asc' ? dateA - dateB : dateB - dateA;
+      if (dateFilter.startsWith('date-')) {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        return dateFilter === 'date-asc' ? dateA - dateB : dateB - dateA;
+      } else {
+        // Name sorting
+        const nameA = a.name.toLowerCase();
+        const nameB = b.name.toLowerCase();
+        return dateFilter === 'name-asc' 
+          ? nameA.localeCompare(nameB)
+          : nameB.localeCompare(nameA);
+      }
     });
   }
 
@@ -3001,15 +3010,17 @@ return (
               </Select>
               <Select
                 value={dateFilter}
-                onValueChange={(value: 'asc' | 'desc' | 'none') => setDateFilter(value)}
+                onValueChange={(value: 'name-asc' | 'name-desc' | 'date-asc' | 'date-desc' | 'none') => setDateFilter(value)}
               >
                 <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Sort by date" />
+                  <SelectValue placeholder="Sort by..." />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Manual Sort</SelectItem>
-                  <SelectItem value="asc">Oldest First</SelectItem>
-                  <SelectItem value="desc">Newest First</SelectItem>
+                  <SelectItem value="date-asc">Date (Oldest First)</SelectItem>
+                  <SelectItem value="date-desc">Date (Newest First)</SelectItem>
+                  <SelectItem value="name-asc">Name (A-Z)</SelectItem>
+                  <SelectItem value="name-desc">Name (Z-A)</SelectItem>
                 </SelectContent>
               </Select>
               <BulkActionsDialog 
