@@ -1913,25 +1913,40 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
             });
           }}
         >
-          <SelectTrigger className="h-8 w-28">
-            <div className="flex items-center gap-1">
-              <div className={cn(
-                "h-2 w-2 rounded-full",
-                assignment.status === 'completed' ? "bg-green-500" :
-                assignment.status === 'in_progress' ? "bg-blue-500" :
-                assignment.status === 'not_graded' ? "bg-orange-500" :
-                "bg-slate-500"
-              )} />
-              <span className="text-xs capitalize">
-                {assignment.status?.replace('_', ' ') || 'not started'}
-              </span>
-            </div>
+          <SelectTrigger className="h-8 w-8 p-0 justify-center">
+            <div className={cn(
+              "h-3 w-3 rounded-full",
+              assignment.status === 'completed' ? "bg-green-500" :
+              assignment.status === 'in_progress' ? "bg-blue-500" :
+              assignment.status === 'not_graded' ? "bg-orange-500" :
+              "bg-slate-500"
+            )} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="not_started">Not Started</SelectItem>
-            <SelectItem value="not_graded">Not Graded</SelectItem>
-            <SelectItem value="in_progress">In Progress</SelectItem>
-            <SelectItem value="completed">Completed</SelectItem>
+            <SelectItem value="not_started">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-slate-500" />
+                <span>Not Started</span>
+              </div>
+            </SelectItem>
+            <SelectItem value="not_graded">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-orange-500" />
+                <span>Not Graded</span>
+              </div>
+            </SelectItem>
+            <SelectItem value="in_progress">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-blue-500" />
+                <span>In Progress</span>
+              </div>
+            </SelectItem>
+            <SelectItem value="completed">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-green-500" />
+                <span>Completed</span>
+              </div>
+            </SelectItem>
           </SelectContent>
         </Select>
         <Button
