@@ -24,6 +24,7 @@ import { AddStudentDialog } from './AddStudentDialog';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { getCurrentSixWeeks } from '@/lib/dateUtils'; // Add this import
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"; // New import
+import { saveNavigationState } from '@/lib/storage';
 
 interface RosterViewProps {
   students: Record<string, Student[]>;
@@ -86,6 +87,18 @@ const RosterView: FC<RosterViewProps> = ({
       assignments[id].periods.includes(activeTab)
     ))
   );
+
+  // Save navigation state whenever activeTab changes
+  useEffect(() => {
+    if (activeTab) {
+      saveNavigationState({
+        currentView: 'roster',
+        lastActivePeriod: activeTab,
+        viewMode: 'roster'
+      });
+    }
+  }, [activeTab]);
+
   // Initialize color settings to show type colors by default
   const [showColors, setShowColors] = useState(true);
   const [colorMode, setColorMode] = useState<'none' | 'subject' | 'type' | 'status'>('type');

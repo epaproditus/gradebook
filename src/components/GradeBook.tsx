@@ -29,7 +29,7 @@ import { v4 as uuidv4 } from 'uuid';  // Add this import at the top
 import { useSession } from 'next-auth/react';
 import { getGradesForSync } from '@/lib/gradeSync';
 import debounce from 'lodash/debounce';
-import { loadConfig, saveConfig, defaultConfig } from '@/lib/storage';
+import { loadConfig, saveConfig, defaultConfig, loadNavigationState, saveNavigationState } from '@/lib/storage';
 import RosterView from './RosterView';
 import { LayoutGrid, Table } from 'lucide-react';
 import { STATUS_COLORS, TYPE_COLORS, SUBJECT_COLORS } from '@/lib/constants';
@@ -431,7 +431,16 @@ const GradeBook: FC = () => {
   const [dateFilter, setDateFilter] = useState<'name-asc' | 'name-desc' | 'date-asc' | 'date-desc' | 'none'>(loadConfig().dateFilter);
   const [subjectFilter, setSubjectFilter] = useState(loadConfig().subjectFilter);
   const [studentSortOrder, setStudentSortOrder] = useState(loadConfig().studentSortOrder);
+  
+  // Load navigation state on component mount
+  const navState = loadNavigationState();
   const [sixWeeksFilter, setSixWeeksFilter] = useState<string>(getCurrentSixWeeks());
+  const [viewMode, setViewMode] = useState<'assignment' | 'roster'>(navState.viewMode || 'assignment');
+  const [activeTab, setActiveTab] = useState<string>(navState.lastActivePeriod || '');
+  const [isCalendarVisible, setIsCalendarVisible] = useState(navState.isCalendarVisible);
+  const [expandedAssignments, setExpandedAssignments] = useState<Record<string, boolean>>(
+    navState.expandedAssignments || {}
+  );
 
   // Add effect to save config when any related state changes
   useEffect(() => {

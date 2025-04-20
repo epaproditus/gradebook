@@ -1,4 +1,3 @@
-
 interface GradebookConfig {
   showColors: boolean;
   colorMode: 'none' | 'subject' | 'type' | 'status';
@@ -8,7 +7,17 @@ interface GradebookConfig {
   studentSortOrder: 'none' | 'highest' | 'lowest';
 }
 
+// New interface for app navigation state
+interface AppNavigationState {
+  currentView: 'gradebook' | 'roster' | 'seating' | 'tutoring';
+  lastActivePeriod: string;
+  viewMode: 'assignment' | 'roster';
+  expandedAssignments: Record<string, boolean>;
+  isCalendarVisible: boolean;
+}
+
 const STORAGE_KEY = 'gradebook-config';
+const NAVIGATION_KEY = 'app-navigation-state';
 
 export const defaultConfig: GradebookConfig = {
   showColors: false,
@@ -17,6 +26,14 @@ export const defaultConfig: GradebookConfig = {
   dateFilter: 'none',
   subjectFilter: 'all',
   studentSortOrder: 'none'
+};
+
+export const defaultNavigationState: AppNavigationState = {
+  currentView: 'gradebook',
+  lastActivePeriod: '',
+  viewMode: 'assignment',
+  expandedAssignments: {},
+  isCalendarVisible: true
 };
 
 export function saveConfig(config: GradebookConfig) {
@@ -47,4 +64,31 @@ export function loadConfig(): GradebookConfig {
   }
   
   return defaultConfig;
+}
+
+// New functions for app navigation state
+export function saveNavigationState(state: Partial<AppNavigationState>) {
+  try {
+    const currentState = loadNavigationState();
+    const updatedState = {
+      ...currentState,
+      ...state
+    };
+    localStorage.setItem(NAVIGATION_KEY, JSON.stringify(updatedState));
+  } catch (e) {
+    console.warn('Failed to save navigation state:', e);
+  }
+}
+
+export function loadNavigationState(): AppNavigationState {
+  try {
+    const storedState = localStorage.getItem(NAVIGATION_KEY);
+    if (storedState) {
+      return JSON.parse(storedState);
+    }
+  } catch (e) {
+    console.warn('Failed to load navigation state:', e);
+  }
+  
+  return defaultNavigationState;
 }
