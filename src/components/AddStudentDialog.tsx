@@ -18,6 +18,7 @@ export function AddStudentDialog({ period, onStudentAdded }: AddStudentDialogPro
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState('');
+  const [studentId, setStudentId] = useState('');
   const { toast } = useToast();
   const supabase = createClientComponentClient();
 
@@ -31,12 +32,22 @@ export function AddStudentDialog({ period, onStudentAdded }: AddStudentDialogPro
       return;
     }
 
+    if (!studentId.trim()) {
+      toast({
+        title: "Error",
+        description: "Student ID is required",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from('students')
         .insert([{
           name: name.trim(),
+          student_id: studentId.trim(),
           class_period: period,
           period: period
         }])
@@ -77,11 +88,21 @@ export function AddStudentDialog({ period, onStudentAdded }: AddStudentDialogPro
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div>
-            <Label>Full Name</Label>
+            <Label>Full Name *</Label>
             <Input 
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Last, First"
+              required
+            />
+          </div>
+          <div>
+            <Label>Student ID *</Label>
+            <Input 
+              value={studentId}
+              onChange={(e) => setStudentId(e.target.value)}
+              placeholder="12345"
+              required
             />
           </div>
           <div>
