@@ -57,16 +57,17 @@ export function AddStudentDialog({ period, onStudentAdded }: AddStudentDialogPro
 
       toast({
         title: "Success",
-        description: "Student added successfully"
+        description: `${name.trim()} (ID: ${studentId.trim()}) added to Period ${period}`
       });
-      setOpen(false);
       setName('');
+      setStudentId('');
       onStudentAdded();
-    } catch (error) {
+      setOpen(false); // Move this after onStudentAdded
+    } catch (error: any) {
       console.error('Error adding student:', error);
       toast({
         title: "Error",
-        description: "Failed to add student",
+        description: error.message || "Failed to add student",
         variant: "destructive"
       });
     } finally {
