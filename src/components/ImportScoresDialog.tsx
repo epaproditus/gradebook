@@ -33,7 +33,7 @@ export const ImportScoresDialog: FC<ImportScoresDialogProps> = ({
   assignments,
   students,
   grades,
-  multipleAssignmentsVisible,
+  showAssignmentSelector = false, // Default to false if not provided
 }) => {
   const [file, setFile] = useState<File | null>(null);
   const [open, setOpen] = useState(false);
