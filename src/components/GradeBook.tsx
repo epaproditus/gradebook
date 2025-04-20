@@ -483,7 +483,6 @@ const GradeBook: FC = () => {
   const [extraPoints, setExtraPoints] = useState<Record<string, string>>({});
   const [retest, setRetest] = useState<Record<string, boolean>>({});
   const [tags, setTags] = useState<AssignmentTag[]>([]);
-  const [activeTab, setActiveTab] = useState<string>('');
   const [assignmentOrder, setAssignmentOrder] = useState<string[]>([]);
   const [editingAssignment, setEditingAssignment] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
