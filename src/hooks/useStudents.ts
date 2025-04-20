@@ -68,12 +68,38 @@ export function useStudents(initialPeriod?: string) {
     fetchStudents(initialPeriod);
   }, [initialPeriod]);
 
+  const deleteStudent = async (studentId: string) => {
+    try {
+      const { error } = await supabase
+        .from('students')
+        .delete()
+        .eq('id', studentId);
+
+      if (error) throw error;
+
+      // Update local state by removing the student
+      setStudents(prev => {
+        const updated = {...prev};
+        for (const period in updated) {
+          updated[period] = updated[period].filter(s => s.id !== studentId);
+        }
+        return updated;
+      });
+
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete student');
+      return false;
+    }
+  };
+
   return {
     students,
     loading,
     error,
     fetchStudents,
     addStudent,
+    deleteStudent,
     setStudents
   };
 }

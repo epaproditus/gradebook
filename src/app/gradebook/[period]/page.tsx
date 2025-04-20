@@ -22,6 +22,7 @@ export default function GradebookPage() {
     <RosterView
       students={students}
       setStudents={setStudents}
+      deleteStudent={deleteStudent}
       // Pass all other required props...
       activeTab={Array.isArray(period) ? period[0] : period}
       // ...rest of props

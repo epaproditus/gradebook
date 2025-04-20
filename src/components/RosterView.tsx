@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { ChevronRight, ChevronDown, ChevronUp, Save, Plus } from 'lucide-react';
+import { ChevronRight, ChevronDown, ChevronUp, Save, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ImportScoresDialog } from './ImportScoresDialog';
 import { GradeExportDialog } from './GradeExportDialog';
@@ -24,6 +24,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 interface RosterViewProps {
   students: Record<string, Student[]>;
   setStudents: (students: Record<string, Student[]>) => void;
+  deleteStudent: (studentId: string) => Promise<boolean>;
   assignments: Record<string, Assignment>;
   grades: GradeData;
   onGradeChange: (assignmentId: string, periodId: string, studentId: string, grade: string) => void;
@@ -680,9 +681,30 @@ const RosterView: FC<RosterViewProps> = ({
                   return (
                     <TableRow key={student.id}>
                       <TableCell className="sticky left-0 bg-background z-40 font-medium">
-                        <div className="flex flex-col">
-                          <span>{student.name}</span>
-                          <span className="text-xs text-muted-foreground">ID: {student.id}</span>
+                        <div className="flex items-center justify-between">
+                          <div className="flex flex-col">
+                            <span>{student.name}</span>
+                            <span className="text-xs text-muted-foreground">ID: {student.id}</span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (confirm(`Are you sure you want to remove ${student.name}?`)) {
+                                const success = await deleteStudent(student.id.toString());
+                                if (success) {
+                                  toast({
+                                    title: "Student Removed",
+                                    description: `${student.name} has been removed from your roster`
+                                  });
+                                }
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </TableCell>
                       <TableCell className="sticky left-0 bg-background z-40 font-medium text-right">
