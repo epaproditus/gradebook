@@ -43,17 +43,17 @@ export function AddStudentDialog({ period, onStudentAdded }: AddStudentDialogPro
       return;
     }
 
-    // Check for existing student
+    // Check for existing student by name (since we don't have student_id column)
     const { data: existing } = await supabase
       .from('students')
       .select('id')
-      .eq('student_id', studentId.trim())
+      .eq('name', name.trim())
       .single();
 
     if (existing) {
       toast({
         title: "Student Exists",
-        description: `Student ID ${studentId} already exists`,
+        description: `Student ${name.trim()} already exists`,
         variant: "destructive"
       });
       return;
@@ -65,7 +65,6 @@ export function AddStudentDialog({ period, onStudentAdded }: AddStudentDialogPro
         .from('students')
         .insert([{
           name: name.trim(),
-          student_id: studentId.trim(),
           class_period: period,
           period: period
         }])
@@ -112,15 +111,6 @@ export function AddStudentDialog({ period, onStudentAdded }: AddStudentDialogPro
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Last, First"
-              required
-            />
-          </div>
-          <div>
-            <Label>Student ID *</Label>
-            <Input 
-              value={studentId}
-              onChange={(e) => setStudentId(e.target.value)}
-              placeholder="12345"
               required
             />
           </div>
