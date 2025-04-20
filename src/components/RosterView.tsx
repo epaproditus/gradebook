@@ -52,6 +52,8 @@ interface RosterViewProps {
 
 const RosterView: FC<RosterViewProps> = ({
   students,
+  setStudents,
+  deleteStudent,
   assignments,
   grades,
   onGradeChange,
@@ -920,7 +922,19 @@ const RosterView: FC<RosterViewProps> = ({
                               });
                               if (confirmed) {
                                 try {
-                                  // First try basic deactivation
+                                  // Immediately update the UI by removing the student from local state
+                                  // Use the setStudents prop passed to this component
+                                  setStudents(prev => ({
+                                    ...prev,
+                                    [activeTab]: prev[activeTab].filter(s => s.id !== student.id)
+                                  }));
+                                  
+                                  toast({
+                                    title: "Student Removed",
+                                    description: `${student.name} has been removed from the roster`
+                                  });
+                                  
+                                  // Then update the database
                                   let { error } = await supabase
                                     .from('students')
                                     .update({ is_active: false })
@@ -935,8 +949,8 @@ const RosterView: FC<RosterViewProps> = ({
                                   }
 
                                   if (error) throw error;
-
-                                  // Force refresh of students with proper filtering
+                                  
+                                  // Also fetch updated data to ensure everything is in sync
                                   const { data } = await supabase
                                     .from('students')
                                     .select('*')
@@ -946,28 +960,34 @@ const RosterView: FC<RosterViewProps> = ({
                                     })
                                     .order('name');
                                   
-                                  if (!data) return;
-                                  
-                                  // Also update the parent state through setStudents
-                                  setStudents(prev => ({
-                                    ...prev,
-                                    [activeTab]: data
-                                  }));
-
+                                  if (data) {
+                                    // Update with fresh data from the database
+                                    setStudents(prev => ({
+                                      ...prev,
+                                      [activeTab]: data
+                                    }));
+                                  }
+                                } catch (error) {
+                                  // If there was an error, fetch fresh data to restore correct state
+                                  const { data } = await supabase
+                                    .from('students')
+                                    .select('*')
+                                    .match({
+                                      is_active: true,
+                                      period: activeTab
+                                    })
+                                    .order('name');
+                                    
                                   if (data) {
                                     setStudents(prev => ({
                                       ...prev,
                                       [activeTab]: data
                                     }));
-                                    toast({
-                                      title: "Student Deactivated",
-                                      description: `${student.name} has been deactivated`
-                                    });
                                   }
-                                } catch (error) {
+                                  
                                   toast({
                                     title: "Error",
-                                    description: error instanceof Error ? error.message : "Failed to delete student",
+                                    description: error instanceof Error ? error.message : "Failed to remove student",
                                     variant: "destructive"
                                   });
                                 }

@@ -9,8 +9,22 @@ This project is a comprehensive gradebook application designed for teachers to m
 - Assessment analysis
 - Benchmark reporting
 - Standards-based grading
+- Student deactivation
 
 ## Key Features
+
+### Student Management
+
+The system provides comprehensive student management features:
+
+- **Student Records**: Maintain detailed student information
+- **Roster Organization**: Group students by class periods
+- **Student Deactivation**: Safely remove students while preserving historical data
+  - Uses a soft-delete approach by marking students as inactive (`is_active: false`)
+  - Updates UI immediately to show the change without requiring page refresh
+  - Properly updates local state across all relevant components
+  - Provides clear feedback through toast notifications
+  - Securely handles database updates with proper error handling
 
 ### Grade Import/Export Functionality
 

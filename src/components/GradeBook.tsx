@@ -490,6 +490,42 @@ const GradeBook: FC = () => {
   const [flags, setFlags] = useState<Flag[]>([]);
   const [deleteDialog, setDeleteDialog] = useState<{ isOpen: boolean, assignmentId: string, assignmentName: string }>({ isOpen: false, assignmentId: '', assignmentName: '' });
 
+  // Add this function to handle student deletion/deactivation
+  const deleteStudent = async (studentId: string): Promise<boolean> => {
+    try {
+      // Update student to be inactive instead of fully deleting
+      const { error } = await supabase
+        .from('students')
+        .update({ is_active: false })
+        .eq('id', studentId);
+
+      if (error) throw error;
+
+      // Update local state to remove the deactivated student
+      setStudents(prev => {
+        const updated = { ...prev };
+        // Filter out the deactivated student from each period
+        Object.keys(updated).forEach(period => {
+          updated[period] = updated[period].filter(s => s.id.toString() !== studentId);
+        });
+        return updated;
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Error deactivating student:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to deactivate student"
+      });
+      return false;
+    }
+  };
+  
+  // Add an alias for deactivateStudent to maintain backward compatibility
+  const deactivateStudent = deleteStudent;
+
   // Fetch students from Supabase
   useEffect(() => {
     const fetchStudents = async () => {
