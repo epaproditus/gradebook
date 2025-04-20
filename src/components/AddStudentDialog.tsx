@@ -33,16 +33,6 @@ export function AddStudentDialog({ period, onStudentAdded }: AddStudentDialogPro
       return;
     }
 
-    // Validate student ID is numeric
-    if (!studentId.trim() || !/^\d+$/.test(studentId)) {
-      toast({
-        title: "Invalid ID",
-        description: "Student ID must contain only numbers",
-        variant: "destructive"
-      });
-      return;
-    }
-
     // Check for existing student by name (since we don't have student_id column)
     const { data: existing } = await supabase
       .from('students')
