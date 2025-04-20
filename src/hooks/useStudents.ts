@@ -81,13 +81,25 @@ export function useStudents(initialPeriod?: string) {
         throw new Error('Student not found');
       }
 
-      // Delete student
-      const { error: deleteError } = await supabase
+      // Delete student and all related records in a transaction
+      const { error: deleteError } = await supabase.rpc('delete_student_with_related', {
+        student_id: studentId
+      });
+
+      if (deleteError) {
+        console.error('Supabase delete error:', deleteError);
+        throw deleteError;
+      }
+
+      // Verify deletion
+      const { data: verifyDelete, error: verifyError } = await supabase
         .from('students')
-        .delete()
+        .select('id')
         .eq('id', studentId);
 
-      if (deleteError) throw deleteError;
+      if (verifyError || (verifyDelete && verifyDelete.length > 0)) {
+        throw new Error('Student still exists after deletion');
+      }
 
       // Update local state by removing the student
       setStudents(prev => {
@@ -102,6 +114,23 @@ export function useStudents(initialPeriod?: string) {
     } catch (err) {
       console.error('Error deleting student:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete student');
+      // Revert local state if deletion failed
+      setStudents(prev => {
+        const { data } = await supabase
+          .from('students')
+          .select('*')
+          .order('class_period, name');
+        
+        if (data) {
+          return data.reduce((acc: Record<string, Student[]>, student: Student) => {
+            const period = student.period || 'unassigned';
+            if (!acc[period]) acc[period] = [];
+            acc[period].push(student);
+            return acc;
+          }, {});
+        }
+        return prev;
+      });
       return false;
     }
   };
