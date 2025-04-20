@@ -24,6 +24,7 @@ interface ImportScoresDialogProps {
 
 export const ImportScoresDialog: FC<ImportScoresDialogProps> = ({
   assignmentId,
+  assignmentName,
   periodId,
   onImport,
   unsavedGrades,
@@ -32,6 +33,7 @@ export const ImportScoresDialog: FC<ImportScoresDialogProps> = ({
   assignments,
   students,
   grades,
+  multipleAssignmentsVisible,
 }) => {
   const [file, setFile] = useState<File | null>(null);
   const [open, setOpen] = useState(false);
