@@ -16,6 +16,7 @@ import { calculateWeightedAverage, calculateTotal } from '@/lib/gradeCalculation
 import { formatGradeDisplay, getGradeDisplayClass } from '@/lib/displayFormatters';
 import { MessagePanel } from './MessagePanel';
 import { MessageIndicator } from './MessageIndicator';
+import { AddStudentDialog } from './AddStudentDialog';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { getCurrentSixWeeks } from '@/lib/dateUtils'; // Add this import
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"; // New import
@@ -670,73 +671,6 @@ const RosterView: FC<RosterViewProps> = ({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {/* Add Student Row */}
-                <TableRow className="hover:bg-accent/50">
-                  <TableCell className="sticky left-0 bg-background z-40">
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="h-8 w-full justify-start gap-2"
-                      onClick={() => {
-                        const name = prompt("Enter student name (Last, First):");
-                        if (name) {
-                          const newStudent = {
-                            name,
-                            class_period: activeTab,
-                            period: activeTab
-                          };
-                          
-                          supabase.from('students')
-                            .insert([newStudent])
-                            .select()
-                            .then(({ data, error }) => {
-                              if (error) {
-                                toast({
-                                  variant: "destructive",
-                                  title: "Error adding student",
-                                  description: error.message
-                                });
-                              } else if (data) {
-                                toast({
-                                  title: "Student added",
-                                  description: `${name} added to Period ${activeTab}`
-                                });
-                                // Refresh students data
-                                const fetchStudents = async () => {
-                                  const { data, error } = await supabase
-                                    .from('students')
-                                    .select('*')
-                                    .order('class_period, name');
-                                  if (!error && data) {
-                                    const updatedStudents = data.reduce((acc: Record<string, any[]>, student: any) => {
-                                      if (!acc[student.class_period]) acc[student.class_period] = [];
-                                      acc[student.class_period].push(student);
-                                      return acc;
-                                    }, {});
-                                    // Update parent state
-                                    // You'll need to pass a setStudents prop or find another way to update
-                                  }
-                                };
-                                fetchStudents();
-                              }
-                            });
-                        }
-                      }}
-                    >
-                      <Plus className="h-4 w-4" />
-                      <span>Add Student</span>
-                    </Button>
-                  </TableCell>
-                  <TableCell className="sticky left-0 bg-background z-40"></TableCell>
-                  {sortedAssignments.map((assignment) => (
-                    <TableCell key={`add-${assignment.id}`} className="p-0">
-                      <div className="h-8 flex items-center justify-center text-muted-foreground">
-                        -
-                      </div>
-                    </TableCell>
-                  ))}
-                </TableRow>
-
                 {/* Existing students */}
                 {periodStudents.map((student) => {
                   // Calculate student's average from all assignments
@@ -795,6 +729,42 @@ const RosterView: FC<RosterViewProps> = ({
                     </TableRow>
                   );
                 })}
+                
+                {/* Add Student Row - Now at bottom */}
+                <TableRow className="hover:bg-accent/50">
+                  <TableCell className="sticky left-0 bg-background z-40">
+                    <AddStudentDialog 
+                      period={activeTab}
+                      onStudentAdded={() => {
+                        // Refresh students data
+                        const fetchStudents = async () => {
+                          const { data, error } = await supabase
+                            .from('students')
+                            .select('*')
+                            .order('class_period, name');
+                          if (!error && data) {
+                            const updatedStudents = data.reduce((acc: Record<string, any[]>, student: any) => {
+                              if (!acc[student.class_period]) acc[student.class_period] = [];
+                              acc[student.class_period].push(student);
+                              return acc;
+                            }, {});
+                            // Update parent state
+                            // You'll need to pass a setStudents prop or find another way to update
+                          }
+                        };
+                        fetchStudents();
+                      }}
+                    />
+                  </TableCell>
+                  <TableCell className="sticky left-0 bg-background z-40"></TableCell>
+                  {sortedAssignments.map((assignment) => (
+                    <TableCell key={`add-${assignment.id}`} className="p-0">
+                      <div className="h-8 flex items-center justify-center text-muted-foreground">
+                        -
+                      </div>
+                    </TableCell>
+                  ))}
+                </TableRow>
               </TableBody>
               <tfoot>
                 <tr>
