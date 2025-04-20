@@ -764,7 +764,7 @@ const handleGradeChange = (assignmentId: string, periodId: string, studentId: st
 
 const getGradeValue = (assignmentId: string, periodId: string, studentId: string) => {
   // Debug logging for specific student
-  if (studentId === '12345' && periodId === '2' && assignmentId === 'your-assignment-id-here') {
+  if (studentId === '426836' && periodId === '6th' && assignmentId === '77e824f2-2e53-4862-bd6e-53d01b0ed5ef') {
     console.log('Grade debug:', {
       assignmentId,
       periodId, 
