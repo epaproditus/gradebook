@@ -936,12 +936,14 @@ const RosterView: FC<RosterViewProps> = ({
 
                                   if (error) throw error;
 
-                                  // Refresh the students list with proper filtering
+                                  // Force refresh of students with proper filtering
                                   const { data } = await supabase
                                     .from('students')
                                     .select('*')
-                                    .eq('is_active', true)
-                                    .eq('period', activeTab)
+                                    .match({
+                                      is_active: true,
+                                      period: activeTab
+                                    })
                                     .order('name');
                                   
                                   if (!data) return;
@@ -1028,12 +1030,14 @@ const RosterView: FC<RosterViewProps> = ({
                     <AddStudentDialog 
                       period={activeTab}
                       onStudentAdded={async () => {
-                        // Refresh active students for current period
+                        // Refresh active students for current period with proper filtering
                         const { data, error } = await supabase
                           .from('students')
                           .select('*')
-                          .eq('is_active', true)
-                          .eq('period', activeTab)
+                          .match({
+                            is_active: true,
+                            period: activeTab
+                          })
                           .order('name');
                         
                         if (!error && data) {

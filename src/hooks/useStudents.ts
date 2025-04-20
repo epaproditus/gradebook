@@ -14,15 +14,11 @@ export function useStudents(initialPeriod?: string) {
       let query = supabase
         .from('students')
         .select('*')
-        .eq('is_active', true)
+        .match({
+          is_active: true,
+          ...(period ? { period } : {})
+        })
         .order('name');
-
-      if (period) {
-        query = query.eq('period', period);
-      } else {
-        // When no period specified, still ensure we only get active students
-        query = query.eq('is_active', true);
-      }
 
       const { data, error } = await query;
 
@@ -74,24 +70,26 @@ export function useStudents(initialPeriod?: string) {
 
   const deactivateStudent = async (studentId: string) => {
     try {
-      // First try with both fields
-      let { error } = await supabase
+      const { error } = await supabase
         .from('students')
         .update({ is_active: false })
         .eq('id', studentId);
 
-      // If that fails, try without updated_at
-      if (error?.code === 'PGRST204') {
-        ({ error } = await supabase
-          .from('students')
-          .update({ is_active: false })
-          .eq('id', studentId));
-      }
-
       if (error) throw error;
 
-      // Refresh students data after deactivation
+      // Force complete refresh of all students
       await fetchStudents();
+      
+      // Additional verification
+      const { data: verify } = await supabase
+        .from('students')
+        .select('id, is_active')
+        .eq('id', studentId)
+        .single();
+
+      if (verify?.is_active !== false) {
+        throw new Error('Student deactivation failed');
+      }
       
       return true;
     } catch (err) {
