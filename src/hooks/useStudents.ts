@@ -73,20 +73,18 @@ export function useStudents(initialPeriod?: string) {
     try {
       const { error } = await supabase
         .from('students')
-        .update({ is_active: false })
-        .eq('id', studentId);
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq('id', studentId)
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase update error:', error);
+        throw error;
+      }
 
-      // Update local state by filtering out deactivated student
-      setStudents(prev => {
-        const updated = {...prev};
-        for (const period in updated) {
-          updated[period] = updated[period].filter(s => s.id !== studentId);
-        }
-        return updated;
-      });
-
+      // Refresh students data after deactivation
+      await fetchStudents();
+      
       return true;
     } catch (err) {
       console.error('Error deleting student:', err);

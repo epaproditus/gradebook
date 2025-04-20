@@ -920,14 +920,34 @@ const RosterView: FC<RosterViewProps> = ({
                               });
                               if (confirmed) {
                                 try {
-                                  const success = await deactivateStudent(student.id.toString());
-                                  if (success) {
+                                  const { error } = await supabase
+                                    .from('students')
+                                    .update({ 
+                                      is_active: false,
+                                      updated_at: new Date().toISOString() 
+                                    })
+                                    .eq('id', student.id)
+                                    .select();
+
+                                  if (error) throw error;
+
+                                  // Refresh the students list
+                                  const { data } = await supabase
+                                    .from('students')
+                                    .select('*')
+                                    .eq('is_active', true)
+                                    .eq('period', activeTab)
+                                    .order('name');
+
+                                  if (data) {
+                                    setStudents(prev => ({
+                                      ...prev,
+                                      [activeTab]: data
+                                    }));
                                     toast({
                                       title: "Student Deactivated",
-                                      description: `${student.name} has been deactivated and hidden from view`
+                                      description: `${student.name} has been deactivated`
                                     });
-                                  } else {
-                                    throw new Error('Failed to delete student');
                                   }
                                 } catch (error) {
                                   toast({
