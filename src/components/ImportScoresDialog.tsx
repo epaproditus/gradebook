@@ -1,6 +1,7 @@
 'use client';
 
 import { FC, useState, useRef } from 'react';
+import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,6 +38,7 @@ export const ImportScoresDialog: FC<ImportScoresDialogProps> = ({
 }) => {
   const [file, setFile] = useState<File | null>(null);
   const [open, setOpen] = useState(false);
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState(assignmentId || '');
   const dialogTriggerRef = useRef<HTMLButtonElement>(null);
   const assignment = assignments[assignmentId];
 
@@ -101,7 +103,11 @@ export const ImportScoresDialog: FC<ImportScoresDialogProps> = ({
         }
       }
 
-      onImport(importedGrades);
+      if (!selectedAssignmentId) {
+        alert('Please select an assignment');
+        return;
+      }
+      onImport(selectedAssignmentId, importedGrades);
       setFile(null);
       setOpen(false);
     } catch (error) {
@@ -145,10 +151,10 @@ export const ImportScoresDialog: FC<ImportScoresDialogProps> = ({
                 <label className="block text-sm font-medium">Select Assignment:</label>
                 <select 
                   className="w-full p-2 border rounded"
-                  value={assignmentId}
+                  value={selectedAssignmentId}
                   onChange={(e) => {
                     const selectedId = e.target.value;
-                    setAssignmentId(selectedId);
+                    setSelectedAssignmentId(selectedId);
                   }}
                 >
                   {Object.values(assignments)
@@ -172,7 +178,9 @@ export const ImportScoresDialog: FC<ImportScoresDialogProps> = ({
             />
             <div className="text-sm text-muted-foreground">
               Upload a CSV file exported from DMAC containing student scores.
-              Scores will be imported for <strong>{assignment?.name}</strong>.
+              Scores will be imported for <strong>{
+                assignments[selectedAssignmentId]?.name || assignment?.name
+              }</strong>.
             </div>
             {file && (
               <Button 
