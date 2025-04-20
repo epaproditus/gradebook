@@ -9,17 +9,17 @@ import { Download } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ImportScoresDialogProps {
-  assignmentId: string;
-  assignmentName?: string; // New optional prop
+  assignmentId?: string; // Now optional
+  assignmentName?: string;
   periodId: string;
-  onImport: (grades: Record<string, string>) => void;
+  onImport: (assignmentId: string, grades: Record<string, string>) => void; // Added assignmentId param
   unsavedGrades: GradeData;
   setUnsavedGrades: React.Dispatch<React.SetStateAction<GradeData>>;
   setEditingGrades: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   assignments: Record<string, Assignment>;
   students: Record<string, Student[]>;
   grades: GradeData;
-  multipleAssignmentsVisible?: boolean; // New flag
+  showAssignmentSelector?: boolean; // New explicit flag
 }
 
 export const ImportScoresDialog: FC<ImportScoresDialogProps> = ({
@@ -140,16 +140,31 @@ export const ImportScoresDialog: FC<ImportScoresDialogProps> = ({
             <DialogTitle>Import Scores</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="flex flex-col gap-1">
+            {showAssignmentSelector ? (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium">Select Assignment:</label>
+                <select 
+                  className="w-full p-2 border rounded"
+                  value={assignmentId}
+                  onChange={(e) => {
+                    const selectedId = e.target.value;
+                    setAssignmentId(selectedId);
+                  }}
+                >
+                  {Object.values(assignments)
+                    .filter(a => a.periods.includes(periodId))
+                    .map(a => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} ({format(a.date, 'MM/dd')})
+                      </option>
+                    ))}
+                </select>
+              </div>
+            ) : (
               <div className="font-medium">
                 Target Assignment: {assignmentName || assignment?.name}
               </div>
-              {multipleAssignmentsVisible && (
-                <div className="text-sm text-yellow-600">
-                  Note: Only the first visible assignment will receive imports
-                </div>
-              )}
-            </div>
+            )}
             <Input
               type="file"
               accept=".csv"

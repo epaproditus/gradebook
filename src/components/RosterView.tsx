@@ -560,17 +560,15 @@ const RosterView: FC<RosterViewProps> = ({
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full sm:w-auto">
             <ImportScoresDialog
-              assignmentId={sortedAssignments[0]?.id}
-              assignmentName={sortedAssignments[0]?.name}
               periodId={activeTab}
-              onImport={handleImportGrades}
+              onImport={(assignmentId, grades) => handleImportGrades(assignmentId, activeTab, grades)}
               unsavedGrades={unsavedGrades}
               setUnsavedGrades={setUnsavedGrades}
               setEditingGrades={setEditingGrades}
               assignments={assignments}
               students={students}
               grades={grades}
-              multipleAssignmentsVisible={sortedAssignments.length > 1}
+              showAssignmentSelector={true}
             />
             {/* GradeExportDialog removed from here */}
             <ColorSettings
