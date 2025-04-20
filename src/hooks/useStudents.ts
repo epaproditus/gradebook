@@ -19,6 +19,9 @@ export function useStudents(initialPeriod?: string) {
 
       if (period) {
         query = query.eq('period', period);
+      } else {
+        // When no period specified, still ensure we only get active students
+        query = query.eq('is_active', true);
       }
 
       const { data, error } = await query;
