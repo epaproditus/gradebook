@@ -570,7 +570,11 @@ const RosterView: FC<RosterViewProps> = ({
               grades={grades}
               showAssignmentSelector={true}
             />
-            {/* GradeExportDialog removed from here */}
+            <GradeExportDialog
+              assignments={assignments}
+              students={students}
+              onExport={exportGrades}
+            />
             <ColorSettings
               showColors={showColors}
               colorMode={colorMode}
