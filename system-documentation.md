@@ -45,7 +45,8 @@ The system provides robust grade import and export capabilities:
   - Automatically detects student ID and name columns
   - Treats each additional column as a separate assignment
   - Handles numeric column headers like "0", "1", "2" as assignment identifiers
-  - Automatically filters out non-assignment columns like "Cycle Grade"
+  - Automatically filters out non-assignment columns like "Cycle Grade", "Average", "Total"
+  - Uses intelligent column detection to differentiate between grade and non-grade columns
   - Allows mapping to existing assignments or creating new ones
   - Supports assigning to multiple class periods in a single operation
   - Shows preview of detected assignments with editable properties

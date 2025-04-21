@@ -3039,6 +3039,13 @@ return (
                   
                   if (importedAssignment.existingId) {
                     // Update existing assignment grades
+                    console.log(`Updating grades for existing assignment: ${importedAssignment.existingId}`, {
+                      name: importedAssignment.name,
+                      periodsCount: importedAssignment.periods.length,
+                      gradesCount: Object.keys(importedAssignment.grades).length,
+                      sampleGrades: Object.entries(importedAssignment.grades).slice(0, 3)
+                    });
+                    
                     const updatedGrades = { ...unsavedGrades };
                     
                     if (!updatedGrades[assignmentId]) {
@@ -3052,7 +3059,14 @@ return (
                       }
                       
                       Object.entries(importedAssignment.grades).forEach(([studentId, grade]) => {
-                        updatedGrades[assignmentId][periodId][studentId] = grade;
+                        if (grade) { // Only process non-empty grades
+                          updatedGrades[assignmentId][periodId][studentId] = grade;
+                          
+                          // Log debug info for first few students
+                          if (Object.keys(updatedGrades[assignmentId][periodId]).length <= 3) {
+                            console.log(`Added grade for student ${studentId}: ${grade}`);
+                          }
+                        }
                       });
                       
                       // Mark as editing so changes will be saved
@@ -3064,9 +3078,13 @@ return (
                     
                     setUnsavedGrades(updatedGrades);
                     
-                    toast({
-                      title: "Grades Imported",
-                      description: `Updated grades for "${assignments[assignmentId].name}"`,
+                    // Immediately save the grades to the database
+                    saveGrades(assignmentId).then(() => {
+                      toast({
+                        title: "Grades Updated",
+                        description: `Updated grades for "${assignments[assignmentId].name}"`,
+                        variant: "default"
+                      });
                     });
                   } else {
                     // Create new assignment
@@ -3079,8 +3097,15 @@ return (
                       subject: importedAssignment.subject,
                       six_weeks_period: getSixWeeksForDate(importedAssignment.date),
                       max_points: 100,
-                      created_at: new Date().toISOString()
+                      created_at: new Date().toISOString(),
+                      status: 'not_started'
                     };
+                    
+                    console.log('Creating new assignment from import:', {
+                      name: newAssignment.name,
+                      periods: newAssignment.periods,
+                      gradesCount: Object.keys(importedAssignment.grades).length
+                    });
                     
                     // Save to Supabase
                     supabase
@@ -3089,7 +3114,7 @@ return (
                         ...newAssignment,
                         date: format(newAssignment.date, 'yyyy-MM-dd')
                       }])
-                      .then(({ error }) => {
+                      .then(({ data, error }) => {
                         if (error) {
                           console.error('Error creating assignment:', error);
                           toast({
@@ -3098,6 +3123,8 @@ return (
                             description: `Failed to create ${newAssignment.name}`
                           });
                         } else {
+                          console.log('Assignment created in database:', data);
+                          
                           // Update local state
                           setAssignments(prev => ({
                             ...prev,
@@ -3107,44 +3134,75 @@ return (
                           setAssignmentOrder(prev => [...prev, assignmentId]);
                           
                           // Handle grades
+                          const gradesToSave = [];
+                          
+                          // For each period in the assignment, add grades for appropriate students
+                          importedAssignment.periods.forEach(periodId => {
+                            const periodStudents = students[periodId] || [];
+                            
+                            // Find all students in this period who have grades
+                            periodStudents.forEach(student => {
+                              const studentId = student.id.toString();
+                              const grade = importedAssignment.grades[studentId];
+                              
+                              if (grade) { // Only save non-empty grades
+                                gradesToSave.push({
+                                  assignment_id: assignmentId,
+                                  student_id: studentId,
+                                  period: periodId,
+                                  grade: grade,
+                                  extra_points: 0
+                                });
+                              }
+                            });
+                          });
+                          
+                          // Update local grades state
                           const newGradesState = { ...grades };
+                          
                           if (!newGradesState[assignmentId]) {
                             newGradesState[assignmentId] = {};
                           }
-                          
-                          const gradesToSave = [];
                           
                           importedAssignment.periods.forEach(periodId => {
                             if (!newGradesState[assignmentId][periodId]) {
                               newGradesState[assignmentId][periodId] = {};
                             }
                             
-                            Object.entries(importedAssignment.grades).forEach(([studentId, grade]) => {
-                              newGradesState[assignmentId][periodId][studentId] = grade;
+                            // Add grades from the imported assignment for this period
+                            const periodStudents = students[periodId] || [];
+                            periodStudents.forEach(student => {
+                              const studentId = student.id.toString();
+                              const grade = importedAssignment.grades[studentId];
                               
-                              gradesToSave.push({
-                                assignment_id: assignmentId,
-                                student_id: studentId,
-                                period: periodId,
-                                grade: grade,
-                                extra_points: 0
-                              });
+                              if (grade) {
+                                newGradesState[assignmentId][periodId][studentId] = grade;
+                              }
                             });
                           });
                           
                           // Save grades to Supabase
                           if (gradesToSave.length > 0) {
+                            console.log(`Saving ${gradesToSave.length} grades to database`);
                             supabase
                               .from('grades')
                               .insert(gradesToSave)
-                              .then(({ error }) => {
+                              .then(({ data, error }) => {
                                 if (error) {
                                   console.error('Error saving grades:', error);
+                                  toast({
+                                    variant: "destructive",
+                                    title: "Error",
+                                    description: "Failed to save some grades. Please check your data."
+                                  });
+                                } else {
+                                  console.log('Grades saved successfully:', data);
+                                  setGrades(newGradesState);
                                 }
                               });
+                          } else {
+                            console.log('No grades to save');
                           }
-                          
-                          setGrades(newGradesState);
                           
                           toast({
                             title: "Assignment Created",
@@ -3160,6 +3218,7 @@ return (
               activeTab={activeTab}
               existingAssignments={assignments}
               setAssignments={setAssignments}
+              students={students}
             />
           </Dialog>
           
