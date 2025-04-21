@@ -2302,6 +2302,36 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
                     </div>
                   ))}
                 </div>
+                <GradeAutofill
+                  assignmentId={assignmentId}
+                  periodId={periodId}
+                  students={students[periodId] || []}
+                  onAutofill={(assignmentId, periodId, value) => {
+                    const updatedGrades = { ...unsavedGrades };
+                    if (!updatedGrades[assignmentId]) {
+                      updatedGrades[assignmentId] = {};
+                    }
+                    if (!updatedGrades[assignmentId][periodId]) {
+                      updatedGrades[assignmentId][periodId] = {};
+                    }
+                    students[periodId].forEach(student => {
+                      const key = `${assignmentId}-${periodId}-${student.id}`;
+                      if (!grades[assignmentId]?.[periodId]?.[student.id]) {
+                        updatedGrades[assignmentId][periodId][student.id] = value;
+                        setLocalGrades(prev => ({
+                          ...prev,
+                          [key]: value
+                        }));
+                      }
+                    });
+                    setUnsavedGrades(updatedGrades);
+                    setEditingGrades(prev => ({
+                      ...prev,
+                      [`${assignmentId}-${periodId}`]: true
+                    }));
+                    debouncedSaveGrades(assignmentId);
+                  }}
+                />
               </div>
               
               <div className="mt-4 flex justify-between items-center">
@@ -3721,5 +3751,46 @@ const handleGradeInputKeyDown = (
       }, 0);
     }
   }
+};
+
+// Add GradeAutofill component definition after the other component definitions
+const GradeAutofill: FC<{
+  assignmentId: string;
+  periodId: string;
+  students: Student[];
+  onAutofill: (assignmentId: string, periodId: string, value: string) => void;
+}> = ({ assignmentId, periodId, students, onAutofill }) => {
+  const [autofillValue, setAutofillValue] = useState('');
+  
+  return (
+    <div className="grid grid-cols-[1fr_100px_100px_100px_auto] items-center h-8 border-t border-muted">
+      <div className="flex items-center px-2">
+        <span className="text-sm text-muted-foreground">Autofill empty grades</span>
+      </div>
+      <Input
+        type="text"
+        placeholder="Grade"
+        className="text-center h-8 border-0 focus:ring-1"
+        value={autofillValue}
+        onChange={(e) => setAutofillValue(e.target.value)}
+      />
+      <div></div>
+      <div></div>
+      <div className="flex items-center justify-end px-2">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            if (autofillValue && autofillValue.trim() !== '') {
+              onAutofill(assignmentId, periodId, autofillValue);
+              setAutofillValue(''); // Clear the input after filling
+            }
+          }}
+        >
+          Fill
+        </Button>
+      </div>
+    </div>
+  );
 };
 
