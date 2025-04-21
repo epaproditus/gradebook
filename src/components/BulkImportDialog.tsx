@@ -71,9 +71,9 @@ export const BulkImportDialog: FC<BulkImportDialogProps> = ({
       const headers = rows[0].map(h => h.toLowerCase().trim());
       
       // More flexible column detection
-      const idIndex = headers.findIndex(h => 
+      let idIndex = headers.findIndex(h => 
         h.includes('id') || h.includes('number') || h.match(/^\d{6}$/));
-      const nameIndex = headers.findIndex(h => 
+      let nameIndex = headers.findIndex(h => 
         h.includes('name') || h.includes('student'));
 
       console.log('Column detection:', { headers, idIndex, nameIndex });
@@ -96,29 +96,38 @@ export const BulkImportDialog: FC<BulkImportDialogProps> = ({
         }
       }
 
-      const assignmentNames = headers
-        .slice(nameIndex + 1)
-        .filter(h => h && !h.toLowerCase()?.includes('cycle'));
+      // Filter out non-assignment columns like "Cycle Grade" but keep numeric headers
+      const assignmentColumns = headers.slice(nameIndex + 1)
+        .map((header, index) => ({ header, index: index + nameIndex + 1 }))
+        .filter(({ header }) => 
+          !header.toLowerCase().includes('cycle') || 
+          /^\d+$/.test(header) // Keep numeric headers like "0", "1", "2", etc.
+        );
 
       const parsedRows = rows.slice(1)
         .filter(row => row.length >= Math.max(idIndex, nameIndex))
         .map(row => {
           const id = row[idIndex]?.trim() || '';
           const [lastName, firstName] = parseStudentName(row[nameIndex]);
-          const grades = row
-            .slice(nameIndex + 1)
-            .filter((_, i) => !headers[nameIndex + 1 + i]?.toLowerCase()?.includes('cycle'));
+          // Get grades only from the assignment columns
+          const grades = assignmentColumns.map(({ index }) => row[index]?.trim() || '');
 
           return { id, lastName, firstName, grades };
         });
 
-      const newAssignments = assignmentNames.map((name, index) => {
+      // Create assignments from the filtered assignment columns
+      const newAssignments = assignmentColumns.map(({ header }, index) => {
+        // Generate a better name for numeric headers
+        const assignmentName = /^\d+$/.test(header) 
+          ? `Assignment ${header}` 
+          : header?.trim() || `Assignment ${index + 1}`;
+            
         // Safely check for existing assignment
         const matchingAssignment = Object.values(existingAssignments)
-          .find(a => a.name.toLowerCase() === name?.toLowerCase());
+          .find(a => a.name.toLowerCase() === assignmentName.toLowerCase());
 
         return {
-          name: name?.trim() || `Assignment ${index + 1}`,
+          name: assignmentName,
           type: matchingAssignment?.type || 'Daily',
           subject: matchingAssignment?.subject || 'Math 8',
           periods: selectedPeriods,

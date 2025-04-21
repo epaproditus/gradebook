@@ -40,6 +40,18 @@ The system provides robust grade import and export capabilities:
   - Maps imported grades to the correct students across periods
   - Validates data before importing to prevent errors
   
+- **BulkImportDialog**: Enables importing multiple assignments from a single spreadsheet
+  - Accepts tab-delimited data pasted from spreadsheet applications
+  - Automatically detects student ID and name columns
+  - Treats each additional column as a separate assignment
+  - Handles numeric column headers like "0", "1", "2" as assignment identifiers
+  - Automatically filters out non-assignment columns like "Cycle Grade"
+  - Allows mapping to existing assignments or creating new ones
+  - Supports assigning to multiple class periods in a single operation
+  - Shows preview of detected assignments with editable properties
+  - Displays count of grades found for each assignment
+  - Provides flexible date, type, and name editing before import
+
 - **GradeExportDialog**: Enables exporting grades in CSV format
   - Implements the same controlled dialog pattern as the import dialog
   - Uses explicit state management to prevent event propagation issues

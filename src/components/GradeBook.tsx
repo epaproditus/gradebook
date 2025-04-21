@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { X, Save, ChevronDown, ChevronUp, Download, ChevronLeft, ChevronRight, PlusCircle, RefreshCw, Copy, FileUp } from 'lucide-react';
+import { X, Save, ChevronDown, ChevronUp, Download, ChevronLeft, ChevronRight, PlusCircle, RefreshCw, Copy, FileUp, Import } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
@@ -42,6 +42,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ImportScoresDialog } from './ImportScoresDialog';  // Import the component
 import { GradeExportDialog } from './GradeExportDialog'; // Import the standalone component
 import { BulkActionsDialog } from './BulkActionsDialog';  // Import the component alongside other imports
+import { BulkImportDialog } from './BulkImportDialog';  // Add the BulkImportDialog import
 
 // Initialize Supabase client (this is fine outside component)
 const supabase = createClient(
@@ -3015,10 +3016,152 @@ return (
         <div className="flex flex-wrap items-center gap-2 sm:gap-4">
           <Button
             onClick={handleNewAssignment}
-            className="w-full sm:w-[200px]"
+            className="w-full sm:w-auto"
           >
             Create New Assignment
           </Button>
+          
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button
+                variant="outline"
+                className="w-full sm:w-auto flex items-center gap-2"
+              >
+                <FileUp className="h-4 w-4" />
+                Bulk Import
+              </Button>
+            </DialogTrigger>
+            <BulkImportDialog
+              onImport={(importedAssignments) => {
+                // Process imported assignments
+                importedAssignments.forEach(importedAssignment => {
+                  const assignmentId = importedAssignment.existingId || crypto.randomUUID();
+                  
+                  if (importedAssignment.existingId) {
+                    // Update existing assignment grades
+                    const updatedGrades = { ...unsavedGrades };
+                    
+                    if (!updatedGrades[assignmentId]) {
+                      updatedGrades[assignmentId] = {};
+                    }
+                    
+                    // Update periods and grades
+                    importedAssignment.periods.forEach(periodId => {
+                      if (!updatedGrades[assignmentId][periodId]) {
+                        updatedGrades[assignmentId][periodId] = {};
+                      }
+                      
+                      Object.entries(importedAssignment.grades).forEach(([studentId, grade]) => {
+                        updatedGrades[assignmentId][periodId][studentId] = grade;
+                      });
+                      
+                      // Mark as editing so changes will be saved
+                      setEditingGrades(prev => ({
+                        ...prev,
+                        [`${assignmentId}-${periodId}`]: true
+                      }));
+                    });
+                    
+                    setUnsavedGrades(updatedGrades);
+                    
+                    toast({
+                      title: "Grades Imported",
+                      description: `Updated grades for "${assignments[assignmentId].name}"`,
+                    });
+                  } else {
+                    // Create new assignment
+                    const newAssignment = {
+                      id: assignmentId,
+                      name: importedAssignment.name,
+                      date: importedAssignment.date,
+                      type: importedAssignment.type,
+                      periods: importedAssignment.periods,
+                      subject: importedAssignment.subject,
+                      six_weeks_period: getSixWeeksForDate(importedAssignment.date),
+                      max_points: 100,
+                      created_at: new Date().toISOString()
+                    };
+                    
+                    // Save to Supabase
+                    supabase
+                      .from('assignments')
+                      .insert([{
+                        ...newAssignment,
+                        date: format(newAssignment.date, 'yyyy-MM-dd')
+                      }])
+                      .then(({ error }) => {
+                        if (error) {
+                          console.error('Error creating assignment:', error);
+                          toast({
+                            variant: "destructive",
+                            title: "Error",
+                            description: `Failed to create ${newAssignment.name}`
+                          });
+                        } else {
+                          // Update local state
+                          setAssignments(prev => ({
+                            ...prev,
+                            [assignmentId]: newAssignment
+                          }));
+                          
+                          setAssignmentOrder(prev => [...prev, assignmentId]);
+                          
+                          // Handle grades
+                          const newGradesState = { ...grades };
+                          if (!newGradesState[assignmentId]) {
+                            newGradesState[assignmentId] = {};
+                          }
+                          
+                          const gradesToSave = [];
+                          
+                          importedAssignment.periods.forEach(periodId => {
+                            if (!newGradesState[assignmentId][periodId]) {
+                              newGradesState[assignmentId][periodId] = {};
+                            }
+                            
+                            Object.entries(importedAssignment.grades).forEach(([studentId, grade]) => {
+                              newGradesState[assignmentId][periodId][studentId] = grade;
+                              
+                              gradesToSave.push({
+                                assignment_id: assignmentId,
+                                student_id: studentId,
+                                period: periodId,
+                                grade: grade,
+                                extra_points: 0
+                              });
+                            });
+                          });
+                          
+                          // Save grades to Supabase
+                          if (gradesToSave.length > 0) {
+                            supabase
+                              .from('grades')
+                              .insert(gradesToSave)
+                              .then(({ error }) => {
+                                if (error) {
+                                  console.error('Error saving grades:', error);
+                                }
+                              });
+                          }
+                          
+                          setGrades(newGradesState);
+                          
+                          toast({
+                            title: "Assignment Created",
+                            description: `Created "${newAssignment.name}" with ${Object.keys(importedAssignment.grades).length} grades`,
+                          });
+                        }
+                      });
+                  }
+                });
+              }}
+              studentIds={Object.values(students).flat().map(s => s.id.toString())}
+              availablePeriods={Object.keys(students)}
+              activeTab={activeTab}
+              existingAssignments={assignments}
+              setAssignments={setAssignments}
+            />
+          </Dialog>
           
           <div className="flex items-center gap-2">
             <Button
