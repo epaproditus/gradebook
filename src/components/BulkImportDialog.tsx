@@ -405,7 +405,7 @@ export const BulkImportDialog: FC<BulkImportDialogProps> = ({
           {debugMode && debugInfo && (
             <div className="border border-amber-200 bg-amber-50 p-3 mb-4 rounded-md">
               <h4 className="font-medium text-amber-800 mb-1">Import Debug Info</h4>
-              <div className="text-sm text-amber-700 space-y-1">
+              <div class="text-sm text-amber-700 space-y-1">
                 <p>Student ID matches: {debugInfo.studentIdMatches.filter(m => m.found).length} of {debugInfo.studentIdMatches.length} matched</p>
                 <p>Periods detected: {Array.from(new Set(debugInfo.studentIdMatches.filter(m => m.found && m.period).map(m => m.period))).join(', ')}</p>
                 {debugInfo.studentIdMatches.filter(m => !m.found).length > 0 && (
@@ -450,6 +450,7 @@ export const BulkImportDialog: FC<BulkImportDialogProps> = ({
                 <TableHead>Assignment Name</TableHead>
                 <TableHead>Map to Existing</TableHead>
                 <TableHead>Type</TableHead>
+                <TableHead>Subject</TableHead>
                 <TableHead className="w-32">Date</TableHead>
                 <TableHead className="text-right"># Grades</TableHead>
                 <TableHead className="text-right">Periods</TableHead>
@@ -527,6 +528,24 @@ export const BulkImportDialog: FC<BulkImportDialogProps> = ({
                       <SelectContent>
                         <SelectItem value="Daily">Daily</SelectItem>
                         <SelectItem value="Assessment">Assessment</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell>
+                    <Select
+                      value={assignment.subject}
+                      onValueChange={(value: 'Math 8' | 'Algebra I') => {
+                        setParsedData(prev => prev.map((a, i) => 
+                          i === index ? { ...a, subject: value } : a
+                        ));
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Math 8">Math 8</SelectItem>
+                        <SelectItem value="Algebra I">Algebra I</SelectItem>
                       </SelectContent>
                     </Select>
                   </TableCell>

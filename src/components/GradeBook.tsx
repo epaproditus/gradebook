@@ -3054,6 +3054,14 @@ return (
                       new Set([...existingAssignment.periods, ...importedAssignment.periods])
                     );
                     
+                    // Create a map of student IDs to their periods for quick lookup
+                    const studentToPeriodMap: Record<string, string> = {};
+                    Object.entries(students).forEach(([period, periodStudents]) => {
+                      periodStudents.forEach(student => {
+                        studentToPeriodMap[student.id.toString()] = period;
+                      });
+                    });
+                    
                     // Update assignment in Supabase to include the new periods
                     if (!arraysEqual(existingAssignment.periods, updatedPeriods)) {
                       console.log(`Updating assignment periods from [${existingAssignment.periods.join(', ')}] to [${updatedPeriods.join(', ')}]`);
@@ -3092,33 +3100,44 @@ return (
                       updatedGrades[assignmentId] = {};
                     }
                     
-                    // Update periods and grades for all periods imported
-                    importedAssignment.periods.forEach(periodId => {
-                      if (!updatedGrades[assignmentId][periodId]) {
-                        updatedGrades[assignmentId][periodId] = {};
-                      }
-                      
-                      // Process grades for this period
-                      const periodStudents = students[periodId] || [];
-                      periodStudents.forEach(student => {
-                        const studentId = student.id.toString();
-                        const grade = importedAssignment.grades[studentId];
+                    // Process all student IDs from imported grades
+                    Object.entries(importedAssignment.grades).forEach(([studentId, grade]) => {
+                      if (grade && grade !== '0') {
+                        // Find which period this student belongs to
+                        let studentPeriod = '';
                         
-                        if (grade && grade !== '0') { // Only process non-empty grades
-                          updatedGrades[assignmentId][periodId][studentId] = grade;
-                          
-                          // Log debug info for first few students
-                          if (Object.keys(updatedGrades[assignmentId][periodId]).length <= 3) {
-                            console.log(`Added grade for student ${studentId} in period ${periodId}: ${grade}`);
+                        // First check in student-to-period mapping
+                        if (studentToPeriodMap && studentToPeriodMap[studentId]) {
+                          studentPeriod = studentToPeriodMap[studentId];
+                        } else {
+                          // Fallback: search through all students in all periods
+                          for (const period of updatedPeriods) {
+                            const periodStudents = students[period] || [];
+                            if (periodStudents.some(s => s.id.toString() === studentId)) {
+                              studentPeriod = period;
+                              break;
+                            }
                           }
                         }
-                      });
-                      
-                      // Mark as editing so changes will be saved
-                      setEditingGrades(prev => ({
-                        ...prev,
-                        [`${assignmentId}-${periodId}`]: true
-                      }));
+                        
+                        // If we found the student's period, add the grade
+                        if (studentPeriod) {
+                          if (!updatedGrades[assignmentId][studentPeriod]) {
+                            updatedGrades[assignmentId][studentPeriod] = {};
+                          }
+                          
+                          updatedGrades[assignmentId][studentPeriod][studentId] = grade;
+                          console.log(`Adding grade ${grade} for student ${studentId} in period ${studentPeriod}`);
+                          
+                          // Mark as editing so changes will be saved
+                          setEditingGrades(prev => ({
+                            ...prev,
+                            [`${assignmentId}-${studentPeriod}`]: true
+                          }));
+                        } else {
+                          console.warn(`Could not find period for student ${studentId}`);
+                        }
+                      }
                     });
                     
                     setUnsavedGrades(updatedGrades);
