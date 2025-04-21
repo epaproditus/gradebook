@@ -58,6 +58,8 @@ export const BulkImportDialog: FC<BulkImportDialogProps> = ({
     studentIdMatches: {id: string, found: boolean, period?: string}[];
     headers?: string[];
     firstDataRow?: string[];
+    allColumns?: string[][];
+    gradeDistribution?: Record<string, number>;  // Track grade counts per assignment
   } | null>(null);
 
   // Get student ID to period mapping for automatic period assignment
@@ -77,6 +79,8 @@ export const BulkImportDialog: FC<BulkImportDialogProps> = ({
 
   const handlePaste = (content: string) => {
     try {
+      console.log('Starting to parse pasted data...');
+      
       // Split into rows and tabs
       const rows = content.trim().split('\n').map(row => row.split('\t'));
       if (rows.length < 2) {
@@ -92,11 +96,18 @@ export const BulkImportDialog: FC<BulkImportDialogProps> = ({
         ? headerRow.map(h => h.toLowerCase().trim()) 
         : rows[0].map((_, idx) => `column_${idx}`);
       
+      console.log('Headers detected:', headers);
+      
       // More flexible column detection
       let idIndex = headers.findIndex(h => 
-        h.includes('id') || h.includes('number') || h.match(/^\d{6}$/));
+        h.includes('id') || 
+        h.includes('number') || 
+        h.match(/^\d{6}$/) ||
+        h === 'student id');
+        
       let nameIndex = headers.findIndex(h => 
-        h.includes('name') || h.includes('student'));
+        h === 'name' ||
+        h.includes('student name'));
 
       console.log('Column detection:', { headers, idIndex, nameIndex });
 
@@ -119,31 +130,60 @@ export const BulkImportDialog: FC<BulkImportDialogProps> = ({
         }
       }
 
-      // Filter out non-assignment columns like "Cycle Grade" but keep numeric headers
-      const assignmentColumns = headers.slice(nameIndex + 1)
-        .map((header, index) => ({ header, index: index + nameIndex + 1 }))
-        .filter(({ header }) => {
+      // Filter out non-assignment columns and gather assignment column data
+      // Each entry will be {header, index, arrayPosition}
+      // - header: the column name
+      // - index: the original column index in the CSV
+      // - arrayPosition: position in the filtered array (used for accessing grades)
+      let filteredColPosition = 0;
+      const assignmentColumns = headers
+        .map((header, index) => {
+          // Skip the ID and Name columns directly
+          if (index === idIndex || index === nameIndex) {
+            return null;
+          }
+
+          // Check if it's a non-grade column (cycle grade, average, etc.)
+          const isNonGradeColumn = 
+            header.toLowerCase().includes('cycle') || 
+            header.toLowerCase().includes('avg') || 
+            header.toLowerCase().includes('average') ||
+            header.toLowerCase().includes('total');
+          
           // Check if it's a numeric header (0, 1, 2, etc.)
           const isNumeric = /^\d+$/.test(header);
           
-          // Check if it's a non-grade column
-          const isNonGradeColumn = header.toLowerCase().includes('cycle') || 
-                                   header.toLowerCase().includes('avg') || 
-                                   header.toLowerCase().includes('average') ||
-                                   header.toLowerCase().includes('total');
-          
           // Keep if it's numeric OR it's not a non-grade column
-          return isNumeric || !isNonGradeColumn;
-        });
+          const shouldKeep = isNumeric || !isNonGradeColumn;
+          
+          if (shouldKeep) {
+            return { 
+              header, 
+              index, 
+              arrayPosition: filteredColPosition++
+            };
+          }
+          
+          return null;
+        })
+        .filter(Boolean); // Filter out null entries
+
+      console.log('Assignment columns with positions:', assignmentColumns);
 
       // Parse all data rows (skip header if present)
       const parsedRows = rows.slice(dataStartIndex)
-        .filter(row => row.length >= Math.max(idIndex, nameIndex))
+        .filter(row => row.length >= Math.max(idIndex, nameIndex) + 1)
         .map(row => {
           const id = row[idIndex]?.trim() || '';
           const [lastName, firstName] = parseStudentName(row[nameIndex]);
+          
           // Get grades only from the assignment columns
-          const grades = assignmentColumns.map(({ index }) => row[index]?.trim() || '');
+          const grades = assignmentColumns.map(col => {
+            const value = row[col.index]?.trim() || '';
+            // Debug log to see what values we're extracting
+            console.log(`Student ${id}: Column ${col.header} (index ${col.index}) = "${value}"`);
+            return value;
+          });
 
           return { id, lastName, firstName, grades };
         });
@@ -161,40 +201,44 @@ export const BulkImportDialog: FC<BulkImportDialogProps> = ({
         .map(match => match.period || '')
         .filter((period, index, self) => period && self.indexOf(period) === index);
 
-      setDebugInfo({
-        studentIdMatches,
-        headers,
-        firstDataRow: rows[dataStartIndex]
-      });
-
-      console.log('Parsed rows:', parsedRows);
-      console.log('Student ID matching:', studentIdMatches);
-      console.log('Periods in data:', periodsInData);
+      // Create a grades distribution tracker
+      const gradeDistribution: Record<string, number> = {};
 
       // Create assignments from the filtered assignment columns
-      const newAssignments = assignmentColumns.map(({ header }, index) => {
-        // Generate a better name for numeric headers
-        const assignmentName = /^\d+$/.test(header) 
-          ? `Assignment ${header}` 
-          : header?.trim() || `Assignment ${index + 1}`;
+      const newAssignments = assignmentColumns.map(({ header, index, arrayPosition }) => {
+        // Generate a better name for numeric headers - preserve original number
+        let assignmentName = header.trim();
+        if (/^\d+$/.test(header)) {
+          assignmentName = `Assignment ${header}`;
+        } else if (assignmentName === '') {
+          assignmentName = `Assignment ${index + 1}`;
+        }
             
         // Safely check for existing assignment
         const matchingAssignment = Object.values(existingAssignments)
           .find(a => a.name.toLowerCase() === assignmentName.toLowerCase());
 
-        // Construct grades object by student ID
+        // Construct grades object by student ID - this time using arrayPosition
         const gradesObject: Record<string, string> = {};
         parsedRows.forEach(row => {
-          const gradeValue = row.grades[index]?.trim();
+          // Use arrayPosition to get the right grade from the grades array
+          const gradeValue = row.grades[arrayPosition]?.trim();
+          
           if (gradeValue && row.id) {
             // Check if this student exists in our roster
             if (studentIds.includes(row.id)) {
-              gradesObject[row.id] = gradeValue;
+              // Only add non-zero grades
+              if (gradeValue !== '0') {
+                gradesObject[row.id] = gradeValue;
+              }
             } else {
               console.warn(`Student ID ${row.id} not found in roster, skipping grade import`);
             }
           }
         });
+
+        // Track how many grades we found for this assignment
+        gradeDistribution[assignmentName] = Object.keys(gradesObject).length;
 
         return {
           name: assignmentName,
@@ -208,7 +252,21 @@ export const BulkImportDialog: FC<BulkImportDialogProps> = ({
         };
       });
 
+      // Set detailed debug info to help diagnose issues
+      setDebugInfo({
+        studentIdMatches,
+        headers,
+        firstDataRow: rows[dataStartIndex],
+        allColumns: assignmentColumns.map(col => [col.header, `${col.index}:${col.arrayPosition}`]),
+        gradeDistribution
+      });
+
+      console.log('Parsed rows:', parsedRows);
+      console.log('Student ID matching:', studentIdMatches);
+      console.log('Periods in data:', periodsInData);
+      console.log('Grade distribution:', gradeDistribution);
       console.log('New assignments with grades:', newAssignments);
+
       setParsedData(newAssignments);
     } catch (error) {
       console.error('Error parsing data:', error);
@@ -252,7 +310,18 @@ export const BulkImportDialog: FC<BulkImportDialogProps> = ({
       return;
     }
 
+    // Show number of grades being imported for each assignment
+    const summaryInfo = assignmentsToImport.map(a => 
+      `${a.name}: ${Object.keys(a.grades).length} grades`
+    ).join(', ');
+    
+    console.log('Import summary:', summaryInfo);
+    
     onImport(assignmentsToImport);
+    toast({
+      title: "Import started",
+      description: `Importing ${assignmentsToImport.length} assignments. ${summaryInfo}`,
+    });
   };
 
   // We can import if we have assignments with grades
@@ -306,6 +375,7 @@ export const BulkImportDialog: FC<BulkImportDialogProps> = ({
               <li>Check the "First row contains headers" box if your data has column headers</li>
               <li>Data must include Student ID and Name columns</li>
               <li>Each additional column will be treated as an assignment</li>
+              <li>Columns labeled "Cycle Grade", "Average", etc. will be ignored</li>
               <li>Student class periods will be automatically detected based on student IDs</li>
             </ul>
           </div>
@@ -332,6 +402,26 @@ export const BulkImportDialog: FC<BulkImportDialogProps> = ({
                 <p>Periods detected: {Array.from(new Set(debugInfo.studentIdMatches.filter(m => m.found && m.period).map(m => m.period))).join(', ')}</p>
                 {debugInfo.studentIdMatches.filter(m => !m.found).length > 0 && (
                   <p>Unmatched IDs: {debugInfo.studentIdMatches.filter(m => !m.found).map(m => m.id).join(', ')}</p>
+                )}
+                {debugInfo.allColumns && (
+                  <div>
+                    <p>Assignment columns (header, index:position):</p>
+                    <ul className="text-xs">
+                      {debugInfo.allColumns.map((col, i) => (
+                        <li key={i}>{col[0]} ({col[1]})</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {debugInfo.gradeDistribution && (
+                  <div>
+                    <p>Grades found per assignment:</p>
+                    <ul className="text-xs">
+                      {Object.entries(debugInfo.gradeDistribution).map(([name, count], i) => (
+                        <li key={i}>{name}: {count} grades</li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
               </div>
             </div>
@@ -443,7 +533,7 @@ export const BulkImportDialog: FC<BulkImportDialogProps> = ({
                       }}
                     />
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right font-medium">
                     {Object.keys(assignment.grades).length}
                   </TableCell>
                   <TableCell className="text-right">
