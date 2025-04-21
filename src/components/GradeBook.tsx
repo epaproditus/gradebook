@@ -3764,8 +3764,8 @@ const GradeAutofill: FC<{
   
   return (
     <div className="grid grid-cols-[1fr_100px_100px_100px_auto] items-center h-8 border-t border-muted">
-      <div className="flex items-center px-2">
-        <span className="text-sm text-muted-foreground">Autofill empty grades</span>
+      <div className="flex items-center px-2 justify-end">
+        <span className="text-sm text-muted-foreground mr-2">Autofill empty grades:</span>
       </div>
       <Input
         type="text"

@@ -61,6 +61,25 @@ The system provides robust grade import and export capabilities:
   - Creates properly formatted CSV files with student ID, name, and grades
   - Handles special characters in student names with proper CSV escaping
 
+### Grade Input Interface
+
+The grade input interface provides several features for efficient grade entry:
+
+- **Grid Layout**: Consistent grid structure for student information and grade input fields
+- **Column Alignment**: Properly aligned columns for student data and grade inputs
+  - Column headers clearly indicate each data type (Student ID & Name, Initial Grade, Extra Points, Total Grade, Tags)
+  - All input fields and data cells are properly aligned within their respective columns
+  - The GradeAutofill component aligns perfectly with the grade input column
+  - Text labels use proper spacing and alignment to ensure visual clarity
+- **Keyboard Navigation**: Support for up/down arrow keys to move between student grade inputs
+- **Autofill Functionality**: Allows bulk filling of empty grade fields
+  - Clear labeling indicates "Autofill empty grades:" with proper alignment to grade column
+  - Only affects empty grade fields, preserving existing grades
+  - Provides immediate visual feedback when grades are filled
+- **Input Validation**: Ensures grades are within acceptable ranges
+- **Extra Points**: Separate column for adding extra credit points
+- **Tag Management**: Quick-access buttons for marking absences, late work, etc.
+
 ### Assignment Management Interface
 
 The assignment management interface provides a comprehensive view of each assignment with several interactive features:
