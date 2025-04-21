@@ -3046,25 +3046,70 @@ return (
                       sampleGrades: Object.entries(importedAssignment.grades).slice(0, 3)
                     });
                     
+                    // Get the existing assignment to update its periods
+                    const existingAssignment = assignments[assignmentId];
+                    
+                    // Merge periods, ensuring we don't duplicate any
+                    const updatedPeriods = Array.from(
+                      new Set([...existingAssignment.periods, ...importedAssignment.periods])
+                    );
+                    
+                    // Update assignment in Supabase to include the new periods
+                    if (!arraysEqual(existingAssignment.periods, updatedPeriods)) {
+                      console.log(`Updating assignment periods from [${existingAssignment.periods.join(', ')}] to [${updatedPeriods.join(', ')}]`);
+                      
+                      // Update in database
+                      supabase
+                        .from('assignments')
+                        .update({ periods: updatedPeriods })
+                        .eq('id', assignmentId)
+                        .then(({ error }) => {
+                          if (error) {
+                            console.error('Failed to update assignment periods:', error);
+                            toast({
+                              variant: "destructive",
+                              title: "Error",
+                              description: "Failed to update assignment periods. Some grades may not appear correctly."
+                            });
+                          } else {
+                            console.log(`Successfully updated periods for assignment ${assignmentId}`);
+                          }
+                        });
+                      
+                      // Update local state immediately
+                      setAssignments(prev => ({
+                        ...prev,
+                        [assignmentId]: {
+                          ...prev[assignmentId],
+                          periods: updatedPeriods
+                        }
+                      }));
+                    }
+                    
                     const updatedGrades = { ...unsavedGrades };
                     
                     if (!updatedGrades[assignmentId]) {
                       updatedGrades[assignmentId] = {};
                     }
                     
-                    // Update periods and grades
+                    // Update periods and grades for all periods imported
                     importedAssignment.periods.forEach(periodId => {
                       if (!updatedGrades[assignmentId][periodId]) {
                         updatedGrades[assignmentId][periodId] = {};
                       }
                       
-                      Object.entries(importedAssignment.grades).forEach(([studentId, grade]) => {
-                        if (grade) { // Only process non-empty grades
+                      // Process grades for this period
+                      const periodStudents = students[periodId] || [];
+                      periodStudents.forEach(student => {
+                        const studentId = student.id.toString();
+                        const grade = importedAssignment.grades[studentId];
+                        
+                        if (grade && grade !== '0') { // Only process non-empty grades
                           updatedGrades[assignmentId][periodId][studentId] = grade;
                           
                           // Log debug info for first few students
                           if (Object.keys(updatedGrades[assignmentId][periodId]).length <= 3) {
-                            console.log(`Added grade for student ${studentId}: ${grade}`);
+                            console.log(`Added grade for student ${studentId} in period ${periodId}: ${grade}`);
                           }
                         }
                       });
@@ -3584,5 +3629,13 @@ const DeleteConfirmationDialog: FC<{
       </DialogContent>
     </Dialog>
   );
+};
+
+// Add this utility function at the top level with other utility functions
+const arraysEqual = (a: string[], b: string[]): boolean => {
+  if (a.length !== b.length) return false;
+  const sortedA = [...a].sort();
+  const sortedB = [...b].sort();
+  return sortedA.every((val, idx) => val === sortedB[idx]);
 };
 

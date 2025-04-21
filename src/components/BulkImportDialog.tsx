@@ -1,6 +1,6 @@
-import { FC, useState, useEffect } from 'react';
+import { FC, useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -52,6 +52,7 @@ export const BulkImportDialog: FC<BulkImportDialogProps> = ({
   const [parsedData, setParsedData] = useState<ImportedAssignment[]>([]);
   const [hasHeaders, setHasHeaders] = useState<boolean>(true);
   const [debugMode, setDebugMode] = useState<boolean>(false);
+  const dialogCloseRef = useRef<HTMLButtonElement>(null);
   
   // Debug state to help understand processing
   const [debugInfo, setDebugInfo] = useState<{
@@ -292,8 +293,8 @@ export const BulkImportDialog: FC<BulkImportDialogProps> = ({
             subject: existingAssignment.subject,
             type: existingAssignment.type,
             date: existingAssignment.date,
-            // Merge with existing periods to avoid overwriting
-            periods: [...new Set([...existingAssignment.periods])]
+            // Ensure we merge with existing periods properly
+            periods: Array.from(new Set([...existingAssignment.periods, ...a.periods]))
           };
         }
         
@@ -317,11 +318,18 @@ export const BulkImportDialog: FC<BulkImportDialogProps> = ({
     
     console.log('Import summary:', summaryInfo);
     
+    // Call the import function
     onImport(assignmentsToImport);
+    
     toast({
       title: "Import started",
       description: `Importing ${assignmentsToImport.length} assignments. ${summaryInfo}`,
     });
+    
+    // Close the dialog after successful import
+    if (dialogCloseRef.current) {
+      dialogCloseRef.current.click();
+    }
   };
 
   // We can import if we have assignments with grades
@@ -557,6 +565,9 @@ export const BulkImportDialog: FC<BulkImportDialogProps> = ({
         >
           Clear
         </Button>
+        <DialogClose ref={dialogCloseRef} asChild>
+          <button className="hidden" aria-hidden="true" />
+        </DialogClose>
         <Button
           onClick={handleImport}
           disabled={!canImport}
