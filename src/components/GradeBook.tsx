@@ -2214,6 +2214,13 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
                             debouncedSaveGrades(assignmentId);
                           }
                         }}
+                        onKeyDown={(e) => handleGradeInputKeyDown(
+                          e,
+                          assignmentId,
+                          periodId,
+                          String(student.id),
+                          students[periodId] || []
+                        )}
                       />
                       
                       <Input
@@ -3656,5 +3663,57 @@ const arraysEqual = (a: string[], b: string[]): boolean => {
   const sortedA = [...a].sort();
   const sortedB = [...b].sort();
   return sortedA.every((val, idx) => val === sortedB[idx]);
+};
+
+// Add this new function to handle keyboard navigation between student grade inputs
+const handleGradeInputKeyDown = (
+  e: React.KeyboardEvent<HTMLInputElement>,
+  assignmentId: string,
+  periodId: string,
+  currentStudentId: string,
+  students: Student[]
+) => {
+  // If Arrow Down key is pressed
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    
+    // Find the current student's index in the array
+    const currentIndex = students.findIndex(s => String(s.id) === currentStudentId);
+    
+    // If there's a next student, focus on their grade input
+    if (currentIndex < students.length - 1) {
+      const nextStudent = students[currentIndex + 1];
+      const nextInputId = `grade-${assignmentId}-${periodId}-${nextStudent.id}`;
+      
+      setTimeout(() => {
+        const nextInput = document.getElementById(nextInputId) as HTMLInputElement;
+        if (nextInput) {
+          nextInput.focus();
+          nextInput.select(); // Select the text for easy replacement
+        }
+      }, 0);
+    }
+  }
+  // If Arrow Up key is pressed
+  else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    
+    // Find the current student's index in the array
+    const currentIndex = students.findIndex(s => String(s.id) === currentStudentId);
+    
+    // If there's a previous student, focus on their grade input
+    if (currentIndex > 0) {
+      const prevStudent = students[currentIndex - 1];
+      const prevInputId = `grade-${assignmentId}-${periodId}-${prevStudent.id}`;
+      
+      setTimeout(() => {
+        const prevInput = document.getElementById(prevInputId) as HTMLInputElement;
+        if (prevInput) {
+          prevInput.focus();
+          prevInput.select(); // Select the text for easy replacement
+        }
+      }, 0);
+    }
+  }
 };
 
