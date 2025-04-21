@@ -596,7 +596,7 @@ const GradeBook: FC = () => {
         ...acc,
         [assignment.id]: {
           ...assignment,
-          date: new Date(assignment.date)
+          date: new Date(assignment.date + 'T00:00:00') // Add time component to prevent timezone shift
         }
       }), {});
   
@@ -1302,13 +1302,13 @@ const saveAssignment = async () => {
   try {
     // Create assignment data with a new UUID
     const assignmentData = {
-      id: crypto.randomUUID(), // Use crypto.randomUUID() instead of uuidv4()
+      id: crypto.randomUUID(),
       name: newAssignment.name,
-      date: format(newAssignment.date, 'yyyy-MM-dd'),
+      date: newAssignment.date.toISOString().split('T')[0], // Use UTC date string
       type: selectedType,
       periods: newAssignment.periods,
       subject: newAssignment.subject,
-      six_weeks_period: newAssignment.six_weeks_period, // Include six_weeks_period
+      six_weeks_period: newAssignment.six_weeks_period,
       max_points: 100,
       created_at: new Date().toISOString()
     };
@@ -1831,7 +1831,7 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm">
-                  {format(assignment.date, 'PPP')}
+                  {format(assignment.date, 'PPP')} (UTC)
                   <CalendarIcon className="ml-2 h-4 w-4" />
                 </Button>
               </PopoverTrigger>
@@ -3414,7 +3414,13 @@ return (
                           selected={newAssignment.date}
                           onSelect={(date) => {
                             if (date) {
-                              setNewAssignment(prev => prev ? { ...prev, date } : null);
+                              // Create a new date at UTC midnight to avoid timezone issues
+                              const utcDate = new Date(Date.UTC(
+                                date.getFullYear(),
+                                date.getMonth(),
+                                date.getDate()
+                              ));
+                              setNewAssignment(prev => prev ? { ...prev, date: utcDate } : null);
                             }
                           }}
                           initialFocus
