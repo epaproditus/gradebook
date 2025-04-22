@@ -2309,7 +2309,7 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
                   <div className="flex items-center gap-2">
                     <Input
                       type="text"
-                      placeholder="Fill empty"
+                      placeholder=""
                       className="text-center h-8 w-16"
                       value={autofillValue}
                       onChange={(e) => setAutofillValue(e.target.value)}
