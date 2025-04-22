@@ -2175,20 +2175,20 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
       </Select>
     </div>
 
-    {/* Grid headers with fixed column widths */}
-    <div className="grid grid-cols-[280px_100px_100px_100px_140px] gap-x-4 px-4 py-1 bg-muted text-sm font-medium">
+    {/* Grid headers with matching column widths */}
+    <div className="grid grid-cols-[minmax(200px,1fr)_100px_100px_100px_140px] gap-x-4 px-4 py-1 bg-muted text-sm font-medium">
       <div className="flex items-center">Student ID & Name</div>
       <div className="flex items-center justify-center">Initial Grade</div>
       <div className="flex items-center justify-center">Extra Points</div>
       <div className="flex items-center justify-center">Total Grade</div>
       <div className="flex items-center justify-end pr-2">Tags</div>
     </div>
-                <div className="divide-y divide-border"> {/* Changed from space-y-0 to divide-y for table-like appearance */}
+                <div className="divide-y divide-border">
                   {sortStudents(students[periodId] || [], assignmentId, periodId).map(student => (
                     <div 
                       key={student.id} 
                       className={cn(
-                        "grid grid-cols-[1fr_100px_100px_100px_auto] items-center h-8", // Removed gap, added fixed height
+                        "grid grid-cols-[minmax(200px,1fr)_100px_100px_100px_140px] items-center h-8 gap-x-4 px-4",
                         activeRow === `${assignmentId}-${periodId}-${student.id}` && "bg-muted"  // Changed to bg-muted like RosterView
                       )}
                     >
