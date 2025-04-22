@@ -7,12 +7,12 @@ interface SixWeeksRange {
 }
 
 const SIX_WEEKS_RANGES: SixWeeksRange[] = [
-  { period: '1SW', start: new Date('2023-08-14'), end: new Date('2023-09-22') },
-  { period: '2SW', start: new Date('2023-09-25'), end: new Date('2023-11-03') },
-  { period: '3SW', start: new Date('2023-11-06'), end: new Date('2023-12-22') },
-  { period: '4SW', start: new Date('2024-01-09'), end: new Date('2024-02-16') },
-  { period: '5SW', start: new Date('2024-02-20'), end: new Date('2024-04-05') },
-  { period: '6SW', start: new Date('2024-04-08'), end: new Date('2024-05-23') }
+  { period: '1SW', start: new Date('2024-08-14'), end: new Date('2024-09-22') },
+  { period: '2SW', start: new Date('2024-09-25'), end: new Date('2024-11-03') },
+  { period: '3SW', start: new Date('2024-11-06'), end: new Date('2024-12-22') },
+  { period: '4SW', start: new Date('2025-01-09'), end: new Date('2025-02-16') },
+  { period: '5SW', start: new Date('2025-02-20'), end: new Date('2025-04-05') },
+  { period: '6SW', start: new Date('2025-04-08'), end: new Date('2025-05-23') }
 ];
 
 export function getCurrentSixWeeks(): string {
