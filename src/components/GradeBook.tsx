@@ -425,6 +425,7 @@ type AssignmentStatus = 'in_progress' | 'completed' | 'not_started' | 'not_grade
 
 const GradeBook: FC = () => {
   const { toast } = useToast();
+  const [autofillValue, setAutofillValue] = useState('');
   // Replace the individual state declarations with the loaded config
   const [showColors, setShowColors] = useState(loadConfig().showColors);
   const [colorMode, setColorMode] = useState(loadConfig().colorMode);
@@ -2302,36 +2303,83 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
                     </div>
                   ))}
                 </div>
-                <GradeAutofill
-                  assignmentId={assignmentId}
-                  periodId={periodId}
-                  students={students[periodId] || []}
-                  onAutofill={(assignmentId, periodId, value) => {
-                    const updatedGrades = { ...unsavedGrades };
-                    if (!updatedGrades[assignmentId]) {
-                      updatedGrades[assignmentId] = {};
-                    }
-                    if (!updatedGrades[assignmentId][periodId]) {
-                      updatedGrades[assignmentId][periodId] = {};
-                    }
-                    students[periodId].forEach(student => {
-                      const key = `${assignmentId}-${periodId}-${student.id}`;
-                      if (!grades[assignmentId]?.[periodId]?.[student.id]) {
-                        updatedGrades[assignmentId][periodId][student.id] = value;
-                        setLocalGrades(prev => ({
-                          ...prev,
-                          [key]: value
-                        }));
-                      }
-                    });
-                    setUnsavedGrades(updatedGrades);
-                    setEditingGrades(prev => ({
-                      ...prev,
-                      [`${assignmentId}-${periodId}`]: true
-                    }));
-                    debouncedSaveGrades(assignmentId);
-                  }}
-                />
+                {/* Autofill row positioned below students */}
+                <div className="grid grid-cols-[minmax(200px,1fr)_100px_100px_100px_140px] items-center h-8 gap-x-4 px-4">
+                  <div></div> {/* Empty first column */}
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="text"
+                      placeholder="Fill empty"
+                      className="text-center h-8 w-16"
+                      value={autofillValue}
+                      onChange={(e) => setAutofillValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && autofillValue) {
+                          const updatedGrades = { ...unsavedGrades };
+                          if (!updatedGrades[assignmentId]) {
+                            updatedGrades[assignmentId] = {};
+                          }
+                          if (!updatedGrades[assignmentId][periodId]) {
+                            updatedGrades[assignmentId][periodId] = {};
+                          }
+                          students[periodId].forEach(student => {
+                            const key = `${assignmentId}-${periodId}-${student.id}`;
+                            if (!grades[assignmentId]?.[periodId]?.[student.id]) {
+                              updatedGrades[assignmentId][periodId][student.id] = autofillValue;
+                              setLocalGrades(prev => ({
+                                ...prev,
+                                [key]: autofillValue
+                              }));
+                            }
+                          });
+                          setUnsavedGrades(updatedGrades);
+                          setEditingGrades(prev => ({
+                            ...prev,
+                            [`${assignmentId}-${periodId}`]: true
+                          }));
+                          debouncedSaveGrades(assignmentId);
+                          setAutofillValue('');
+                        }
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        if (autofillValue) {
+                          const updatedGrades = { ...unsavedGrades };
+                          if (!updatedGrades[assignmentId]) {
+                            updatedGrades[assignmentId] = {};
+                          }
+                          if (!updatedGrades[assignmentId][periodId]) {
+                            updatedGrades[assignmentId][periodId] = {};
+                          }
+                          students[periodId].forEach(student => {
+                            const key = `${assignmentId}-${periodId}-${student.id}`;
+                            if (!grades[assignmentId]?.[periodId]?.[student.id]) {
+                              updatedGrades[assignmentId][periodId][student.id] = autofillValue;
+                              setLocalGrades(prev => ({
+                                ...prev,
+                                [key]: autofillValue
+                              }));
+                            }
+                          });
+                          setUnsavedGrades(updatedGrades);
+                          setEditingGrades(prev => ({
+                            ...prev,
+                            [`${assignmentId}-${periodId}`]: true
+                          }));
+                          debouncedSaveGrades(assignmentId);
+                          setAutofillValue('');
+                        }
+                      }}
+                    >
+                      Fill
+                    </Button>
+                  </div>
+                  <div></div> {/* Empty columns */}
+                  <div></div>
+                </div>
               </div>
               
               <div className="mt-4 flex justify-between items-center">
