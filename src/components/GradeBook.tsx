@@ -2182,7 +2182,7 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
       <div className="flex items-center justify-center">Initial Grade</div>
       <div className="flex items-center justify-center">Extra Points</div>
       <div className="flex items-center justify-center">Total Grade</div>
-      <div className="flex items-center justify-end pr-2">Tags</div>
+      <div className="flex items-center justify-center">Tags</div>
     </div>
                 <div className="divide-y divide-border">
                   {sortStudents(students[periodId] || [], assignmentId, periodId).map(student => (
