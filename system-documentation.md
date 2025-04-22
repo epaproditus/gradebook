@@ -13,6 +13,21 @@ This project is a comprehensive gradebook application designed for teachers to m
 
 ## Key Features
 
+### Six Weeks Period Management
+
+The system organizes assignments into six weeks grading periods with the following date ranges:
+
+| Period | Start Date   | End Date     |
+|--------|-------------|-------------|
+| 1SW    | Aug 14, 2024 | Sep 22, 2024 |
+| 2SW    | Sep 23, 2024 | Nov 3, 2024  |
+| 3SW    | Nov 4, 2024  | Dec 22, 2024 |
+| 4SW    | Jan 9, 2025  | Feb 19, 2025 |
+| 5SW    | Feb 20, 2025 | Apr 7, 2025  |
+| 6SW    | Apr 8, 2025  | May 23, 2025 |
+
+Assignments are automatically categorized into the appropriate six weeks period based on their date. This categorization is handled by the `getSixWeeksForDate` function in `dateUtils.ts`, which ensures consistent date handling across the application.
+
 ### Student Management
 
 The system provides comprehensive student management features:
@@ -190,3 +205,32 @@ The application uses Supabase with the following main tables:
 - Authentication is handled through Supabase Auth
 - Application state is managed with React hooks
 - Error handling implemented to ensure data integrity when processing student performance metrics
+
+## Debugging Tools
+
+The application includes specialized debugging tools accessible to administrators:
+
+### Six Weeks Period Debugger
+
+Available at `/debug/sixweeks`, this tool helps validate how dates are categorized into six weeks periods:
+
+- **Date Input**: Allows selecting any date to test period classification
+- **Detailed Information Display**: Shows how the date is processed including:
+  - Original input date
+  - Normalized date (with timezone handling)
+  - Matched six weeks period
+  - Direct period check comparison
+- **Period Testing Table**: Displays which period ranges the date falls within
+- **Useful For**: Troubleshooting issues with assignments appearing in incorrect periods
+
+### Fix Six Weeks Periods Tool
+
+Available at `/debug/fixperiods`, this utility helps correct period assignments for existing data:
+
+- **Assignment Scanner**: Automatically identifies assignments with incorrect six weeks periods
+- **Bulk Fix Capability**: Can update all incorrect assignments with one click
+- **Detailed Reporting**: Shows which assignments need fixing and their correct periods
+- **Results Display**: Reports how many assignments were fixed and any failures
+- **Use Case**: Best used when six weeks period definitions have changed or when assignments were created with incorrect periods
+
+These tools are essential for maintaining data integrity when working with date-based period classifications. Access them when you need to verify period assignments or fix bulk data issues.

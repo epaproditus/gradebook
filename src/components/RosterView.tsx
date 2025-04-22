@@ -192,7 +192,7 @@ const RosterView: FC<RosterViewProps> = ({
           type: newAssignment.type,
           periods: newAssignment.periods,
           subject: newAssignment.subject,
-          six_weeks_period: currentSixWeeks,
+          six_weeks_period: getSixWeeksForDate(newAssignment.date), // Use date to determine period
           max_points: 100,
           created_at: new Date().toISOString()
         }])
