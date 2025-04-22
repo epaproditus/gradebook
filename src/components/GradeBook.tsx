@@ -2175,13 +2175,13 @@ const renderAssignmentCard = (assignmentId: string, assignment: Assignment, prov
       </Select>
     </div>
 
-    {/* Grid headers moved here */}
-    <div className="grid grid-cols-[1fr_100px_100px_100px_auto] gap-2 px-2 py-1 bg-muted text-sm font-medium">
+    {/* Grid headers with fixed column widths */}
+    <div className="grid grid-cols-[280px_100px_100px_100px_140px] gap-x-4 px-4 py-1 bg-muted text-sm font-medium">
       <div className="flex items-center">Student ID & Name</div>
       <div className="flex items-center justify-center">Initial Grade</div>
       <div className="flex items-center justify-center">Extra Points</div>
       <div className="flex items-center justify-center">Total Grade</div>
-      <div className="flex items-center justify-end">Tags</div>
+      <div className="flex items-center justify-end pr-2">Tags</div>
     </div>
                 <div className="divide-y divide-border"> {/* Changed from space-y-0 to divide-y for table-like appearance */}
                   {sortStudents(students[periodId] || [], assignmentId, periodId).map(student => (
