@@ -197,50 +197,64 @@ const CalendarView: FC<CalendarViewProps> = ({
 
   // Multi-week view generator
   const renderMultiWeekView = (weeks: number) => {
-    const weekStart = startOfWeek(currentDate);
-    const days = Array.from({ length: 7 * weeks }, (_, i) => addDays(weekStart, i));
-    
-    // Filter out weekends if hideWeekends is true
-    const filteredDays = hideWeekends 
-      ? days.filter(day => ![0, 6].includes(day.getDay())) 
-      : days;
-
-    const dayColumns = hideWeekends ? 5 * weeks : 7 * weeks;
+    const weekStarts = Array.from({ length: weeks }, (_, i) => 
+      addDays(startOfWeek(currentDate), i * 7)
+    );
 
     return (
-      <div className="mt-4">
-        <div className="grid gap-2" style={{ 
-          gridTemplateColumns: `repeat(${dayColumns}, minmax(0, 1fr))` 
-        }}>
-          {/* Day headers */}
-          {filteredDays.map(day => (
-            <div 
-              key={day.toString()}
-              className={cn(
-                "font-medium text-center p-2 border-b",
-                [0, 6].includes(day.getDay()) && !hideWeekends && "text-muted-foreground"
-              )}
-            >
-              {format(day, 'EEE')}
-              <div className="text-lg">{format(day, 'd')}</div>
+      <div className="mt-4 space-y-4">
+        {weekStarts.map((weekStart, weekIndex) => {
+          const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+          const filteredDays = hideWeekends 
+            ? days.filter(day => ![0, 6].includes(day.getDay()))
+            : days;
+
+          return (
+            <div key={weekIndex} className="space-y-2">
+              <div className="text-sm font-medium text-muted-foreground">
+                Week {weekIndex + 1}: {format(weekStart, 'MMM d')} - {format(addDays(weekStart, 6), 'MMM d, yyyy')}
+              </div>
+              <div className="grid gap-2" style={{
+                gridTemplateColumns: `repeat(${hideWeekends ? 5 : 7}, minmax(0, 1fr))`
+              }}>
+                {/* Day headers */}
+                {days.map(day => {
+                  if (hideWeekends && [0, 6].includes(day.getDay())) return null;
+                  return (
+                    <div 
+                      key={day.toString()}
+                      className={cn(
+                        "font-medium text-center p-2 border-b",
+                        [0, 6].includes(day.getDay()) && !hideWeekends && "text-muted-foreground"
+                      )}
+                    >
+                      {format(day, 'EEE')}
+                      <div className="text-lg">{format(day, 'd')}</div>
+                    </div>
+                  );
+                })}
+                
+                {/* Calendar cells */}
+                {days.map(day => {
+                  if (hideWeekends && [0, 6].includes(day.getDay())) return null;
+                  return (
+                    <div 
+                      key={day.toString() + '-cell'} 
+                      className={cn(
+                        "border rounded p-2 min-h-[120px] cursor-pointer",
+                        isSameDay(day, selectedDate || new Date()) && "bg-primary/10",
+                        [0, 6].includes(day.getDay()) && !hideWeekends && "bg-muted/50"
+                      )}
+                      onClick={() => onDateSelect(day)}
+                    >
+                      {renderAssignments(day)}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          ))}
-          
-          {/* Calendar cells */}
-          {filteredDays.map(day => (
-            <div 
-              key={day.toString() + '-cell'} 
-              className={cn(
-                "border rounded p-2 min-h-[120px] cursor-pointer",
-                isSameDay(day, selectedDate || new Date()) && "bg-primary/10",
-                [0, 6].includes(day.getDay()) && !hideWeekends && "bg-muted/50"
-              )}
-              onClick={() => onDateSelect(day)}
-            >
-              {renderAssignments(day)}
-            </div>
-          ))}
-        </div>
+          );
+        })}
       </div>
     );
   };
