@@ -28,7 +28,8 @@ const CalendarView: FC<CalendarViewProps> = ({
   activeTab,
   toggleAssignment
 }) => {
-  const [calendarView, setCalendarView] = useState<'month' | 'week' | 'day'>('month');
+  const [calendarView, setCalendarView] = useState<'month' | 'week' | '2week' | '3week' | 'day'>('month');
+  const [hideWeekends, setHideWeekends] = useState(false);
   const [currentDate, setCurrentDate] = useState<Date>(selectedDate || new Date());
 
   // Filter assignments based on sixWeeksFilter and possibly activeTab
@@ -41,7 +42,7 @@ const CalendarView: FC<CalendarViewProps> = ({
     })
     .map(([id, assignment]) => ({ id, ...assignment }));
 
-  const handleViewChange = (view: 'month' | 'week' | 'day') => {
+  const handleViewChange = (view: 'month' | 'week' | '2week' | '3week' | 'day') => {
     setCalendarView(view);
     if (props.onViewChange) {
       props.onViewChange(view);
@@ -194,19 +195,31 @@ const CalendarView: FC<CalendarViewProps> = ({
     );
   };
 
-  // Week view
-  const renderWeekView = () => {
+  // Multi-week view generator
+  const renderMultiWeekView = (weeks: number) => {
     const weekStart = startOfWeek(currentDate);
-    const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+    const days = Array.from({ length: 7 * weeks }, (_, i) => addDays(weekStart, i));
+    
+    // Filter out weekends if hideWeekends is true
+    const filteredDays = hideWeekends 
+      ? days.filter(day => ![0, 6].includes(day.getDay())) 
+      : days;
+
+    const dayColumns = hideWeekends ? 5 * weeks : 7 * weeks;
 
     return (
       <div className="mt-4">
-        <div className="grid grid-cols-7 gap-2">
+        <div className="grid gap-2" style={{ 
+          gridTemplateColumns: `repeat(${dayColumns}, minmax(0, 1fr))` 
+        }}>
           {/* Day headers */}
-          {weekDays.map(day => (
+          {filteredDays.map(day => (
             <div 
               key={day.toString()}
-              className="font-medium text-center p-2 border-b"
+              className={cn(
+                "font-medium text-center p-2 border-b",
+                [0, 6].includes(day.getDay()) && !hideWeekends && "text-muted-foreground"
+              )}
             >
               {format(day, 'EEE')}
               <div className="text-lg">{format(day, 'd')}</div>
@@ -214,12 +227,13 @@ const CalendarView: FC<CalendarViewProps> = ({
           ))}
           
           {/* Calendar cells */}
-          {weekDays.map(day => (
+          {filteredDays.map(day => (
             <div 
               key={day.toString() + '-cell'} 
               className={cn(
                 "border rounded p-2 min-h-[120px] cursor-pointer",
-                isSameDay(day, selectedDate || new Date()) ? "bg-primary/10" : ""
+                isSameDay(day, selectedDate || new Date()) && "bg-primary/10",
+                [0, 6].includes(day.getDay()) && !hideWeekends && "bg-muted/50"
               )}
               onClick={() => onDateSelect(day)}
             >
@@ -230,6 +244,15 @@ const CalendarView: FC<CalendarViewProps> = ({
       </div>
     );
   };
+
+  // Week view
+  const renderWeekView = () => renderMultiWeekView(1);
+
+  // 2 Week view
+  const render2WeekView = () => renderMultiWeekView(2);
+
+  // 3 Week view
+  const render3WeekView = () => renderMultiWeekView(3);
 
   // Daily view
   const renderDayView = () => {
@@ -295,24 +318,39 @@ const CalendarView: FC<CalendarViewProps> = ({
         </div>
         
         <div className="flex items-center gap-2">
-          <Select
-            value={calendarView}
-            onValueChange={(value: 'month' | 'week' | 'day') => handleViewChange(value)}
-          >
-            <SelectTrigger className="w-[120px]">
-              <SelectValue placeholder="View" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="month">Month</SelectItem>
-              <SelectItem value="week">Week</SelectItem>
-              <SelectItem value="day">Day</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Select
+              value={calendarView}
+              onValueChange={(value: 'month' | 'week' | '2week' | '3week' | 'day') => handleViewChange(value)}
+            >
+              <SelectTrigger className="w-[120px]">
+                <SelectValue placeholder="View" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="month">Month</SelectItem>
+                <SelectItem value="week">Week</SelectItem>
+                <SelectItem value="2week">2 Weeks</SelectItem>
+                <SelectItem value="3week">3 Weeks</SelectItem>
+                <SelectItem value="day">Day</SelectItem>
+              </SelectContent>
+            </Select>
+            {calendarView !== 'month' && calendarView !== 'day' && (
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setHideWeekends(!hideWeekends)}
+              >
+                {hideWeekends ? 'Show Weekends' : 'Hide Weekends'}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
       {calendarView === 'month' && renderMonthView()}
       {calendarView === 'week' && renderWeekView()}
+      {calendarView === '2week' && render2WeekView()}
+      {calendarView === '3week' && render3WeekView()}
       {calendarView === 'day' && renderDayView()}
     </div>
   );
