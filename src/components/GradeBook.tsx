@@ -3095,10 +3095,7 @@ return (
     </div>
     <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
       {/* Main content - now with full width when calendar is hidden */}
-      <div className={cn(
-        "flex-grow space-y-4",
-        isCalendarVisible ? "lg:w-3/4" : "w-full" // Take full width when calendar is hidden
-      )}>
+      <div className="flex-grow space-y-4 w-full">
         <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-4">
           <div className="flex flex-wrap items-center gap-2">
             <Button
