@@ -13,7 +13,6 @@ interface CalendarViewProps {
   students: Record<string, Student[]>;
   selectedDate: Date | null;
   onDateSelect: (date: Date | undefined) => void;
-  sixWeeksFilter: string;
   activeTab: string;
   toggleAssignment: (assignmentId: string) => void;
   onViewChange?: (view: 'month' | 'week' | 'day') => void;
@@ -24,19 +23,19 @@ const CalendarView: FC<CalendarViewProps> = ({
   students,
   selectedDate,
   onDateSelect,
-  sixWeeksFilter,
   activeTab,
   toggleAssignment
 }) => {
   const [calendarView, setCalendarView] = useState<'month' | 'week' | '2week' | '3week' | 'day'>('month');
   const [hideWeekends, setHideWeekends] = useState(false);
   const [currentDate, setCurrentDate] = useState<Date>(selectedDate || new Date());
+  const [calendarSixWeeksFilter, setCalendarSixWeeksFilter] = useState<string>('all');
 
-  // Filter assignments based on sixWeeksFilter and possibly activeTab
+  // Filter assignments based on calendar's own six weeks filter
   const filteredAssignments = Object.entries(assignments)
     .filter(([_, assignment]) => {
-      if (sixWeeksFilter && sixWeeksFilter !== 'all') {
-        return assignment.six_weeks_period === sixWeeksFilter;
+      if (calendarSixWeeksFilter && calendarSixWeeksFilter !== 'all') {
+        return assignment.six_weeks_period === calendarSixWeeksFilter;
       }
       return true;
     })
@@ -324,6 +323,23 @@ const CalendarView: FC<CalendarViewProps> = ({
             <ChevronRight className="h-4 w-4" />
           </Button>
           <Button variant="outline" onClick={handleToday}>Today</Button>
+          <Select
+            value={calendarSixWeeksFilter}
+            onValueChange={setCalendarSixWeeksFilter}
+          >
+            <SelectTrigger className="w-[120px]">
+              <SelectValue placeholder="All Six Weeks" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Six Weeks</SelectItem>
+              <SelectItem value="1">1st Six Weeks</SelectItem>
+              <SelectItem value="2">2nd Six Weeks</SelectItem>
+              <SelectItem value="3">3rd Six Weeks</SelectItem>
+              <SelectItem value="4">4th Six Weeks</SelectItem>
+              <SelectItem value="5">5th Six Weeks</SelectItem>
+              <SelectItem value="6">6th Six Weeks</SelectItem>
+            </SelectContent>
+          </Select>
           <h2 className="text-xl font-semibold ml-2">
             {calendarView === 'month' && format(currentDate, 'MMMM yyyy')}
             {calendarView === 'week' && `Week of ${format(startOfWeek(currentDate), 'MMM d')} - ${format(endOfWeek(currentDate), 'MMM d, yyyy')}`}
