@@ -1702,16 +1702,19 @@ const getSortedAndFilteredAssignments = () => {
     .filter(id => assignments[id]) // Filter out any invalid IDs
     .map(id => [id, assignments[id]] as [string, Assignment]);
   
-  // Apply Six Weeks filter
-  if (sixWeeksFilter) {
-    entries = entries.filter(([_, assignment]) => 
-      assignment.six_weeks_period === sixWeeksFilter
-    );
+  // Apply Six Weeks filter - only if not 'all'
+  if (sixWeeksFilter && sixWeeksFilter !== 'all') {
+    entries = entries.filter(([_, assignment]) => {
+      // Handle both string and number comparison
+      return String(assignment.six_weeks_period) === String(sixWeeksFilter);
+    });
   }
 
-  // Apply subject filter
-  if (subjectFilter !== 'all') {
-    entries = entries.filter(([_, assignment]) => assignment.subject === subjectFilter);
+  // Apply subject filter - only if not 'all'
+  if (subjectFilter && subjectFilter !== 'all') {
+    entries = entries.filter(([_, assignment]) => 
+      assignment.subject === subjectFilter
+    );
   }
 
   // Apply sorting
@@ -2434,14 +2437,22 @@ const escapeCSV = (value: string) => {
 // Add function to get grouped assignments
 const getGroupedAssignments = () => {
   const entries = getSortedAndFilteredAssignments();
-  
+    
   if (groupBy === 'type') {
-    return {
-      Daily: entries.filter(([_, assignment]) => assignment.type === 'Daily'),
-      Assessment: entries.filter(([_, assignment]) => assignment.type === 'Assessment')
-    };
+    const daily = entries.filter(([_, assignment]) => assignment.type === 'Daily');
+    const assessment = entries.filter(([_, assignment]) => assignment.type === 'Assessment');
+      
+    // Only include groups that have assignments
+    const result: Record<string, [string, Assignment][]> = {};
+    if (daily.length > 0) result.Daily = daily;
+    if (assessment.length > 0) result.Assessment = assessment;
+      
+    return result;
   }
 
+  // Return empty object if no assignments match filters
+  if (entries.length === 0) return {};
+    
   return { all: entries };
 };
 
@@ -3329,7 +3340,23 @@ return (
                 onDelete={bulkDeleteAssignments}
               />
             </div>
-            {renderAssignmentsSection()}
+            {Object.keys(getGroupedAssignments()).length > 0 ? (
+              renderAssignmentsSection()
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className="text-muted-foreground text-center">
+                  <p className="text-lg font-medium">No assignments found</p>
+                  <p className="text-sm mt-2">
+                    {sixWeeksFilter !== 'all' && `Six Weeks: ${sixWeeksFilter}`}
+                    {sixWeeksFilter !== 'all' && subjectFilter !== 'all' && ' • '}
+                    {subjectFilter !== 'all' && `Subject: ${subjectFilter}`}
+                  </p>
+                  <p className="text-sm mt-2">
+                    Try adjusting your filters or create a new assignment
+                  </p>
+                </div>
+              </div>
+            )}
           </>
         ) : (
           // New Roster View
