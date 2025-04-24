@@ -85,15 +85,22 @@ const CalendarView: FC<CalendarViewProps> = ({
             key={assignment.id}
             className={cn(
               "text-xs p-1 rounded truncate cursor-pointer hover:bg-secondary",
-              assignment.type === 'Assessment' ? 'bg-red-100' : 'bg-blue-100',
+              assignment.type === 'Assessment' 
+                ? 'bg-red-100 text-red-900' 
+                : 'bg-blue-100 text-blue-900',
             )}
             onClick={(e) => {
               e.stopPropagation();
               toggleAssignment(assignment.id);
             }}
-            title={assignment.name}
+            title={`${assignment.name} (${assignment.type})`}
           >
-            {assignment.name}
+            <div className="flex items-center gap-1">
+              <span className="truncate">{assignment.name}</span>
+              <span className="text-[0.6rem] opacity-70">
+                {assignment.periods.length}p
+              </span>
+            </div>
           </div>
         ))}
       </div>
@@ -111,23 +118,51 @@ const CalendarView: FC<CalendarViewProps> = ({
           month={currentDate}
           className="w-full"
           modifiers={{
-            assignment: (date) => {
+            hasAssignment: (date) => {
               return filteredAssignments.some(
                 assignment => isSameDay(new Date(assignment.date), date)
+              );
+            },
+            hasAssessment: (date) => {
+              return filteredAssignments.some(
+                assignment => 
+                  assignment.type === 'Assessment' && 
+                  isSameDay(new Date(assignment.date), date)
+              );
+            },
+            hasDaily: (date) => {
+              return filteredAssignments.some(
+                assignment => 
+                  assignment.type === 'Daily' && 
+                  isSameDay(new Date(assignment.date), date)
               );
             }
           }}
           modifiersStyles={{
-            assignment: {
-              border: '2px solid var(--primary)',
-              fontWeight: 'bold'
+            hasAssignment: {
+              borderBottom: '2px solid var(--primary)',
+            },
+            hasAssessment: {
+              backgroundColor: 'var(--red-50)',
+            },
+            hasDaily: {
+              backgroundColor: 'var(--blue-50)',
             }
           }}
           components={{
-            Day: ({ date, ...props }) => (
-              <div className="w-full">
-                <div {...props} />
-                {renderAssignments(date)}
+            Day: ({ date, modifiers, ...props }) => (
+              <div className="w-full h-full relative">
+                <div 
+                  {...props} 
+                  className={cn(
+                    props.className,
+                    modifiers?.hasAssessment && 'bg-red-50',
+                    modifiers?.hasDaily && 'bg-blue-50'
+                  )}
+                />
+                <div className="absolute bottom-0 left-0 right-0 px-1">
+                  {renderAssignments(date)}
+                </div>
               </div>
             )
           }}
