@@ -466,7 +466,6 @@ const GradeBook: FC = () => {
   };
 
   // Move useState here
-  const [calendarView, setCalendarView] = useState<'month' | 'week'>('week');
   
   // Rest of your state declarations
   const [students, setStudents] = useState<Record<string, Student[]>>({});
@@ -3390,88 +3389,6 @@ return (
         )}
       </div>
 
-      {/* Calendar sidebar - only render when visible */}
-      {isCalendarVisible && (
-        <div className="flex flex-col w-full lg:w-72 shrink-0 ml-2">
-          <Card className="w-full">
-            <CardHeader className="p-2 pb-1">
-              <div className="flex justify-between items-center">
-                <CardTitle className="text-sm">Calendar</CardTitle>
-                <div className="flex items-center gap-2">
-                  <Button 
-                    variant="ghost" 
-                    size="icon"
-                    onClick={() => setIsCalendarVisible(false)}
-                    className="h-7 w-7"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                  <Select
-                    defaultValue="month"
-                    onValueChange={(value) => setCalendarView(value as 'month' | 'week')}
-                  >
-                    <SelectTrigger className="h-7 w-20 text-xs">
-                      <SelectValue placeholder="View" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="month">Month</SelectItem>
-                      <SelectItem value="week">Week</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-2">
-              {calendarView === 'month' ? (
-                <Calendar
-                  mode="single"
-                  selected={selectedDate || undefined}
-                  onSelect={handleDateSelect}
-                  className="w-full"
-                  modifiers={{
-                    assignment: (date) => {
-                      return Object.values(assignments).some(
-                        assignment => assignment.date.toDateString() === date.toDateString()
-                      );
-                    }
-                  }}
-                  modifiersStyles={{
-                    assignment: {
-                      border: '1px solid var(--primary)',
-                    }
-                  }}
-                  classNames={{
-                    day_today: "bg-accent/50 font-semibold text-accent-foreground",
-                    day: "h-6 w-6 text-xs p-0", 
-                    head_cell: "text-xs font-normal text-muted-foreground",
-                    table: "w-full border-collapse space-y-1",
-                    cell: "p-0",
-                    nav_button: "h-6 w-6"
-                  }}
-                />
-              ) : (
-                <CustomWeekView
-                  date={selectedDate || new Date()}
-                  onDateSelect={handleDateSelect}
-                  assignments={assignments}
-                  onWeekChange={handleWeekChange}
-                />
-              )}
-              <BirthdayList 
-                students={Object.values(students).flat()}
-                currentDate={selectedDate || new Date()}
-                view={calendarView}
-              />
-              <TodoList 
-                tags={tags}
-                students={students}
-                assignments={assignments}
-                onRemoveTag={handleRemoveTag}
-              />
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </div>
     <DeleteConfirmationDialog
       isOpen={deleteDialog.isOpen}
