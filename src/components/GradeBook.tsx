@@ -437,10 +437,8 @@ const GradeBook: FC = () => {
   // Load navigation state on component mount
   const navState = loadNavigationState();
   const [sixWeeksFilter, setSixWeeksFilter] = useState<string>(getCurrentSixWeeks());
-  const [viewMode, setViewMode] = useState<'assignment' | 'roster'>(navState.viewMode || 'assignment');
+  const [viewMode, setViewMode] = useState<ViewMode>(navState.viewMode || 'assignment');
   const [activeTab, setActiveTab] = useState<string>(navState.lastActivePeriod || '');
-  // Set calendar to be hidden by default
-  const [isCalendarVisible, setIsCalendarVisible] = useState(false);
   const [expandedAssignments, setExpandedAssignments] = useState<Record<string, boolean>>(
     navState.expandedAssignments || {}
   );
@@ -3153,10 +3151,11 @@ return (
             >
               <Table className="h-4 w-4" />
             </Button>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="icon"
-              onClick={() => setIsCalendarVisible(prev => !prev)}
+              onClick={() => setViewMode('calendar')}
+              className={cn(viewMode === 'calendar' && "bg-secondary")}
             >
               <CalendarIcon className="h-4 w-4" />
             </Button>
@@ -3164,7 +3163,17 @@ return (
         </div>
 
         {/* View Mode Content */}
-        {viewMode === 'assignment' ? (
+        {viewMode === 'calendar' ? (
+          <CalendarView 
+            assignments={assignments}
+            students={students}
+            selectedDate={selectedDate}
+            onDateSelect={handleDateSelect}
+            sixWeeksFilter={sixWeeksFilter}
+            activeTab={activeTab}
+            toggleAssignment={toggleAssignment}
+          />
+        ) : viewMode === 'assignment' ? (
           // Your existing assignment view content
           <>
             {newAssignment && (

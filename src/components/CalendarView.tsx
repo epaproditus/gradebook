@@ -16,6 +16,7 @@ interface CalendarViewProps {
   sixWeeksFilter: string;
   activeTab: string;
   toggleAssignment: (assignmentId: string) => void;
+  onViewChange?: (view: 'month' | 'week' | 'day') => void;
 }
 
 const CalendarView: FC<CalendarViewProps> = ({
@@ -42,6 +43,9 @@ const CalendarView: FC<CalendarViewProps> = ({
 
   const handleViewChange = (view: 'month' | 'week' | 'day') => {
     setCalendarView(view);
+    if (props.onViewChange) {
+      props.onViewChange(view);
+    }
   };
 
   const handlePrevious = () => {
