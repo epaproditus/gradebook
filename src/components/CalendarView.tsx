@@ -79,12 +79,12 @@ const CalendarView: FC<CalendarViewProps> = ({
     );
 
     return dayAssignments.length > 0 ? (
-      <div className="space-y-1 mt-1">
+      <div className="space-y-1 w-full">
         {dayAssignments.map(assignment => (
           <div
             key={assignment.id}
             className={cn(
-              "text-xs p-1 rounded truncate cursor-pointer hover:bg-secondary",
+              "text-xs p-1 rounded truncate cursor-pointer hover:bg-secondary w-full",
               assignment.type === 'Assessment' 
                 ? 'bg-red-100 text-red-900' 
                 : 'bg-blue-100 text-blue-900',
@@ -95,11 +95,14 @@ const CalendarView: FC<CalendarViewProps> = ({
             }}
             title={`${assignment.name} (${assignment.type})`}
           >
-            <div className="flex items-center gap-1">
-              <span className="truncate">{assignment.name}</span>
+            <div className="flex items-center gap-1 w-full">
+              <span className="truncate flex-1">{assignment.name}</span>
               <span className="text-[0.6rem] opacity-70">
                 {assignment.periods.length}p
               </span>
+            </div>
+            <div className="text-[0.6rem] opacity-70 truncate">
+              {assignment.subject}
             </div>
           </div>
         ))}
@@ -110,13 +113,23 @@ const CalendarView: FC<CalendarViewProps> = ({
   // Month view
   const renderMonthView = () => {
     return (
-      <div className="mt-4">
+      <div className="mt-4 w-full h-full">
         <Calendar
           mode="single"
           selected={selectedDate || undefined}
           onSelect={onDateSelect}
           month={currentDate}
-          className="w-full"
+          className="w-full h-full"
+          classNames={{
+            months: "w-full h-full",
+            month: "w-full h-full",
+            table: "w-full h-full",
+            head_cell: "w-[14%] h-10 text-center font-medium",
+            cell: "w-[14%] h-24 relative border",
+            day: "h-full w-full flex flex-col items-start p-1",
+            day_selected: "bg-primary/10",
+            day_today: "bg-accent/50 font-semibold"
+          }}
           modifiers={{
             hasAssignment: (date) => {
               return filteredAssignments.some(
@@ -151,16 +164,17 @@ const CalendarView: FC<CalendarViewProps> = ({
           }}
           components={{
             Day: ({ date, modifiers, ...props }) => (
-              <div className="w-full h-full relative">
+              <div className="w-full h-full flex flex-col">
                 <div 
                   {...props} 
                   className={cn(
+                    "flex-1 flex items-start justify-center",
                     props.className,
                     modifiers?.hasAssessment && 'bg-red-50',
                     modifiers?.hasDaily && 'bg-blue-50'
                   )}
                 />
-                <div className="absolute bottom-0 left-0 right-0 px-1">
+                <div className="flex-1 overflow-y-auto w-full">
                   {renderAssignments(date)}
                 </div>
               </div>
