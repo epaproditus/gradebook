@@ -44,9 +44,9 @@ interface RosterViewProps {
   setEditingGrades: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   handleImportGrades: (assignmentId: string, periodId: string, grades: Record<string, string>) => void;
   exportGrades: (assignmentIds: string[], periodIds: string[], merge: boolean) => void;
-  saveGrades: (assignmentId: string, periodId: string) => Promise<void>; // Add this
-  extraPoints: Record<string, string>;  // Make sure this prop is passed
-  editingGrades: Record<string, boolean>;  // Add this prop
+  saveGrades: (assignmentId: string, periodId: string) => Promise<void>;
+  extraPoints: Record<string, string>;
+  editingGrades: Record<string, boolean>;
   onExtraPointsChange: (assignmentId: string, periodId: string, studentId: string, points: string) => void;
   messages: Message[];
   onMessageResolve: (messageId: string) => Promise<void>;
