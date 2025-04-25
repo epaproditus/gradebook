@@ -16,6 +16,7 @@ interface CalendarViewProps {
   activeTab: string;
   toggleAssignment: (assignmentId: string) => void;
   onViewChange?: (view: 'month' | 'week' | 'day') => void;
+  initialSixWeeksFilter?: string;
 }
 
 const CalendarView: FC<CalendarViewProps> = ({
@@ -29,13 +30,16 @@ const CalendarView: FC<CalendarViewProps> = ({
   const [calendarView, setCalendarView] = useState<'month' | 'week' | '2week' | '3week' | 'day'>('month');
   const [hideWeekends, setHideWeekends] = useState(false);
   const [currentDate, setCurrentDate] = useState<Date>(selectedDate || new Date());
-  const [calendarSixWeeksFilter, setCalendarSixWeeksFilter] = useState<string>('all');
+  const [calendarSixWeeksFilter, setCalendarSixWeeksFilter] = useState<string>(
+    props.initialSixWeeksFilter || 'all'
+  );
 
-  // Filter assignments based on calendar's own six weeks filter
+  // Filter assignments using same logic as GradeBook
   const filteredAssignments = Object.entries(assignments)
     .filter(([_, assignment]) => {
       if (calendarSixWeeksFilter && calendarSixWeeksFilter !== 'all') {
-        return assignment.six_weeks_period === calendarSixWeeksFilter;
+        // Handle both string and number comparison like GradeBook
+        return String(assignment.six_weeks_period) === String(calendarSixWeeksFilter);
       }
       return true;
     })

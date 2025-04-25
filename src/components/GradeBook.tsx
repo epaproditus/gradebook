@@ -3177,9 +3177,9 @@ return (
             students={students}
             selectedDate={selectedDate}
             onDateSelect={handleDateSelect}
-            sixWeeksFilter={sixWeeksFilter}
             activeTab={activeTab}
             toggleAssignment={toggleAssignment}
+            initialSixWeeksFilter={sixWeeksFilter}
           />
         ) : viewMode === 'assignment' ? (
           // Your existing assignment view content
