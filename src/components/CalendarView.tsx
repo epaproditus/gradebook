@@ -25,7 +25,9 @@ const CalendarView: FC<CalendarViewProps> = ({
   selectedDate,
   onDateSelect,
   activeTab,
-  toggleAssignment
+  toggleAssignment,
+  initialSixWeeksFilter,
+  onViewChange
 }) => {
   const [calendarView, setCalendarView] = useState<'month' | 'week' | '2week' | '3week' | 'day'>('month');
   const [hideWeekends, setHideWeekends] = useState(false);
