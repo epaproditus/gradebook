@@ -28,6 +28,8 @@ import { saveNavigationState } from '@/lib/storage';
 
 interface RosterViewProps {
   students: Record<string, Student[]>;
+  sixWeeksFilter: string;
+  setSixWeeksFilter: (filter: string) => void;
   setStudents: (students: Record<string, Student[]>) => void;
   deleteStudent: (studentId: string) => Promise<boolean>;
   assignments: Record<string, Assignment>;
@@ -799,6 +801,10 @@ const RosterView: FC<RosterViewProps> = ({
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div className="flex flex-wrap items-center gap-2 sm:gap-4 w-full sm:w-auto">
+            <SixWeeksSelector
+              value={sixWeeksFilter}
+              onChange={setSixWeeksFilter}
+            />
             <ImportScoresDialog
               periodId={activeTab}
               onImport={(assignmentId, grades) => handleImportGrades(assignmentId, activeTab, grades)}

@@ -10,6 +10,8 @@ import { format, addDays, startOfMonth, endOfMonth, isWithinInterval, isSameDay,
 
 interface CalendarViewProps {
   assignments: Record<string, Assignment>;
+  sixWeeksFilter: string;
+  setSixWeeksFilter: (filter: string) => void;
   students: Record<string, Student[]>;
   selectedDate: Date | null;
   onDateSelect: (date: Date | undefined) => void;
@@ -346,6 +348,11 @@ const CalendarView: FC<CalendarViewProps> = ({
               <SelectItem value="6">6th Six Weeks</SelectItem>
             </SelectContent>
           </Select>
+          <SixWeeksSelector
+            value={sixWeeksFilter}
+            onChange={setSixWeeksFilter}
+            className="ml-2"
+          />
           <h2 className="text-xl font-semibold ml-2">
             {calendarView === 'month' && format(currentDate, 'MMMM yyyy')}
             {calendarView === 'week' && `Week of ${format(startOfWeek(currentDate), 'MMM d')} - ${format(endOfWeek(currentDate), 'MMM d, yyyy')}`}

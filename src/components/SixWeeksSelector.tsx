@@ -1,15 +1,17 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-interface SixWeeeksSelectorProps {
-  value: string | null;
-  onChange: (value: string | null) => void;
+interface SixWeeksSelectorProps {
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
 }
 
-export function SixWeeksSelector({ value, onChange }: SixWeeeksSelectorProps) {
+export function SixWeeksSelector({ value, onChange, className }: SixWeeksSelectorProps) {
   return (
     <Select
-      value={value || "all"}
-      onValueChange={(v) => onChange(v === "all" ? null : v)}
+      value={value}
+      onValueChange={onChange}
+      className={className}
     >
       <SelectTrigger className="w-[180px]">
         <SelectValue placeholder="Select Grading Window" />

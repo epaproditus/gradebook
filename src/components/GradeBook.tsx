@@ -3303,7 +3303,7 @@ return (
               </Card>
             )}
             <div className="flex gap-4 mb-4">
-              <SixWeeksSelector 
+              <SixWeeksSelector
                 value={sixWeeksFilter}
                 onChange={setSixWeeksFilter}
               />
