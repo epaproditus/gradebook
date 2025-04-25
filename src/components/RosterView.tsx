@@ -122,9 +122,12 @@ const RosterView: FC<RosterViewProps> = ({
     }
   };
 
-  // Convert assignments to array and sort by date
+  // Convert assignments to array, filter by period and six weeks, then sort by date
   const sortedAssignments = Object.entries(assignments)
-    .filter(([, assignment]) => assignment.periods.includes(activeTab))
+    .filter(([, assignment]) => 
+      assignment.periods.includes(activeTab) &&
+      (sixWeeksFilter === 'all' || assignment.six_weeks_period === sixWeeksFilter)
+    )
     .sort(([, a], [, b]) => {
       const dateA = a.date.getTime();
       const dateB = b.date.getTime();
