@@ -33,6 +33,7 @@ interface RosterViewProps {
   setSixWeeksFilter: (filter: string) => void;
   setStudents: (students: Record<string, Student[]>) => void;
   deleteStudent: (studentId: string) => Promise<boolean>;
+  defaultSixWeeks?: string;
   assignments: Record<string, Assignment>;
   grades: GradeData;
   onGradeChange: (assignmentId: string, periodId: string, studentId: string, grade: string) => void;
@@ -610,7 +611,7 @@ const RosterView: FC<RosterViewProps> = ({
     };
   }, []);
 
-  const [currentSixWeeks, setCurrentSixWeeks] = useState<string>(defaultSixWeeks);
+  const [currentSixWeeks, setCurrentSixWeeks] = useState<string>(sixWeeksFilter);
   const [newAssignment, setNewAssignment] = useState<{
     name: string;
     date: Date;
