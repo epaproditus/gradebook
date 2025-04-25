@@ -3402,11 +3402,13 @@ return (
                     }
                   }}
                   extraPoints={extraPoints}
-                  editingGrades={editingGrades}  // Add this prop
+                  editingGrades={editingGrades}
                   onExtraPointsChange={handleExtraPointsChange}
                   messages={messages}
                   onMessageResolve={handleMessageResolve}
                   onMessageCreate={handleMessageCreate}
+                  sixWeeksFilter={sixWeeksFilter}
+                  setSixWeeksFilter={setSixWeeksFilter}
                 />
               </TabsContent>
             </Tabs>
