@@ -20,18 +20,14 @@ const SIX_WEEKS_RANGES: SixWeeksRange[] = [
 
 /**
  * Gets the current six weeks period based on today's date
- * @returns The current six weeks period code (e.g., '6SW')
+ * @returns The current six weeks period (1-6) as string
  */
 export function getCurrentSixWeeks(): string {
   const now = new Date();
-  // Normalize the date to just year-month-day for consistent comparison
-  const normalizedNow = normalizeDate(now);
-  
   const currentPeriod = SIX_WEEKS_RANGES.find(
-    range => normalizedNow >= normalizeDate(range.start) && normalizedNow <= normalizeDate(range.end)
+    range => now >= range.start && now <= range.end
   );
-  
-  return currentPeriod?.period || '6SW'; // Default to current six weeks (6SW) if not found
+  return currentPeriod?.period.replace('SW', '') || '1'; // Default to 1st six weeks if not found
 }
 
 /**
