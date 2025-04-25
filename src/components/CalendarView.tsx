@@ -33,7 +33,7 @@ const CalendarView: FC<CalendarViewProps> = ({
   const [hideWeekends, setHideWeekends] = useState(false);
   const [currentDate, setCurrentDate] = useState<Date>(selectedDate || new Date());
   const [calendarSixWeeksFilter, setCalendarSixWeeksFilter] = useState<string>(
-    props.initialSixWeeksFilter || 'all'
+    initialSixWeeksFilter || 'all'
   );
 
   // Filter assignments using same logic as GradeBook
@@ -49,8 +49,8 @@ const CalendarView: FC<CalendarViewProps> = ({
 
   const handleViewChange = (view: 'month' | 'week' | '2week' | '3week' | 'day') => {
     setCalendarView(view);
-    if (props.onViewChange) {
-      props.onViewChange(view);
+    if (onViewChange) {
+      onViewChange(view);
     }
   };
 
