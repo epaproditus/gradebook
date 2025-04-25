@@ -65,6 +65,8 @@ const RosterView: FC<RosterViewProps> = ({
   getGradeValue,
   calculateTotal,
   activeTab,
+  sixWeeksFilter,
+  setSixWeeksFilter,
   unsavedGrades,
   setUnsavedGrades,
   setEditingGrades,
@@ -611,7 +613,7 @@ const RosterView: FC<RosterViewProps> = ({
     };
   }, []);
 
-  const [currentSixWeeks, setCurrentSixWeeks] = useState<string>(sixWeeksFilter);
+  const [currentSixWeeks, setCurrentSixWeeks] = useState<string>(sixWeeksFilter || defaultSixWeeks);
   const [newAssignment, setNewAssignment] = useState<{
     name: string;
     date: Date;
