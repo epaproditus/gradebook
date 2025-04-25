@@ -2,6 +2,7 @@ import { FC, useState, useEffect, useMemo } from 'react';
 import { Assignment, Student, GradeData } from '@/types/gradebook';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Calendar as CalendarIcon } from 'lucide-react';
+import { SixWeeksSelector } from './SixWeeksSelector';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
