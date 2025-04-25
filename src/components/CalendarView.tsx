@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Assignment, Student } from '@/types/gradebook';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { SixWeeksSelector } from './SixWeeksSelector';
 import { format, addDays, startOfMonth, endOfMonth, isWithinInterval, isSameDay, startOfWeek, endOfWeek } from 'date-fns';
 
 interface CalendarViewProps {
