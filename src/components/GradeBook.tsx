@@ -3179,7 +3179,8 @@ return (
             onDateSelect={handleDateSelect}
             activeTab={activeTab}
             toggleAssignment={toggleAssignment}
-            initialSixWeeksFilter={sixWeeksFilter}
+            sixWeeksFilter={sixWeeksFilter}
+            setSixWeeksFilter={setSixWeeksFilter}
           />
         ) : viewMode === 'assignment' ? (
           // Your existing assignment view content
@@ -3379,6 +3380,8 @@ return (
               <TabsContent value={activeTab} className="mt-4">
                 <RosterView
                   students={students}
+                  sixWeeksFilter={sixWeeksFilter}
+                  setSixWeeksFilter={setSixWeeksFilter}
                   setStudents={setStudents}
                   deactivateStudent={deactivateStudent}
                   assignments={assignments}
