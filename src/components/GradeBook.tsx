@@ -3076,12 +3076,17 @@ return (
       <div className="flex-grow space-y-4 w-full">
         <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-4">
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              onClick={handleNewAssignment}
-              className="w-full sm:w-auto"
-            >
-              Create New Assignment
-            </Button>
+            <CreateAssignmentDialog 
+              activeTab={activeTab}
+              students={students}
+              onAssignmentCreated={(newAssignment) => {
+                setAssignments(prev => ({
+                  ...prev,
+                  [newAssignment.id]: newAssignment
+                }));
+                setAssignmentOrder(prev => [...prev, newAssignment.id]);
+              }}
+            />
             
             <Dialog>
               <DialogTrigger asChild>
