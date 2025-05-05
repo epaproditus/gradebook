@@ -1,4 +1,5 @@
 import { FC, useState } from 'react';
+import { CreateAssignmentDialog } from './CreateAssignmentDialog';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -326,6 +327,17 @@ const CalendarView: FC<CalendarViewProps> = ({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
+        <CreateAssignmentDialog 
+          activeTab={activeTab}
+          students={students}
+          onAssignmentCreated={(newAssignment) => {
+            setAssignments(prev => ({
+              ...prev,
+              [newAssignment.id]: newAssignment
+            }));
+            setAssignmentOrder(prev => [...prev, newAssignment.id]);
+          }}
+        />
         <CreateAssignmentDialog 
           activeTab={activeTab}
           students={students}
