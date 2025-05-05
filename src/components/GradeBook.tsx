@@ -17,6 +17,7 @@ import { startOfWeek, addDays, isSameDay, format } from 'date-fns';
 import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import { Calendar as CalendarIcon } from 'lucide-react';
 import { CreateAssignmentDialog } from './CreateAssignmentDialog';
+import { CreateAssignmentDialog } from './CreateAssignmentDialog';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/components/ui/use-toast";
 import CustomWeekView from './WeekView'; // Update import name to avoid confusion
