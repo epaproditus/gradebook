@@ -695,6 +695,9 @@ const GradeBook: FC = () => {
     if (date) {
       setSelectedDate(date);
       checkBirthdays(date);
+      // Update six weeks period based on selected date
+      const periodForDate = getSixWeeksForDate(date);
+      setSixWeeksFilter(periodForDate);
     }
   };
 
