@@ -327,28 +327,6 @@ const CalendarView: FC<CalendarViewProps> = ({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <CreateAssignmentDialog 
-          activeTab={activeTab}
-          students={students}
-          onAssignmentCreated={(newAssignment) => {
-            setAssignments(prev => ({
-              ...prev,
-              [newAssignment.id]: newAssignment
-            }));
-            setAssignmentOrder(prev => [...prev, newAssignment.id]);
-          }}
-        />
-        <CreateAssignmentDialog 
-          activeTab={activeTab}
-          students={students}
-          onAssignmentCreated={(newAssignment) => {
-            setAssignments(prev => ({
-              ...prev,
-              [newAssignment.id]: newAssignment
-            }));
-            setAssignmentOrder(prev => [...prev, newAssignment.id]);
-          }}
-        />
         <div className="flex items-center gap-2">
           <Button variant="outline" size="icon" onClick={handlePrevious}>
             <ChevronLeft className="h-4 w-4" />
