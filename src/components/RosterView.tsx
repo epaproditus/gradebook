@@ -636,18 +636,7 @@ const RosterView: FC<RosterViewProps> = ({
   return (
     <>
       <div className="flex justify-between items-center mb-4">
-        <CreateAssignmentDialog 
-          activeTab={activeTab}
-          students={students}
-          onAssignmentCreated={(newAssignment) => {
-            setAssignments(prev => ({
-              ...prev,
-              [newAssignment.id]: newAssignment
-            }));
-            setAssignmentOrder(prev => [...prev, newAssignment.id]);
-          }}
-        />
-        {/* ... rest of existing buttons ... */}
+        {/* ... other buttons ... */}
       </div>
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
