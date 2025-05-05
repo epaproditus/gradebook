@@ -473,7 +473,6 @@ const GradeBook: FC = () => {
   const [birthdayStudents, setBirthdayStudents] = useState<Student[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [assignments, setAssignments] = useState<Record<string, Assignment>>({});
-  const [newAssignment, setNewAssignment] = useState<Assignment | null>(null);
   const [grades, setGrades] = useState<GradeData>({});
   const [unsavedGrades, setUnsavedGrades] = useState<GradeData>({});
   const [editingGrades, setEditingGrades] = useState<Record<string, boolean>>({});
@@ -701,39 +700,6 @@ const GradeBook: FC = () => {
   };
 
   // Add a new button for creating assignments
-  const handleNewAssignment = () => {
-    // If clicked without a date, select today's date
-    const dateToUse = selectedDate || new Date();
-    setSelectedDate(dateToUse);
-    
-    setNewAssignment({
-      date: dateToUse,
-      name: '',
-      periods: [],
-      type: selectedType,
-      subject: 'Math 8',
-      six_weeks_period: getSixWeeksForDate(dateToUse) // Automatically set based on date
-    });
-  };
-
-const handleAssignmentNameChange = (name: string) => {
-  setNewAssignment(prev => prev ? { ...prev, name } : null);
-};
-
-const handlePeriodsSelect = (selectedPeriod: string) => {
-  setNewAssignment(prev => {
-    if (!prev) return null;
-    const periods = prev.periods.includes(selectedPeriod)
-      ? prev.periods.filter(p => p !== selectedPeriod)
-      : [...prev.periods, selectedPeriod];
-    return {
-      ...prev,
-      periods
-    };
-  });
-};
-
-// Update debounce delay from 1500 to 2500ms and add batching
 const debouncedSaveGrades = useCallback(
   debounce(async (assignmentId: string) => {
     try {
