@@ -438,7 +438,11 @@ const GradeBook: FC = () => {
   
   // Load navigation state on component mount
   const navState = loadNavigationState();
-  const [sixWeeksFilter, setSixWeeksFilter] = useState<string>(getCurrentSixWeeks());
+  const [sixWeeksFilter, setSixWeeksFilter] = useState<string>(() => {
+    // Initialize with current six weeks period
+    const currentPeriod = getCurrentSixWeeks();
+    return currentPeriod ? `${currentPeriod}SW` : '1SW'; // Fallback to 1st six weeks
+  });
   const [viewMode, setViewMode] = useState<ViewMode>(navState.viewMode || 'assignment');
   const [activeTab, setActiveTab] = useState<string>(navState.lastActivePeriod || '');
   const [expandedAssignments, setExpandedAssignments] = useState<Record<string, boolean>>(
@@ -698,6 +702,9 @@ const GradeBook: FC = () => {
   const handleWeekChange = (newDate: Date) => {
     setSelectedDate(newDate);
     checkBirthdays(newDate);
+    // Update six weeks period based on new week
+    const periodForDate = getSixWeeksForDate(newDate);
+    setSixWeeksFilter(periodForDate);
   };
 
   // Add a new button for creating assignments
