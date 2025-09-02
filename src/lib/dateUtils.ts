@@ -10,12 +10,12 @@ interface SixWeeksRange {
 // Define the six weeks ranges with consistent date handling
 // Using ISO format strings to avoid timezone issues
 const SIX_WEEKS_RANGES: SixWeeksRange[] = [
-  { period: '1SW', start: new Date('2024-08-14T00:00:00.000Z'), end: new Date('2024-09-22T23:59:59.999Z') },
-  { period: '2SW', start: new Date('2024-09-23T00:00:00.000Z'), end: new Date('2024-11-03T23:59:59.999Z') },
-  { period: '3SW', start: new Date('2024-11-04T00:00:00.000Z'), end: new Date('2024-12-22T23:59:59.999Z') },
-  { period: '4SW', start: new Date('2025-01-09T00:00:00.000Z'), end: new Date('2025-02-19T23:59:59.999Z') },
-  { period: '5SW', start: new Date('2025-02-24T00:00:00.000Z'), end: new Date('2025-04-17T23:59:59.999Z') },
-  { period: '6SW', start: new Date('2025-04-22T00:00:00.000Z'), end: new Date('2025-05-29T23:59:59.999Z') }
+  { period: '1SW', start: new Date('2025-08-18T00:00:00.000Z'), end: new Date('2025-09-26T23:59:59.999Z') },
+  { period: '2SW', start: new Date('2025-09-29T00:00:00.000Z'), end: new Date('2025-11-07T23:59:59.999Z') },
+  { period: '3SW', start: new Date('2025-11-10T00:00:00.000Z'), end: new Date('2025-12-19T23:59:59.999Z') },
+  { period: '4SW', start: new Date('2026-01-05T00:00:00.000Z'), end: new Date('2026-02-13T23:59:59.999Z') },
+  { period: '5SW', start: new Date('2026-02-16T00:00:00.000Z'), end: new Date('2026-04-02T23:59:59.999Z') },
+  { period: '6SW', start: new Date('2026-04-06T00:00:00.000Z'), end: new Date('2026-05-28T23:59:59.999Z') }
 ];
 
 /**

@@ -231,6 +231,7 @@ export function CourseCard({ course, onSetupClick }: CourseCardProps) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="7th Grade Math">7th Grade Math</SelectItem>
                 <SelectItem value="Math 8">Math 8</SelectItem>
                 <SelectItem value="Algebra I">Algebra I</SelectItem>
               </SelectContent>

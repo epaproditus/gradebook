@@ -2,7 +2,7 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
-const TEACHER_EMAIL = 'abromero@eeisd.org'; // This should be in an environment variable
+const TEACHER_EMAIL = process.env.TEACHER_EMAIL || 'your-email@example.com'; // This should be in an environment variable
 
 export async function POST(request: Request) {
   try {

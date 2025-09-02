@@ -18,5 +18,5 @@ export function parseStudentEmail(email: string): {
 export function formatStudentEmail(firstName: string, lastName: string, studentId: string): string {
   // Take only first last name if multiple exist
   const primaryLastName = lastName.split(' ')[0].toLowerCase();
-  return `${firstName.toLowerCase()}.${primaryLastName}${studentId}@eeisd.org`;
+  return `${firstName.toLowerCase()}.${primaryLastName}${studentId}@vanguardacademy.net`;
 }

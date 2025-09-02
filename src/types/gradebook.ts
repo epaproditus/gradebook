@@ -1,9 +1,12 @@
+export type Subject = 'Math 8' | 'Algebra I' | '7th Grade Math';
+
 export interface Assignment {
-  date: Date;
+  id: string;
   name: string;
-  periods: string[];
+  date: Date;
   type: 'Daily' | 'Assessment';
-  subject: 'Math 8' | 'Algebra I';
+  periods: string[];
+  subject: Subject;
   google_classroom_id?: string;
   google_course_id?: string;
   six_weeks_period: '1SW' | '2SW' | '3SW' | '4SW' | '5SW' | '6SW' | null;

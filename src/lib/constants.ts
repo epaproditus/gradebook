@@ -1,7 +1,8 @@
-export const SUBJECT_COLORS = {
+export const SUBJECT_COLORS: Record<Subject, string> = {
   'Math 8': 'bg-purple-100 hover:bg-purple-200',
-  'Algebra I': 'bg-green-100 hover:bg-green-200'
-} as const;
+  'Algebra I': 'bg-green-100 hover:bg-green-200',
+  '7th Grade Math': 'bg-blue-100 hover:bg-blue-200',
+};
 
 export const TYPE_COLORS = {
   'Daily': 'bg-yellow-50 hover:bg-yellow-100',

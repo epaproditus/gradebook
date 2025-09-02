@@ -25,7 +25,7 @@ export const supabaseAuthConfig = {
   providers: ['google'],
   callbacks: {
     async signIn({ user, account }) {
-      return user?.email?.endsWith('@eeisd.org') ?? false;
+      return user?.email?.endsWith('@eeisd.org') || user?.email?.endsWith('@vanguardacademy.net') ?? false;
     }
   }
 };

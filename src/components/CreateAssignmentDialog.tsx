@@ -26,12 +26,16 @@ export function CreateAssignmentDialog({
   onAssignmentCreated
 }: CreateAssignmentDialogProps) {
   const [open, setOpen] = useState(false);
+
+  // Set the initial period intelligently
+  const initialPeriod = activeTab || Object.keys(students)[0] || '';
+
   const [newAssignment, setNewAssignment] = useState({
     name: '',
     date: new Date(),
     type: 'Daily' as 'Daily' | 'Assessment',
-    subject: 'Math 8' as 'Math 8' | 'Algebra I',
-    periods: [activeTab]
+    subject: '7th Grade Math' as '7th Grade Math' | 'Math 8' | 'Algebra I',
+    periods: initialPeriod ? [initialPeriod] : []
   });
   const { toast } = useToast();
   const supabase = createClientComponentClient();
@@ -152,7 +156,8 @@ export function CreateAssignmentDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Math 8">Math 8</SelectItem>
+                  <SelectItem value="7th Grade Math">7th Grade Math</SelectItem>
+                <SelectItem value="Math 8">Math 8</SelectItem>
                   <SelectItem value="Algebra I">Algebra I</SelectItem>
                 </SelectContent>
               </Select>

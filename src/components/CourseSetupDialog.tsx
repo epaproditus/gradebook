@@ -115,7 +115,7 @@ interface DialogProps {
   onClose: () => void;
 }
 
-const SUBJECTS = ['Math 8', 'Algebra I'] as const;
+const SUBJECTS = ['7th Grade Math', 'Math 8', 'Algebra I'] as const;
 type Subject = typeof SUBJECTS[number];
 
 interface GoogleStudentMatch {

@@ -33,8 +33,7 @@ export default function SignIn() {
           redirectTo: `${window.location.origin}/auth/callback`,
           queryParams: {
             access_type: 'offline',
-            prompt: 'consent',
-            hd: 'eeisd.org'
+            prompt: 'consent'
           }
         }
       });
@@ -81,7 +80,8 @@ export default function SignIn() {
         <CardHeader>
           <CardTitle>Student Sign In</CardTitle>
           <CardDescription>
-            Sign in with your school Google account (@eeisd.org)
+                                      Sign in with your school Google account
+                          
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -99,7 +99,7 @@ export default function SignIn() {
             Sign in with Google
           </Button>
           <p className="text-xs text-muted-foreground text-center">
-            Only @eeisd.org accounts are allowed
+            Only authorized accounts are allowed
           </p>
         </CardContent>
       </Card>

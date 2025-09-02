@@ -23,8 +23,8 @@ export const calculateDailyPoints = (assignments: { grade: string; extra: string
     return sum + calculateTotal(assignment.grade, assignment.extra);
   }, 0);
   
-  // Calculate percentage out of 80 points (80% weight)
-  return Math.round((total / dailyAssignments.length) * 0.8);
+  // Calculate percentage out of 50 points (50% weight)
+  return Math.round((total / dailyAssignments.length) * 0.5);
 };
 
 export const calculateAssessmentPoints = (assignments: { grade: string; extra: string; type: string }[]) => {
@@ -35,8 +35,8 @@ export const calculateAssessmentPoints = (assignments: { grade: string; extra: s
     return sum + calculateTotal(assignment.grade, assignment.extra);
   }, 0);
   
-  // Calculate percentage out of 20 points (20% weight)
-  return Math.round((total / assessmentAssignments.length) * 0.2);
+  // Calculate percentage out of 50 points (50% weight)
+  return Math.round((total / assessmentAssignments.length) * 0.5);
 };
 
 export const totalPoints = (assignments: GradeInfo[]): number => {
@@ -89,11 +89,11 @@ export const calculateWeightedAverage = (
     return Math.round(dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length);
   }
   
-  // Otherwise use 80/20 split
+  // Otherwise use 50/50 split
   const dailyAvg = dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length;
   const assessmentAvg = assessmentGrades.reduce((a, b) => a + b, 0) / assessmentGrades.length;
   
-  return Math.round((dailyAvg * 0.8) + (assessmentAvg * 0.2));
+  return Math.round((dailyAvg * 0.5) + (assessmentAvg * 0.5));
 };
 
 // Add this new helper to standardize calculations
@@ -109,19 +109,19 @@ export const calculateStudentAverage = (assignments: { grade: string; extra: str
 
   // Calculate each component's contribution to final grade
   const dailyComponent = dailyGrades.length > 0 
-    ? (dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length) * 0.8
+    ? (dailyGrades.reduce((a, b) => a + b, 0) / dailyGrades.length) * 0.5
     : 0;
 
   const assessmentComponent = assessmentGrades.length > 0
-    ? (assessmentGrades.reduce((a, b) => a + b, 0) / assessmentGrades.length) * 0.2
+    ? (assessmentGrades.reduce((a, b) => a + b, 0) / assessmentGrades.length) * 0.5
     : 0;
 
   // If one type is missing, scale up the other type's weight
   if (dailyGrades.length === 0 && assessmentGrades.length > 0) {
-    return Math.round(assessmentComponent * 5); // Scale up from 20% to 100%
+    return Math.round(assessmentComponent * 2); // Scale up from 50% to 100%
   }
   if (assessmentGrades.length === 0 && dailyGrades.length > 0) {
-    return Math.round(dailyComponent * 1.25); // Scale up from 80% to 100%
+    return Math.round(dailyComponent * 2); // Scale up from 50% to 100%
   }
 
   // Both types present - use normal weighting

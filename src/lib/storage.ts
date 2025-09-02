@@ -3,7 +3,7 @@ interface GradebookConfig {
   colorMode: 'none' | 'subject' | 'type' | 'status';
   groupBy: 'none' | 'type';
   dateFilter: 'asc' | 'desc' | 'none';
-  subjectFilter: 'all' | 'Math 8' | 'Algebra I';
+  subjectFilter: 'all' | 'Math 8' | 'Algebra I' | '7th Grade Math';
   studentSortOrder: 'none' | 'highest' | 'lowest';
 }
 

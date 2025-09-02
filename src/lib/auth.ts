@@ -113,40 +113,35 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, account, user }): Promise<ExtendedToken> {
+    async jwt({ token, account, user }) {
       // Initial sign in
       if (account && user) {
-        console.log('Auth tokens:', {
-          access_token: account.access_token?.slice(0, 10) + '...',
-          refresh_token: account.refresh_token?.slice(0, 10) + '...',
-          expires_at: account.expires_at,
-          token_type: account.token_type
-        });
+        console.log("Initial sign in, creating new token");
         return {
           accessToken: account.access_token,
-          accessTokenExpires: Date.now() + ((account.expires_in as number ?? 3600) * 1000),
+          accessTokenExpires: account.expires_at * 1000,
           refreshToken: account.refresh_token,
           user,
         };
       }
 
-      // Return previous token if the access token has not expired
+      // Return previous token if the access token has not expired yet
       if (Date.now() < (token.accessTokenExpires as number)) {
+        console.log("Access token is still valid");
         return token;
       }
 
-      // Access token expired, try to refresh it
+      // Access token has expired, try to update it
+      console.log("Access token has expired, refreshing...");
       return refreshAccessToken(token as ExtendedToken);
     },
     async session({ session, token }: { session: ExtendedSession, token: ExtendedToken }): Promise<ExtendedSession> {
-      if (token.error) {
-        throw new Error("RefreshAccessTokenError");
+      if (token) {
+        session.user = token.user;
+        session.accessToken = token.accessToken;
+        session.error = token.error;
       }
       
-      session.accessToken = token.accessToken;
-      session.error = token.error;
-
-      // Add token debugging
       console.log('Session update:', {
         tokenExpires: token.accessTokenExpires,
         now: Date.now(),
